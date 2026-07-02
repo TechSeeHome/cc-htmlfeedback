@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DesignHub - design proposal (draft for review)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Fragment+Mono:ital@0;1&display=swap');
+
+  :root{
+    --paper:#f7f3ea;
+    --paper2:#efe9dc;
+    --card:#fffdf7;
+    --ink:#211d16;
+    --dim:#6b6353;
+    --faint:#a49a86;
+    --line:#ddd3bf;
+    --green:#1e6f50;      /* archive green - primary accent */
+    --green2:#e3efe7;
+    --hl:#f5d64b;         /* the widget's highlight heritage */
+    --err:#b8432f;
+    --blue:#2b5fad;
+    --serif:"Instrument Serif", "Iowan Old Style", Georgia, serif;
+    --mono:"Fragment Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0 }
+  html{ scroll-behavior:smooth }
+  body{
+    background:var(--paper);
+    background-image:radial-gradient(#0000 0, #0000 98%, #211d1608 100%),
+      repeating-linear-gradient(0deg, transparent 0 31px, #211d160a 31px 32px);
+    color:var(--ink); font:15.5px/1.7 var(--mono); -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:1060px; margin:0 auto; padding:0 24px }
+  a{ color:var(--green); text-underline-offset:3px }
+  code{ background:var(--paper2); border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:.85em; white-space:nowrap }
+
+  /* ------------ header ------------ */
+  header{ padding:64px 0 8px; position:relative }
+  .badge-draft{
+    display:inline-flex; align-items:center; gap:8px;
+    font:400 12px/1 var(--mono); letter-spacing:.16em; text-transform:uppercase;
+    color:#7c4a12; background:#f7e8c8; border:1px solid #e0c584; border-radius:999px; padding:8px 16px;
+  }
+  .badge-draft::before{ content:""; width:8px; height:8px; border-radius:50%; background:#d99a2b; animation:blink 1.6s ease-in-out infinite }
+  @keyframes blink{ 0%,100%{ opacity:.4 } 50%{ opacity:1 } }
+  h1{ font:400 clamp(46px,7vw,86px)/1.03 var(--serif); letter-spacing:-.01em; margin:26px 0 8px }
+  h1 em{ font-style:italic; color:var(--green) }
+  .lede{ max-width:64ch; color:var(--dim); font-size:15px; margin-top:14px }
+  .lede b{ color:var(--ink); font-weight:400; background:linear-gradient(0deg, var(--hl) 0 38%, transparent 38%) }
+  .meta-line{ margin-top:22px; font-size:12px; color:var(--faint); letter-spacing:.08em; text-transform:uppercase }
+  .meta-line a{ color:var(--dim) }
+
+  /* ------------ sections ------------ */
+  section{ padding:56px 0 4px }
+  .sec-head{ display:flex; align-items:baseline; gap:14px; margin-bottom:8px }
+  .sec-num{ font:400 12px/1 var(--mono); color:var(--green); letter-spacing:.18em }
+  h2{ font:400 clamp(28px,3.6vw,40px)/1.12 var(--serif) }
+  .sec-sub{ color:var(--dim); font-size:13.5px; margin:6px 0 28px; max-width:72ch }
+
+  /* ------------ problem cards ------------ */
+  .probs{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px }
+  @media (max-width:720px){ .probs{ grid-template-columns:1fr } }
+  .prob{
+    background:var(--card); border:1px solid var(--line); border-radius:4px;
+    padding:22px 22px 20px; position:relative;
+    box-shadow:3px 3px 0 #211d160d;
+  }
+  .prob h3{ font:400 20px/1.25 var(--serif); margin-bottom:8px }
+  .prob p{ font-size:13px; color:var(--dim) }
+  .prob .pn{ position:absolute; top:14px; right:16px; font:italic 400 30px/1 var(--serif); color:var(--line) }
+
+  /* ------------ decision log ------------ */
+  .dlog{ border:1px solid var(--line); border-radius:4px; background:var(--card); overflow:hidden }
+  .drow{ display:grid; grid-template-columns:64px 200px 1fr; border-bottom:1px solid var(--line); transition:background .15s ease }
+  .drow:last-child{ border-bottom:none }
+  .drow:hover{ background:var(--green2) }
+  .drow>div{ padding:16px 18px }
+  .drow .did{ font:italic 400 19px/1.2 var(--serif); color:var(--green); border-right:1px dashed var(--line) }
+  .drow .dq{ font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; border-right:1px dashed var(--line); padding-top:18px }
+  .drow .da{ font-size:13.5px }
+  .drow .da b{ font-weight:400; background:linear-gradient(0deg, var(--hl) 0 34%, transparent 34%) }
+  .drow .da small{ display:block; color:var(--faint); font-size:11.5px; margin-top:6px }
+  @media (max-width:720px){
+    .drow{ grid-template-columns:52px 1fr }
+    .drow .dq{ display:none }
+  }
+
+  /* ------------ architecture: layer diagram ------------ */
+  .arch{ display:grid; grid-template-columns:1fr; gap:0; counter-reset:none }
+  .layer{
+    border:1px solid var(--line); background:var(--card); border-radius:4px;
+    padding:20px 22px; margin-bottom:-1px; position:relative; cursor:pointer;
+    transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+  .layer:hover, .layer.on{ background:#fff; transform:translateX(6px); box-shadow:-6px 0 0 var(--green); z-index:2 }
+  .layer h3{ font:400 22px/1.2 var(--serif); display:flex; align-items:baseline; gap:12px }
+  .layer h3 .tag{ font:400 10.5px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--green); border:1px solid var(--green); border-radius:999px; padding:4px 10px }
+  .layer h3 .tag.warn{ color:#7c4a12; border-color:#d99a2b }
+  .layer p{ font-size:13px; color:var(--dim); margin-top:8px; max-width:78ch }
+  .layer .detail{ display:none; margin-top:14px; border-top:1px dashed var(--line); padding-top:14px; font-size:12.5px; color:var(--dim) }
+  .layer.on .detail{ display:block }
+  .layer .detail b{ color:var(--ink); font-weight:400 }
+  .arch-note{
+    margin-top:20px; border-left:3px solid var(--green); background:var(--green2);
+    padding:14px 18px; font-size:13px; color:#1c4635; border-radius:0 4px 4px 0;
+  }
+
+  /* actors strip */
+  .actors{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px }
+  @media (max-width:720px){ .actors{ grid-template-columns:1fr } }
+  .actor{ border:1px dashed var(--line); border-radius:4px; padding:14px 16px; background:#fffdf780 }
+  .actor b{ font:400 16px/1.3 var(--serif); display:block; margin-bottom:4px }
+  .actor span{ font-size:12px; color:var(--dim) }
+  .actor .via{ display:block; margin-top:8px; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--green) }
+
+  /* ------------ tables ------------ */
+  table{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); font-size:12.5px }
+  th{ text-align:left; font:400 11px/1.4 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--faint); padding:10px 14px; border-bottom:1px solid var(--line); background:var(--paper2) }
+  td{ padding:10px 14px; border-bottom:1px solid #eae2d0; color:var(--dim); vertical-align:top }
+  tr:last-child td{ border-bottom:none }
+  td:first-child{ color:var(--ink); white-space:nowrap }
+  .tbl-scroll{ overflow-x:auto }
+
+  /* tree */
+  pre.tree{
+    background:#211d16; color:#e8e0cf; border-radius:6px; padding:20px 22px;
+    font:13px/1.8 var(--mono); overflow-x:auto;
+  }
+  pre.tree .g{ color:#7fc9a4 } pre.tree .y{ color:#f0d878 } pre.tree .d{ color:#8f8672 }
+
+  /* ------------ roadmap ------------ */
+  .road{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px }
+  @media (max-width:820px){ .road{ grid-template-columns:1fr } }
+  .phase{ border:1px solid var(--line); border-radius:4px; background:var(--card); padding:20px }
+  .phase.now{ border-color:var(--green); box-shadow:3px 3px 0 #1e6f5022 }
+  .phase .ph{ font:400 11px/1 var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin-bottom:8px }
+  .phase.now .ph{ color:var(--green) }
+  .phase h3{ font:400 21px/1.2 var(--serif); margin-bottom:10px }
+  .phase ul{ list-style:none }
+  .phase li{ font-size:12.5px; color:var(--dim); padding:4px 0 4px 20px; position:relative }
+  .phase li::before{ content:"·"; position:absolute; left:6px; color:var(--green); font-weight:700 }
+
+  /* ------------ open questions ------------ */
+  .oq{ counter-reset:q }
+  .q{
+    background:var(--card); border:1px solid var(--line); border-radius:4px;
+    padding:16px 18px 16px 60px; margin-bottom:10px; position:relative; font-size:13.5px; color:var(--dim);
+  }
+  .q::before{
+    counter-increment:q; content:"Q" counter(q);
+    position:absolute; left:16px; top:14px; font:italic 400 20px/1.4 var(--serif); color:var(--green);
+  }
+  .q b{ color:var(--ink); font-weight:400; display:block; margin-bottom:3px; font-size:14px }
+  .oq-invite{
+    margin-top:18px; text-align:center; border:1px dashed var(--green); border-radius:4px;
+    background:var(--green2); padding:16px; font-size:13px; color:#1c4635;
+  }
+  .oq-invite b{ font-weight:400; background:linear-gradient(0deg, var(--hl) 0 34%, transparent 34%) }
+
+  footer{ margin:70px 0 44px; padding-top:20px; border-top:1px solid var(--line); color:var(--faint); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px }
+  @media (prefers-reduced-motion:reduce){ .badge-draft::before{ animation:none } *{ transition:none!important } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="badge-draft">Draft v0.1 · open for comments · 2026-07-02</span>
+  <h1>DesignHub:<br>publish, <em>review</em>, remember.</h1>
+  <p class="lede">A hub on Google Workspace where <b>design docs from our repos become shareable, rendered pages</b> -
+  reviewable by anyone with a TechSee Google account, PMs and management included, with in-page
+  highlight-and-comment feedback (borrowed from cc-htmlfeedback) stored as structured data agents can act on.
+  Module one of an org knowledge portal.</p>
+  <div class="meta-line">TechSee · platform design proposal · <a href="./design.md">markdown version</a> · builds on <a href="../how-it-works.md">how cc-htmlfeedback works</a></div>
+</header>
+
+<!-- ============ 01 problem ============ -->
+<section id="problem">
+  <div class="sec-head"><span class="sec-num">01</span><h2>The problem</h2></div>
+  <p class="sec-sub">Four gaps, one platform.</p>
+  <div class="probs">
+    <div class="prob"><span class="pn">i</span><h3>Design docs are invisible where they live</h3>
+      <p>Agents and engineers produce rich HTML dashboards and MD plans inside repos - GitHub shows HTML as source code, and both need a GitHub seat to view. See PR #1 in this repo for a live example.</p></div>
+    <div class="prob"><span class="pn">ii</span><h3>Half the reviewers have no GitHub</h3>
+      <p>PMs, CS, and management have Google accounts only. Today they get screenshots or nothing.</p></div>
+    <div class="prob"><span class="pn">iii</span><h3>cc-htmlfeedback is single-player</h3>
+      <p>Highlight-to-comment with quote anchoring is exactly the right review interaction - but it is local-machine, anonymous, and its comments are disposable.</p></div>
+    <div class="prob"><span class="pn">iv</span><h3>Org knowledge is scattered</h3>
+      <p>Docs, Slides, and Sheets full of knowledge exist all over Drive with no shared structure, taxonomy, or index.</p></div>
+  </div>
+</section>
+
+<!-- ============ 02 decisions ============ -->
+<section id="decisions">
+  <div class="sec-head"><span class="sec-num">02</span><h2>Decisions so far</h2></div>
+  <p class="sec-sub">The log of what is already settled - challenge any of it in comments.</p>
+  <div class="dlog">
+    <div class="drow"><div class="did">D1</div><div class="dq">Audience &amp; identity</div>
+      <div class="da">Eng (GitHub + Google), PMs/mgmt (<b>Google only</b>), AI agents as first-class actors.<small>Feedback must work with only a Google login; agents read, write, and react to comments programmatically.</small></div></div>
+    <div class="drow"><div class="did">D2</div><div class="dq">Comment store</div>
+      <div class="da"><b>A Google Sheet per doc is the DB and source of truth.</b><small>Rich ticket model (anchors, status, threads, author) that GitHub comment bodies would mangle; native to Workspace; PMs can literally open it; agents get it via one API.</small></div></div>
+    <div class="drow"><div class="did">D3</div><div class="dq">GitHub sync</div>
+      <div class="da">Explicit <b>Sync button</b>, phase 2 - and it <b>requires an open PR</b>. Closed PR → "PR #N is closed, open a new one". No PR → "sync impossible".<small>Deliberate batching, no notification spam, no artificial PRs. The sheet is the always-on store; GitHub is strictly the review-time mirror.</small></div></div>
+    <div class="drow"><div class="did">D4</div><div class="dq">Runtime</div>
+      <div class="da"><b>Approach C:</b> pure Apps Script v1, designed to graduate to any host later.<small>Zero infra, cost, and ops now; an evidence-based exit later - not a rewrite.</small></div></div>
+    <div class="drow"><div class="did">D5</div><div class="dq">Cloud independence</div>
+      <div class="da"><b>Hard rule: Google Workspace only - no cloud assumed.</b><small>Drive works with any cloud. The future serving layer can be any host anywhere, talking Drive/Sheets over public REST APIs.</small></div></div>
+    <div class="drow"><div class="did">D6</div><div class="dq">Publishing</div>
+      <div class="da"><b>Claude Code skill on demand</b> - /publish-design.<small>Human- or agent-triggered, no per-repo config. A CI wrapper can come later against the same contract.</small></div></div>
+    <div class="drow"><div class="did">D7</div><div class="dq">V1 scope</div>
+      <div class="da">Publish + view + tree · in-page comments → Sheet · agent access. <b>PR sync deferred to phase 2.</b><small>Removes all GitHub-write integration from v1.</small></div></div>
+    <div class="drow"><div class="did">D8</div><div class="dq">Portal trajectory</div>
+      <div class="da">DesignHub is <b>module 1 of an org knowledge portal</b>; navigation is catalog-driven from day one.<small>Existing Docs/Slides/Sheets register into the same catalog later - no redesign, no file moves.</small></div></div>
+  </div>
+</section>
+
+<!-- ============ 03 architecture ============ -->
+<section id="arch">
+  <div class="sec-head"><span class="sec-num">03</span><h2>Architecture: three layers</h2></div>
+  <p class="sec-sub">Click a layer to expand it. The rule that holds everything: <b>all value lives in the bottom two layers under documented contracts; the top layer is disposable.</b></p>
+
+  <div class="actors">
+    <div class="actor"><b>Publisher</b><span>engineer or agent in any repo, any machine</span><span class="via">via /publish-design → Drive API</span></div>
+    <div class="actor"><b>Reviewer</b><span>eng · PM · management - anyone in the domain</span><span class="via">via Google login → web app</span></div>
+    <div class="actor"><b>AI agent</b><span>reads docs, reads/writes/reacts to comments</span><span class="via">via Sheets/Drive REST API</span></div>
+  </div>
+
+  <div class="arch" id="layers">
+    <div class="layer" data-l="0">
+      <h3>Serving <span class="tag warn">thin · disposable · Apps Script now</span></h3>
+      <p>One standalone Apps Script web app: tree UI, doc serving with widget injection, MD rendering, and a comment bridge. Deleted tomorrow → zero data loss.</p>
+      <div class="detail">
+        <b>Deploy:</b> "execute as me" (dedicated publisher account eventually), access "anyone in the domain".
+        <b>Identity for free:</b> Session.getActiveUser().getEmail() - no OAuth prompts, no tokens in the browser.<br><br>
+        <b>Serving:</b> ?doc=&lt;path&gt; reads the file from Drive, injects the adapted cc-htmlfeedback widget (same inject.js trick), returns via HtmlService. MD renders to HTML at view time, then gets the same widget - PMs comment on rendered Markdown exactly like on HTML.<br><br>
+        <b>Comments:</b> widget → google.script.run bridge (no CORS, nothing to secure) → append row to the doc's Sheet.
+        The bridge functions are deliberately REST-shaped: listCatalog · getDoc · submitComment · listComments · reply · setStatus -
+        a future host on any cloud implements the same six calls.
+      </div>
+    </div>
+    <div class="layer" data-l="1">
+      <h3>Storage <span class="tag">Drive files + comment Sheets</span></h3>
+      <p>The published assets and their conversations. Physical tree: DesignHub/&lt;repo&gt;/&lt;feature&gt;/doc + a companion Sheet per doc as its comment DB.</p>
+      <div class="detail">
+        <b>Comment ticket schema</b> (carried from cc-htmlfeedback, extended for multi-user): id · parentId (threading) ·
+        type comment|strike|reply · status open → in-progress → resolved|declined · the anchor triple quote/context/section ·
+        note · authorEmail/authorName · source web|agent · docVersion · result/files (agent outcomes) · timestamps.<br><br>
+        <b>Meta tab per doc:</b> repo, path-in-repo, branch, commit SHA, PR#, jira, publisher, publish history.<br><br>
+        <b>Anti-lock-in discipline:</b> no PropertiesService/CacheService as data stores, no Apps-Script-only formats.
+      </div>
+    </div>
+    <div class="layer" data-l="2">
+      <h3>Catalog <span class="tag">_catalog Sheet · the portal backbone</span></h3>
+      <p>One master registry: every knowledge asset is a row. Navigation reads the catalog, never folders. This is what the knowledge portal grows out of.</p>
+      <div class="detail">
+        <b>Row:</b> id · type html|md (later + gdoc|gslides|gsheet|link) · title · repo · feature · jira · tags · owner ·
+        driveFileId · url · status active|archived · publishedAt · updatedAt.<br><br>
+        <b>V1:</b> only the publish skill writes rows; the tree UI is a rendering of the catalog grouped by repo/feature.<br>
+        <b>Portal phase:</b> existing Docs/Slides/Sheets register as rows pointing at their current files, opened in native
+        viewers - same tree, search, and taxonomy across published designs and existing content. Bulk importer for whole folders.<br><br>
+        <b>Taxonomy lives in columns, not folder paths</b> - browsing by team, epic, or product area later is just another
+        view over the catalog. No file moves, no redesign.
+      </div>
+    </div>
+  </div>
+
+  <div class="arch-note">📌 <b>Riskiest assumption, tested first:</b> a real design HTML (the CRM dashboard) served through
+  HtmlService renders faithfully inside the iframe sandbox with the widget's comment round-trip working. Half-day spike -
+  validates or kills the v1 runtime while switching is still free.</div>
+</section>
+
+<!-- ============ 04 contracts ============ -->
+<section id="contracts">
+  <div class="sec-head"><span class="sec-num">04</span><h2>The contracts</h2></div>
+  <p class="sec-sub">Runtime-agnostic by design - any future host inherits these unchanged.</p>
+
+  <pre class="tree">DesignHub/                          <span class="d">(shared folder or Shared Drive)</span>
+  <span class="y">_catalog</span>                          <span class="d">(Sheet - the org knowledge registry)</span>
+  &lt;repo&gt;/
+    &lt;feature-or-JIRA&gt;/              <span class="d">e.g. HELM-123-crm-evaluation</span>
+      <span class="g">dashboard.html</span>                <span class="d">published doc, byte-exact source</span>
+      <span class="y">dashboard.comments</span>            <span class="d">(Sheet - this doc's comment DB)</span></pre>
+
+  <div class="tbl-scroll" style="margin-top:16px">
+  <table>
+    <tr><th>bridge function (v1, google.script.run)</th><th>future REST equivalent</th></tr>
+    <tr><td>listCatalog(filter)</td><td>GET /catalog</td></tr>
+    <tr><td>getDoc(path)</td><td>GET /docs/{path}</td></tr>
+    <tr><td>submitComment(ticket)</td><td>POST /docs/{path}/comments</td></tr>
+    <tr><td>listComments(path)</td><td>GET /docs/{path}/comments</td></tr>
+    <tr><td>reply(parentId, note)</td><td>POST /comments/{id}/replies</td></tr>
+    <tr><td>setStatus(id, status)</td><td>PATCH /comments/{id}</td></tr>
+  </table>
+  </div>
+
+  <div class="tbl-scroll" style="margin-top:16px">
+  <table>
+    <tr><th>from cc-htmlfeedback</th><th>fate in DesignHub</th></tr>
+    <tr><td>Widget UX (highlight → popover → comment/strike)</td><td>reused ~80% as-is</td></tr>
+    <tr><td>Anchor triple (quote / context / section) + re-anchoring</td><td>reused as-is</td></tr>
+    <tr><td>Ticket schema</td><td>extended: author, threading, source, docVersion</td></tr>
+    <tr><td>Transport (fetch /__ccfb/* + SSE)</td><td>replaced by google.script.run bridge; SSE dropped in v1</td></tr>
+    <tr><td>Injection pattern (inject.js)</td><td>same trick, server-side in Apps Script</td></tr>
+    <tr><td>Local fix loop (server.js, watch-inbox, boards)</td><td>not used - replaced by Sheet + agents pulling from it</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ============ 05 roadmap ============ -->
+<section id="roadmap">
+  <div class="sec-head"><span class="sec-num">05</span><h2>Scope &amp; roadmap</h2></div>
+  <div class="road">
+    <div class="phase now">
+      <div class="ph">V1 · now</div>
+      <h3>Publish &amp; review</h3>
+      <ul>
+        <li>/publish-design skill: upload HTML/MD + metadata, upsert catalog, create comment Sheet, return link</li>
+        <li>Google-login-gated viewing; MD rendered, widget on everything</li>
+        <li>Tree UI over the catalog (repo/feature)</li>
+        <li>Comments → Sheet: identity, threads, statuses</li>
+        <li>Agent access = documented Sheet schema + REST how-to</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="ph">Phase 2</div>
+      <h3>Close the GitHub loop</h3>
+      <ul>
+        <li>Sync-to-PR button (open PR required - D3)</li>
+        <li>Eng as themselves; PMs via bot token + "on behalf of"</li>
+        <li>Quote → source-line mapping for inline review comments; plain comment fallback</li>
+        <li>Agent fix loop: read open tickets, apply fixes, re-publish</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="ph">Phase 3</div>
+      <h3>The knowledge portal</h3>
+      <ul>
+        <li>Register existing Docs/Slides/Sheets into the catalog (bulk importer)</li>
+        <li>Tags / team / epic navigation facets, search</li>
+        <li>Portal home replacing the v1 tree</li>
+        <li>One index over everything the org knows</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 open questions ============ -->
+<section id="questions">
+  <div class="sec-head"><span class="sec-num">06</span><h2>Open questions</h2></div>
+  <p class="sec-sub">Unsettled - these are the highest-value places to comment.</p>
+  <div class="oq">
+    <div class="q"><b>Publish skill CLI shape</b>/publish-design &lt;file&gt; [--feature X --jira Y] with repo/branch auto-detected from git? What defaults are right?</div>
+    <div class="q"><b>MD rendering</b>Client-side (bundled marked.js, zero server work) vs server-side in Apps Script (cleaner output, more code)? Leaning client-side.</div>
+    <div class="q"><b>Re-publish semantics</b>Overwrite the Drive file (Drive keeps revisions) + bump catalog updatedAt? Flag old comments whose anchors were lost (cc-htmlfeedback has anchorLost for this)?</div>
+    <div class="q"><b>Permissions granularity</b>One shared folder visible to the whole domain, or per-repo subfolder ACLs? V1 assumption: whole-domain read.</div>
+    <div class="q"><b>Status lifecycle</b>Is open → in-progress → resolved/declined right for mixed human + agent review, or do we need an acknowledged state?</div>
+    <div class="q"><b>Dedicated publisher account</b>A real service user (designhub@) as script owner from day one, or migrate later?</div>
+    <div class="q"><b>Naming convention</b>&lt;repo&gt;/&lt;feature-or-JIRA&gt;/&lt;basename&gt; enough? Where do versions show - catalog only, or in the doc name?</div>
+  </div>
+  <div class="oq-invite">🖍️ <b>Review this doc with the tool it grew from:</b> <code>node server.js --root docs/designhub</code>,
+  open design.html, highlight anything, and comment. Meta, but that is the point.</div>
+</section>
+
+<footer>
+  <span>DesignHub design proposal · draft v0.1 · <a href="./design.md">markdown version</a></span>
+  <span>heritage: <a href="../how-it-works.html">how cc-htmlfeedback works</a></span>
+</footer>
+
+</div>
+
+<script>
+  // layer expansion - one open at a time
+  document.querySelectorAll('.layer').forEach(el => {
+    el.addEventListener('click', () => {
+      const was = el.classList.contains('on');
+      document.querySelectorAll('.layer').forEach(x => x.classList.remove('on'));
+      if (!was) el.classList.add('on');
+    });
+  });
+  // open the catalog layer by default - it is the star of the amendment
+  document.querySelector('.layer[data-l="2"]').classList.add('on');
+</script>
+</body>
+</html>

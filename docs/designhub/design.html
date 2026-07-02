@@ -17,7 +17,7 @@
     --line:#ddd3bf;
     --green:#1e6f50;      /* archive green - primary accent */
     --green2:#e3efe7;
-    --hl:#f5d64b;         /* the widget's highlight heritage */
+    --hl:#b8dcc7;         /* soft green emphasis underlay - distinct from the widget's yellow comment marks */
     --err:#b8432f;
     --blue:#2b5fad;
     --serif:"Instrument Serif", "Iowan Old Style", Georgia, serif;
@@ -201,7 +201,7 @@
     <div class="drow"><div class="did">D2</div><div class="dq">Comment store</div>
       <div class="da"><b>A Google Sheet per doc is the DB and source of truth.</b><small>Rich ticket model (anchors, status, threads, author) that GitHub comment bodies would mangle; native to Workspace; PMs can literally open it; agents get it via one API.</small></div></div>
     <div class="drow"><div class="did">D3</div><div class="dq">GitHub sync</div>
-      <div class="da">Explicit <b>Sync button</b>, phase 2 - and it <b>requires an open PR</b>. Closed PR → "PR #N is closed, open a new one". No PR → "sync impossible".<small>Deliberate batching, no notification spam, no artificial PRs. The sheet is the always-on store; GitHub is strictly the review-time mirror.</small></div></div>
+      <div class="da">Explicit <b>Sync button</b>, phase 2 - and it syncs into an <b>open PR</b>. Closed PR → "PR #N is closed - open a new one". No PR at all → explain there's nothing to sync to yet and offer to open a new PR for the doc.<small>Deliberate batching, no notification spam, no unsolicited PRs - the platform guides you to a PR instead of refusing. The sheet is the always-on store; GitHub is strictly the review-time mirror.</small></div></div>
     <div class="drow"><div class="did">D4</div><div class="dq">Runtime</div>
       <div class="da"><b>Approach C:</b> pure Apps Script v1, designed to graduate to any host later.<small>Zero infra, cost, and ops now; an evidence-based exit later - not a rewrite.</small></div></div>
     <div class="drow"><div class="did">D5</div><div class="dq">Cloud independence</div>
@@ -212,6 +212,20 @@
       <div class="da">Publish + view + tree · in-page comments → Sheet · agent access. <b>PR sync deferred to phase 2.</b><small>Removes all GitHub-write integration from v1.</small></div></div>
     <div class="drow"><div class="did">D8</div><div class="dq">Portal trajectory</div>
       <div class="da">DesignHub is <b>module 1 of an org knowledge portal</b>; navigation is catalog-driven from day one.<small>Existing Docs/Slides/Sheets register into the same catalog later - no redesign, no file moves.</small></div></div>
+    <div class="drow"><div class="did">D9</div><div class="dq">Publish defaults</div>
+      <div class="da">Skill infers repo/branch/feature/jira from <b>git + session context</b>, shows resolved values for <b>user approval</b> before publishing; anything unknown gets the explicit placeholder <b>unassigned</b>.<small>No silent guessing - the publisher confirms; "unassigned" is greppable and can't be mistaken for a real value.</small></div></div>
+    <div class="drow"><div class="did">D10</div><div class="dq">MD rendering</div>
+      <div class="da"><b>Client-side for v1</b> (bundled renderer at view time); revisit server-side only if output quality demands.<small>Zero server work, one less moving part; easy to swap later.</small></div></div>
+    <div class="drow"><div class="did">D11</div><div class="dq">Permissions</div>
+      <div class="da"><b>Whole-domain read for v1</b> via one shared folder. Native Drive ACLs - tighten manually per repo/feature folder anytime.<small>Caveat: the web app executes as the publisher account, so once folders are tightened the serving layer must also check the viewer's Drive access before serving - v1 domain-wide read avoids that code.</small></div></div>
+    <div class="drow"><div class="did">D12</div><div class="dq">Comment lifecycle</div>
+      <div class="da">V1 ships <b>open → in-progress → resolved/declined</b> as-is; richer states are out of scope for v1. V2 candidates: sort comments by creation / update date.<small>Don't overdesign the lifecycle before real usage; sorting emerged as a concrete v2 need.</small></div></div>
+    <div class="drow"><div class="did">D13</div><div class="dq">Accounts</div>
+      <div class="da"><b>Developers publish as themselves</b> (own Google OAuth; owner = their email). The <b>web app script owner</b> starts as Igor's account, migrates to a dedicated designhub@ later.<small>Script owner only affects what account serves files and whose quota is used - never authorship. Publishing and serving are separate roles.</small></div></div>
+    <div class="drow"><div class="did">D14</div><div class="dq">Naming</div>
+      <div class="da"><b>Filenames stay original</b> - whatever the file is called in the repo (or the publisher's choice). No versions in filenames: version/date belong <b>inside the doc content</b> and in index metadata (updatedAt, Drive revisions).<small>Renaming on publish breaks the repo ↔ Drive mapping; Drive revisions + the index already track versions.</small></div></div>
+    <div class="drow"><div class="did">D15</div><div class="dq">Re-publish</div>
+      <div class="da">Open comments whose quoted text is gone in the new version are <b>auto-resolved with the distinct terminal status anchor-lost</b> - clearly marked as not fixed, never confused with resolved. The publish flow runs the re-anchor check and writes the status.<small>No manual triage burden in v1; the separate status keeps auto-closed feedback honest, filterable, and recoverable. Collect feedback, refine later.</small></div></div>
   </div>
 </section>
 
@@ -223,7 +237,7 @@
   <div class="actors">
     <div class="actor"><b>Publisher</b><span>engineer or agent in any repo, any machine</span><span class="via">via /publish-design → Drive API</span></div>
     <div class="actor"><b>Reviewer</b><span>eng · PM · management - anyone in the domain</span><span class="via">via Google login → web app</span></div>
-    <div class="actor"><b>AI agent</b><span>reads docs, reads/writes/reacts to comments</span><span class="via">via Sheets/Drive REST API</span></div>
+    <div class="actor"><b>AI agent</b><span>reads docs, reads/writes/reacts to comments, renders docs locally for visual context</span><span class="via">via Sheets/Drive REST API - no web-app login needed</span></div>
   </div>
 
   <div class="arch" id="layers">
@@ -233,10 +247,15 @@
       <div class="detail">
         <b>Deploy:</b> "execute as me" (dedicated publisher account eventually), access "anyone in the domain".
         <b>Identity for free:</b> Session.getActiveUser().getEmail() - no OAuth prompts, no tokens in the browser.<br><br>
-        <b>Serving:</b> ?doc=&lt;path&gt; reads the file from Drive, injects the adapted cc-htmlfeedback widget (same inject.js trick), returns via HtmlService. MD renders to HTML at view time, then gets the same widget - PMs comment on rendered Markdown exactly like on HTML.<br><br>
+        <b>Serving:</b> ?doc=&lt;path&gt; reads the file from Drive, injects the adapted cc-htmlfeedback widget (same inject.js trick), returns via HtmlService. MD renders to HTML at view time (client-side, bundled renderer - D10), then gets the same widget - PMs comment on rendered Markdown exactly like on HTML.<br><br>
         <b>Comments:</b> widget → google.script.run bridge (no CORS, nothing to secure) → append row to the doc's Sheet.
         The bridge functions are deliberately REST-shaped: listCatalog · getDoc · submitComment · listComments · reply · setStatus -
-        a future host on any cloud implements the same six calls.
+        a future host on any cloud implements the same six calls.<br><br>
+        <b>Agents - full context, no new infrastructure:</b> (1) structured - comments via Sheets REST, each carrying the
+        quote/context/section anchor triple that locates it in the doc text; (2) source - the byte-exact doc via Drive REST;
+        (3) visual - the agent renders the fetched doc in a local browser tool (dev-browser, Playwright) and locates the
+        anchors on the rendered page before acting. No Google login needed: the file comes from the Drive API - agents never
+        touch the web app.
       </div>
     </div>
     <div class="layer" data-l="1">
@@ -244,23 +263,31 @@
       <p>The published assets and their conversations. Physical tree: DesignHub/&lt;repo&gt;/&lt;feature&gt;/doc + a companion Sheet per doc as its comment DB.</p>
       <div class="detail">
         <b>Comment ticket schema</b> (carried from cc-htmlfeedback, extended for multi-user): id · parentId (threading) ·
-        type comment|strike|reply · status open → in-progress → resolved|declined · the anchor triple quote/context/section ·
+        type comment|strike|reply · status open → in-progress → resolved|declined|anchor-lost (auto-set on re-publish when the quote is gone - D15) · the anchor triple quote/context/section ·
         note · authorEmail/authorName · source web|agent · docVersion · result/files (agent outcomes) · timestamps.<br><br>
         <b>Meta tab per doc:</b> repo, path-in-repo, branch, commit SHA, PR#, jira, publisher, publish history.<br><br>
         <b>Anti-lock-in discipline:</b> no PropertiesService/CacheService as data stores, no Apps-Script-only formats.
       </div>
     </div>
     <div class="layer" data-l="2">
-      <h3>Catalog <span class="tag">_catalog Sheet · the portal backbone</span></h3>
-      <p>One master registry: every knowledge asset is a row. Navigation reads the catalog, never folders. This is what the knowledge portal grows out of.</p>
+      <h3>Catalog <span class="tag">feature _index shards + derived rollup</span></h3>
+      <p>Sharded writes, unified reads: each feature folder holds its own small _index Sheet (source of truth); an org-wide
+      _portal-index rollup is derived from the shards as a disposable cache. Navigation reads indexes, never folders.</p>
       <div class="detail">
-        <b>Row:</b> id · type html|md (later + gdoc|gslides|gsheet|link) · title · repo · feature · jira · tags · owner ·
-        driveFileId · url · status active|archived · publishedAt · updatedAt.<br><br>
-        <b>V1:</b> only the publish skill writes rows; the tree UI is a rendering of the catalog grouped by repo/feature.<br>
-        <b>Portal phase:</b> existing Docs/Slides/Sheets register as rows pointing at their current files, opened in native
+        <b>Row (same in shards and rollup):</b> id · type html|md (later + gdoc|gslides|gsheet|link) · title · repo · feature ·
+        jira · tags · owner · driveFileId · url · status active|archived · publishedAt · updatedAt.<br><br>
+        <b>V1:</b> the publish skill writes only its feature's _index (+ pokes the rollup refresh); the tree UI reads the
+        _portal-index rollup grouped by repo/feature. Rollup rebuilds on publish + a periodic Apps Script trigger.<br>
+        <b>Portal phase:</b> existing Docs/Slides/Sheets register as index rows pointing at their current files, opened in native
         viewers - same tree, search, and taxonomy across published designs and existing content. Bulk importer for whole folders.<br><br>
         <b>Taxonomy lives in columns, not folder paths</b> - browsing by team, epic, or product area later is just another
-        view over the catalog. No file moves, no redesign.
+        view over the rollup. No file moves, no redesign.<br><br>
+        <b>Why shards + one derived rollup (not one master sheet, and not shards alone)?</b> Sharding the writes keeps each
+        index small, manageable as the org grows, ACL-able per repo/feature, with a tiny blast radius - while cross-repo
+        search and the portal still need a single queryable surface, and per-shard scatter-gather on every tree load would
+        be slow. The rollup gives that surface as a regenerable cache: writes stay clean and distributed, reads stay
+        unified, and losing the rollup costs a rebuild, not data. Per-PR indexes were rejected outright: PRs are ephemeral,
+        docs outlive them (see D3).
       </div>
     </div>
   </div>
@@ -276,9 +303,10 @@
   <p class="sec-sub">Runtime-agnostic by design - any future host inherits these unchanged.</p>
 
   <pre class="tree">DesignHub/                          <span class="d">(shared folder or Shared Drive)</span>
-  <span class="y">_catalog</span>                          <span class="d">(Sheet - the org knowledge registry)</span>
+  <span class="y">_portal-index</span>                     <span class="d">(Sheet - derived rollup, disposable cache)</span>
   &lt;repo&gt;/
     &lt;feature-or-JIRA&gt;/              <span class="d">e.g. HELM-123-crm-evaluation</span>
+      <span class="y">_index</span>                        <span class="d">(Sheet - this feature's docs, source of truth)</span>
       <span class="g">dashboard.html</span>                <span class="d">published doc, byte-exact source</span>
       <span class="y">dashboard.comments</span>            <span class="d">(Sheet - this doc's comment DB)</span></pre>
 
@@ -315,11 +343,11 @@
       <div class="ph">V1 · now</div>
       <h3>Publish &amp; review</h3>
       <ul>
-        <li>/publish-design skill: upload HTML/MD + metadata, upsert catalog, create comment Sheet, return link</li>
+        <li>/publish-design skill: upload HTML/MD + metadata, upsert feature _index (+ rollup refresh), create comment Sheet, return link</li>
         <li>Google-login-gated viewing; MD rendered, widget on everything</li>
-        <li>Tree UI over the catalog (repo/feature)</li>
+        <li>Tree UI over the _portal-index rollup (repo/feature)</li>
         <li>Comments → Sheet: identity, threads, statuses</li>
-        <li>Agent access = documented Sheet schema + REST how-to</li>
+        <li>Agent access = documented Sheet schema + REST how-to + local render recipe for visual context</li>
       </ul>
     </div>
     <div class="phase">
@@ -330,6 +358,7 @@
         <li>Eng as themselves; PMs via bot token + "on behalf of"</li>
         <li>Quote → source-line mapping for inline review comments; plain comment fallback</li>
         <li>Agent fix loop: read open tickets, apply fixes, re-publish</li>
+        <li>Richer comment lifecycle + sorting by creation / update date (D12 candidates)</li>
       </ul>
     </div>
     <div class="phase">
@@ -348,16 +377,8 @@
 <!-- ============ 06 open questions ============ -->
 <section id="questions">
   <div class="sec-head"><span class="sec-num">06</span><h2>Open questions</h2></div>
-  <p class="sec-sub">Unsettled - these are the highest-value places to comment.</p>
-  <div class="oq">
-    <div class="q"><b>Publish skill CLI shape</b>/publish-design &lt;file&gt; [--feature X --jira Y] with repo/branch auto-detected from git? What defaults are right?</div>
-    <div class="q"><b>MD rendering</b>Client-side (bundled marked.js, zero server work) vs server-side in Apps Script (cleaner output, more code)? Leaning client-side.</div>
-    <div class="q"><b>Re-publish semantics</b>Overwrite the Drive file (Drive keeps revisions) + bump catalog updatedAt? Flag old comments whose anchors were lost (cc-htmlfeedback has anchorLost for this)?</div>
-    <div class="q"><b>Permissions granularity</b>One shared folder visible to the whole domain, or per-repo subfolder ACLs? V1 assumption: whole-domain read.</div>
-    <div class="q"><b>Status lifecycle</b>Is open → in-progress → resolved/declined right for mixed human + agent review, or do we need an acknowledged state?</div>
-    <div class="q"><b>Dedicated publisher account</b>A real service user (designhub@) as script owner from day one, or migrate later?</div>
-    <div class="q"><b>Naming convention</b>&lt;repo&gt;/&lt;feature-or-JIRA&gt;/&lt;basename&gt; enough? Where do versions show - catalog only, or in the doc name?</div>
-  </div>
+  <p class="sec-sub">None right now - everything raised during review became a decision (D1-D15). Comment on the published doc to open new ones.</p>
+  <div class="oq"></div>
   <div class="oq-invite">🖍️ <b>Review this doc with the tool it grew from:</b> <code>node server.js --root docs/designhub</code>,
   open design.html, highlight anything, and comment. Meta, but that is the point.</div>
 </section>

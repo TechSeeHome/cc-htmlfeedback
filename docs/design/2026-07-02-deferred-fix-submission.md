@@ -83,7 +83,7 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 | Per-card tooltip | `Send to the agent to fix` |
 | Drafts section header | `Drafts` with count |
 | Connection dot tooltips | `Connected - agent is idle` / `Agent is working on N comments on this page` / `Run /cc-htmlfeedback to enable live fixes` (not "auto fixes" - fixes are no longer automatic) |
-| Popover button tooltips | `Comment (Cmd/Ctrl+click: fix now)` / `Strike (Cmd/Ctrl+click: fix now)` - the mouse fast path's discoverability lives here |
+| Popover button tooltips | `Comment (Cmd/Ctrl+click: fix now)` / `Strike (Cmd/Ctrl+click or Cmd/Ctrl+Backspace: fix now)` - the fast paths' discoverability lives here |
 | Popover hint (connected) | `Enter to save draft · Backspace (empty) to strike · Cmd/Ctrl+Enter to fix now · Shift+Enter for newline · Esc to cancel` (keeps today's strike + newline discoverability - the hint is the only place new users learn them) |
 | Disconnected banner | `Want these fixed live? Run /cc-htmlfeedback.` (today's copy names Claude twice) |
 
@@ -105,11 +105,16 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   mouse-first users (parity with the keyboard chords; plain click saves a draft). Both
   buttons' tooltips advertise it (copy table) - the chords' only other surface is the hint
   line, which stays scannable by carrying just the primary one.
-- **First-use cue**: the first time a draft is saved, a one-time toast (existing `showToast`,
-  gated by a localStorage flag like the banner's `ccfb-banner-dismissed`) explains the new
-  default: `Saved as draft - nothing is sent until you click Fix`. Shown with a duration
-  override (~4 s) - the default 1.6 s auto-hide is too brief for the one message that
-  explains a behavior change. Release notes alone don't reach extension users.
+- **First-use cue**: the first time a draft is saved *by a plain save* (never by a fast
+  path - the fast path just sent it, so "nothing is sent" would be false), a one-time toast
+  (existing `showToast`, gated by a localStorage flag like the banner's
+  `ccfb-banner-dismissed`) explains the new default: `Saved as draft - nothing is sent until
+  you click Fix`. Shown with a duration override (~4 s; one-line extension to `showToast`) -
+  the default 1.6 s auto-hide is too brief for a behavior-change message. Release notes
+  alone don't reach extension users.
+- **Fast-path feedback**: a fix-now chord/click closes the popover and shows `Sent to the
+  agent` - without it, "sent" and "saved as draft" would be indistinguishable at the moment
+  of action (the panel showing the difference may be closed).
 - Hint line updated per the copy table above. Disconnected mode keeps the current hint.
 
 ### 3.2 Panel
@@ -165,10 +170,11 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 - POST failure: the card *returns* to `Drafts` (it moved to `To do` at send). **Failure** =
   fetch rejection, non-2xx response, *or* unparseable response JSON - `fetch` resolves on
   HTTP errors, so the current `.then(r => r.json())` pattern alone would leave `sid`
-  undefined and the card stranded in `To do` forever. Single-Fix failure toast: `Could not
-  reach the server - draft kept`. `Fix all` submits sequentially and stops on first failure,
-  leaving the rest as drafts; its toast reports the batch outcome: `Fix all stopped - N
-  sent, M kept as drafts`. Retrying `Fix all` resumes from the failed item (earlier
+  undefined and the card stranded in `To do` forever. Single-Fix failure toast: `Submission
+  failed - draft kept` (not "could not reach the server" - a non-2xx means the server WAS
+  reached). `Fix all` submits sequentially and stops on first failure, leaving the rest as
+  drafts; its toast reports the batch outcome: `Fix all stopped - N sent, M kept as drafts`
+  (full success: `N drafts sent`). Retrying `Fix all` resumes from the failed item (earlier
   successes are no longer drafts, so they aren't resubmitted). A draft that keeps failing
   can be fixed individually via its own Fix button, or discarded to unblock the rest.
 - **Drafts survive morphs**: `add()` sets `page` at creation (today it is set only on the
@@ -184,7 +190,8 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   - **What persists**: any entry that is a draft *or* not yet **board-seen** - excluding
     `removed: true` entries (a discarded draft must not resurrect on reload; undo history is
     session-local anyway). Written on change (debounced ~300 ms - contenteditable fires per
-    keystroke). `reconcile()` marks an
+    keystroke - with a flush on `pagehide` so a reload right after typing loses nothing).
+    `reconcile()` marks an
     entry board-seen when it matches it in board data (by `sid` or content-adoption). A
     recorded `sid` alone is NOT enough to stop persisting: the POST response returns the
     `sid` seconds before the skill merges the inbox into the board, and
@@ -193,7 +200,11 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   - **Restore**: runs only when the page loads connected (`window.__CCFB` present). If the
     page loads disconnected (server stopped, or the extension-injected widget), the snapshot
     is left intact but not restored - drafts reappear when the page is served again;
-    disconnected mode never reads it. Restored entries re-anchor via the existing
+    disconnected mode never reads *or writes* it. A restored entry that is `draft: false`
+    with no `sid` (the reload interrupted a POST whose outcome is unknown) reverts to a
+    draft: a visible Fix button beats a card stranded in `To do` forever, and if the POST
+    did land, the ticket surfaces as a separate board card the user can reconcile with ✕
+    (visible duplicate > invisible dead end). Restored entries re-anchor via the existing
     `reanchor()` path, which (as today) skips empty-quote entries - insertion-point drafts
     restore into the list without a live on-page mark, same as any anchor-lost entry. `uid`
     is advanced past the highest restored `id` before any new annotation can be created, so
@@ -230,7 +241,9 @@ store[id] = {
   section *placement* comes from the `byKey[statusOf(f)]` bucketing) and `SEC_LABEL` gains
   `draft: 'Drafts'`.
 - `add(type)` no longer POSTs; it creates a draft - setting `page` at creation (see §3.3,
-  morph survival) - and persists it.
+  morph survival) - and persists it. The popover buttons' click handlers currently discard
+  the event (`() => add('comment')`); they must thread it through for the Cmd/Ctrl+click
+  fast path.
 - New `submitDraft(f)` wraps today's `ccfbPost` + `sid` bookkeeping. It flips `draft = false`
   when the POST is *sent* (not when it resolves), and back to `true` if the POST fails.
   Response bookkeeping is `f.sid = f.sid || t.id` - the response never overwrites a `sid`
@@ -287,9 +300,10 @@ Behavior change: connected-mode notes are **no longer sent automatically**. This
 intentional and the default cannot be configured (no mode). Per the release checklist:
 bump `extension/manifest.json` + `package.json`, plus plugin versions
 (`plugins/cc-htmlfeedback/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`),
-run `node build.js`, and update README / SKILL.md wording where it says comments are fixed
-immediately. The one-time first-draft toast (§3.1) is the in-product migration cue; these
-release notes are the record, not the delivery mechanism.
+run `node build.js`, update README / SKILL.md wording where it says comments are fixed
+immediately, and run `/plugin marketplace update` to refresh the installed skill copy. The
+one-time first-draft toast (§3.1) is the in-product migration cue; these release notes are
+the record, not the delivery mechanism.
 
 ## 7. Test plan (high level)
 

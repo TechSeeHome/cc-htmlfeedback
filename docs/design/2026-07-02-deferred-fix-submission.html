@@ -221,8 +221,8 @@
     <div class="fb-pop">
       <textarea readonly>Make this heading sentence case</textarea>
       <div class="pop-row">
-        <button class="b-comment">💬 Comment</button>
-        <button class="b-strike">⌫ Strike</button>
+        <button class="b-comment" title="Comment (Cmd/Ctrl+click: fix now)">💬 Comment</button>
+        <button class="b-strike" title="Strike (Cmd/Ctrl+click or Cmd/Ctrl+Backspace: fix now)">⌫ Strike</button>
       </div>
       <div class="hint"><b>Enter</b> to save draft · <b>Backspace</b> (empty) to strike · <b>Cmd/Ctrl+Enter</b> to fix now · <b>Shift+Enter</b> for newline · <b>Esc</b> to cancel</div>
     </div>
@@ -239,7 +239,7 @@
   <p>No user-facing string names the agent runtime. It is Claude today; it could be Codex or anything else tomorrow.</p>
   <table>
     <tr><th>Element</th><th>Copy</th></tr>
-    <tr><td>Header primary button</td><td><span class="old">Send 3 to Claude</span> → <span class="new">Fix all (3)</span></td></tr>
+    <tr><td>Header primary button</td><td><span class="new">Fix all (3)</span> - new control, no predecessor</td></tr>
     <tr><td>Per-card button (drafts only)</td><td><span class="new">Fix</span> - tooltip "Send to the agent to fix"</td></tr>
     <tr><td>Drafts section header</td><td><span class="new">Drafts</span> + count</td></tr>
     <tr><td>Connection dot, idle</td><td><span class="old">Claude session is idle</span> → <span class="new">Connected - agent is idle</span></td></tr>

@@ -3,7 +3,7 @@
 - **Date:** 2026-07-02
 - **Status:** proposed - awaiting review
 - **Scope:** `feedback-widget.html` (widget only; no server / queue / skill protocol changes)
-- **Companion:** [2026-07-02-deferred-fix-submission.html](./2026-07-02-deferred-fix-submission.html) - visual mockups of every state described here.
+- **Companion:** [2026-07-02-deferred-fix-submission.html](./2026-07-02-deferred-fix-submission.html) - visual mockups of the new panel/popover states (`To do`, `Error`, and disconnected mode are unchanged from today and not re-mocked here).
 
 ## 1. Problem
 
@@ -59,7 +59,7 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 | Per-card tooltip | `Send to the agent to fix` |
 | Drafts section header | `Drafts` with count |
 | Connection dot tooltips | `Connected - agent is idle` / `Agent is working on N comments on this page` / `Run /cc-htmlfeedback to enable auto fixes` |
-| Popover hint (connected) | `Enter to save draft - Cmd+Enter to fix now - Esc to cancel` |
+| Popover hint (connected) | `Enter to save draft · Cmd/Ctrl+Enter to fix now · Esc to cancel` |
 
 ## 3. UX specification
 
@@ -95,7 +95,9 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   file grows only here, so `watch-inbox` wake semantics keep meaning "real work arrived".
 - POST failure: card stays in `Drafts`, error toast (`Could not reach the server - draft
   kept`). `Fix all` submits sequentially and stops on first failure, leaving the rest as
-  drafts.
+  drafts. Retrying `Fix all` resumes from the failed item (earlier successes are no longer
+  drafts, so they aren't resubmitted). A draft that keeps failing can be fixed individually
+  via its own Fix button, or discarded to unblock the rest.
 - **Draft persistence**: drafts are saved to `sessionStorage` (key `ccfb-drafts:<page-key>`,
   scoped per tab - no cross-tab clobbering) on every change and restored on load, re-anchored
   with the existing `reanchor()` path, which (as today) skips entries with an empty quote -
@@ -146,9 +148,10 @@ immediately.
 
 ## 7. Test plan (high level)
 
-- Unit (existing harness): `add()` creates draft without POST; `submitDraft` POSTs and flips
-  state; `Fix all` order + first-failure stop; localStorage round-trip + re-anchor on load;
+- Unit (new - the repo's `node --test` harness covers server/lib only; widget-internal logic
+  needs its own tests): `add()` creates draft without POST; `submitDraft` POSTs and flips
+  state; `Fix all` order + first-failure stop; sessionStorage round-trip + re-anchor on load;
   reconcile does not duplicate drafts; badge counts drafts.
-- Chrome E2E (existing playwright-style checks): draft card renders in `Drafts` with editable
-  note; Fix moves it to `To do`; Cmd+Enter fast path; reload restores drafts; disconnected
+- Chrome E2E (new - no E2E infra exists yet): draft card renders in `Drafts` with editable
+  note; Fix moves it to `To do`; Cmd/Ctrl+Enter fast path; reload restores drafts; disconnected
   mode unchanged.

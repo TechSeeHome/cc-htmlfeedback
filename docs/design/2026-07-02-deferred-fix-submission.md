@@ -145,6 +145,18 @@ store[id] = {
   little v1 benefit. sessionStorage persistence covers the realistic failure mode (reload).
 - Reordering / prioritizing drafts before submission.
 - Editing an already-submitted ticket.
+- **POST-failure idempotency.** The server persists a ticket before responding
+  (`server.js:81-85`), so a response lost after a successful write, then retried, can create a
+  duplicate ticket. A real fix needs a server-side dedup key - out of scope for a widget-only
+  change. Narrower in practice than it sounds (today's silent, no-retry failure path isn't
+  better), but not eliminated.
+- **`Fix all` outrunning inbox ingestion.** If the skill is idle, wakes on the first ticket in
+  a batch, and fully resolves it before later sequential POSTs land, those later tickets can
+  sit unmerged until an unrelated future comment triggers the next wake (`watch-inbox.js`
+  snapshots the inbox size fresh on every invocation). Closing this needs a batch endpoint or a
+  rescan-before-sleep change to the drain loop - both are skill/server-protocol changes, out of
+  scope here. In practice a narrow window: a full fix+verify cycle takes much longer than a
+  handful of sequential localhost POSTs.
 
 ## 6. Release notes
 

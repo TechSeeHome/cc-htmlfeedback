@@ -20,9 +20,6 @@ Consequences:
   (`applyMorph`). With instant send, the agent starts rewriting the page while you are still
   annotating it - content shifts, and later selections risk lost anchors (re-anchoring is
   substring-only; see CLAUDE.md backlog).
-- **Worse fixes.** Related feedback arrives one ticket at a time, so the agent applies
-  sequential, potentially conflicting edits instead of seeing the whole round of feedback at
-  once.
 
 ## 2. Decision
 
@@ -87,7 +84,9 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   Clicking `Fix all` submits drafts in creation order.
 - **Badge / count**: outstanding = drafts + submitted-but-not-done. A page with only drafts
   still shows a red badge - work is pending, just not sent.
-- **Clean** clears drafts along with everything else (it already wipes the local store).
+- **Clean** clears drafts along with everything else - also removes the persisted
+  `ccfb-drafts:<page-key>` entry, so a cleared page can't resurrect drafts from storage on
+  reload.
 
 ### 3.3 Submission semantics
 
@@ -97,9 +96,12 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 - POST failure: card stays in `Drafts`, error toast (`Could not reach the server - draft
   kept`). `Fix all` submits sequentially and stops on first failure, leaving the rest as
   drafts.
-- **Draft persistence**: drafts are saved to `localStorage` (key `ccfb-drafts:<page-key>`) on
-  every change and restored on load, re-anchored with the existing `reanchor()` path. A
-  reload never eats unsent notes. Submitted tickets stay server-authoritative as today.
+- **Draft persistence**: drafts are saved to `sessionStorage` (key `ccfb-drafts:<page-key>`,
+  scoped per tab - no cross-tab clobbering) on every change and restored on load, re-anchored
+  with the existing `reanchor()` path, which (as today) skips entries with an empty quote -
+  insertion-point drafts restore into the list without a live on-page mark, same as any
+  anchor-lost entry. A reload never eats unsent notes; closing the tab does (the tradeoff for
+  avoiding cross-tab collisions). Submitted tickets stay server-authoritative as today.
 
 ### 3.4 Disconnected mode
 
@@ -120,15 +122,16 @@ store[id] = {
 - `visibleItems()` ranks drafts first (`statusRank` returns -1 for drafts).
 - `add(type)` no longer POSTs; it creates a draft and persists it.
 - New `submitDraft(f)` wraps today's `ccfbPost` + `sid` bookkeeping and flips `draft = false`.
-- `reconcile()` ignores drafts (they have no `sid` and must not be adopted by the
-  "just-submitted local entry" matcher unless `draft === false`).
+- `reconcile()` is unchanged: it already matches a sid-less local entry by
+  `quote`+`note`+`page` while a POST is in flight, regardless of any local flag - a draft
+  becomes matchable the moment it's actually submitted, the same as any ticket today.
 - `isComposing()` gains "a draft note is focused" - already covered by the `.fb-note` check.
 
 ## 5. Out of scope (explicitly)
 
 - **Server-side draft status** (survives across browsers/machines, visible to agent tooling).
   Deliberately deferred: it changes the queue file contract and `watch-inbox` gating for
-  little v1 benefit. localStorage persistence covers the realistic failure mode (reload).
+  little v1 benefit. sessionStorage persistence covers the realistic failure mode (reload).
 - Reordering / prioritizing drafts before submission.
 - Editing an already-submitted ticket.
 

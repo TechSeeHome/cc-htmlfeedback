@@ -136,7 +136,6 @@
         <li class="agent">Ticket POSTed instantly; agent wakes and starts fixing</li>
         <li class="warn">Note is now read-only - no way to refine or take it back</li>
         <li class="warn">Agent morphs the page while you are still annotating it</li>
-        <li class="agent">Fixes land one by one, possibly conflicting</li>
       </ul>
     </div>
     <div class="col good">
@@ -146,7 +145,6 @@
         <li class="user">Keep annotating a stable page; edit or discard drafts freely</li>
         <li class="user">Click <b>Fix</b> on one card, or <b>Fix all (3)</b> in the header</li>
         <li class="agent">Only then does the inbox grow and the agent wake</li>
-        <li class="agent">Agent sees the whole round of feedback at once</li>
       </ul>
     </div>
   </div>
@@ -256,16 +254,16 @@
   </div>
   <p>Bonus, specific to this tool: with instant send the agent live-morphs the DOM while you are still annotating,
   shifting content and risking lost anchors (re-anchoring is substring-only). Drafts let you annotate a stable
-  page, then hand the whole round over - which also gives the agent full context in one pass instead of
-  sequential, possibly conflicting edits.</p>
+  page, then hand the whole round over.</p>
 
   <h2>6 · Scope and mechanics</h2>
   <ul class="oos">
     <li><b>Widget-only change.</b> Submitting a draft performs exactly today's POST; the inbox file grows only on
       explicit Fix, so <code>watch-inbox</code> wake semantics still mean "real work arrived". No server, queue,
       or skill protocol changes.</li>
-    <li><b>Drafts survive reload</b> via <code>localStorage</code> (per page key), re-anchored on load with the
-      existing <code>reanchor()</code> path.</li>
+    <li><b>Drafts survive reload</b> (not tab close) via <code>sessionStorage</code> (per page key, per tab -
+      no cross-tab clobbering), re-anchored on load with the existing <code>reanchor()</code> path, which
+      already skips empty-quote (insertion-point) entries.</li>
     <li><b>POST failure keeps the draft</b> with an error toast; Fix all submits in order and stops at the first
       failure.</li>
     <li><b>Badge counts drafts</b> + submitted-but-not-done, so pending-but-unsent work is still visible.</li>

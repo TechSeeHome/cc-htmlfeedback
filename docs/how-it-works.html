@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How cc-htmlfeedback works - the feedback loop, explained</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   /* ---------- fonts: characterful, with honest fallbacks when offline ---------- */
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-
   :root{
-    /* the tool's own status language, lifted from feedback-widget.js */
+    /* the tool's own status language, inspired by feedback-widget.js */
     --hl:      #fbe96b;   /* selection highlight yellow      */
     --hl-hot:  #ffd43b;
     --work:    #4d8dff;   /* in-progress blue (pulse)        */
@@ -133,10 +134,6 @@
   }
   .lane-head b{ display:block; color:var(--ink); font-size:13px; margin-bottom:3px; letter-spacing:.06em }
   .lane-head.on b{ color:var(--hl) }
-  .lane-head::after{ /* lifeline */
-    content:""; position:absolute; left:50%; top:100%; width:1px; height:var(--lifeline,0px);
-    background:linear-gradient(#2a3855, #2a385577);
-  }
   .rows{ grid-column:1/-1; display:flex; flex-direction:column; gap:7px; padding-top:16px }
   .row{
     display:grid; grid-template-columns:repeat(4,1fr); align-items:center;
@@ -281,7 +278,7 @@
 
 <header>
   <div class="pill" aria-hidden="true"><span class="dot"></span> 💬 Feedback <span class="badge">3</span></div>
-  <div class="eyebrow">TechSeeHome / cc-htmlfeedback</div>
+  <div class="eyebrow">leetwito / cc-htmlfeedback</div>
   <h1>The feedback loop, <span class="mark">explained.</span></h1>
   <p class="lede">Highlight text on a locally served HTML page, leave a comment, and a Claude Code
   session turns it into a <b>verified fix that appears in your tab without a reload</b>.
@@ -543,6 +540,7 @@
   document.getElementById('next').addEventListener('click', () => { stop(); go(cur + 1); });
   document.getElementById('prev').addEventListener('click', () => { stop(); go(cur - 1); });
   document.addEventListener('keydown', e => {
+    if (e.altKey || e.metaKey || e.ctrlKey) return;
     if (e.key === 'ArrowRight') { stop(); go(cur + 1); }
     else if (e.key === 'ArrowLeft') { stop(); go(cur - 1); }
     else if (e.key === ' ' && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); timer ? stop() : play(); }

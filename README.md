@@ -37,7 +37,7 @@ Open `playground_file.html` in your browser and load the extension to play with 
 
 ## Advanced mode: live fixes with Claude Code
 
-Once the extension works, add the plugin to skip the copy-paste: comments become tickets that Claude Code applies and verifies for you.
+Once the extension works, add the plugin to skip the copy-paste: comments become tickets that Claude Code applies and verifies for you. For the full end-to-end walkthrough, see [`docs/how-it-works.md`](docs/how-it-works.md) (or its [animated version](docs/how-it-works.html)).
 
 Install the plugin once (it bundles the skill plus the server it runs):
 

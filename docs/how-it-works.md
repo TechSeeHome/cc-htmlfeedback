@@ -29,22 +29,41 @@ sequenceDiagram
     participant Q as Queue (disk)
     participant C as Claude session
 
+    Note over You,S: Step 1 - You open the page
     You->>S: open http://127.0.0.1:4317/page.html
     S-->>You: HTML + injected widget
+
+    Note over You,S: Step 2 - You highlight text and comment
     You->>W: select text, type note, click Comment / Strike
     W->>S: POST /__ccfb/tickets {quote, context, section, note, page}
+
+    Note over S,Q: Step 3 - The server persists it
     S->>Q: append 1 line to feedback_inbox.jsonl
+
+    Note over Q,C: Step 4 - The session wakes, no polling
     Q-->>C: file watcher wakes the session
+
+    Note over C,Q: Step 5 - Ticket claimed on the board
     C->>Q: copy ticket into feedback_tasks.json (todo -> in-progress)
+
+    Note over S,You: Step 6 - Your highlight starts pulsing
     S-->>W: SSE push: board changed
     W-->>You: your highlight pulses "in progress"
+
+    Note over C: Step 7 - A fresh subagent fixes it
     C->>C: subagent finds the quote in source, makes minimal edit
     C->>C: verifies in its OWN browser tab (judge rubric)
+
+    Note over C,Q: Step 8 - Result written back
     C->>Q: status -> done (or error + reason)
+
+    Note over S,You: Step 9 - Your page updates in place
     S-->>W: SSE push: board changed
     W->>S: re-fetch page HTML in background
     W-->>You: DOM morph in place - no reload, scroll/focus preserved
 ```
+
+The animated [`docs/how-it-works.html`](./how-it-works.html) groups these same messages into 9 interactive steps (matching the `Note` labels above) across 4 lanes, collapsing "you" and "the widget" into one lane for a simpler UI.
 
 ### 1. Commenting (what you do in the browser)
 
@@ -75,7 +94,7 @@ concurrency design - because each file has exactly one writer, browser and AI ne
     feedback_tasks.json            # SESSION writes only - the status board
 ```
 
-Ticket schema:
+Ticket schema (defined once in `lib/queue.js`'s `newTicket()`; shown here for reference):
 
 ```json
 {

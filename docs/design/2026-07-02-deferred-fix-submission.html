@@ -125,7 +125,7 @@
 
   <div class="decision"><b>Decision: modeless drafts.</b> No "instant vs. batch" mode switch. The draft state and its
   <b>Fix</b> button <i>are</i> the UI - what you see is what will (not) be sent. A keyboard fast path
-  (<kbd>Cmd</kbd>+<kbd>Enter</kbd> = comment &amp; fix now) preserves today's zero-friction single-fix flow.</div>
+  (<kbd>Cmd/Ctrl</kbd>+<kbd>Enter</kbd> = comment &amp; fix now) preserves today's zero-friction single-fix flow.</div>
 
   <h2>1 · Flow: current vs. proposed</h2>
   <div class="cols">
@@ -217,11 +217,11 @@
         <button class="b-comment">💬 Comment</button>
         <button class="b-strike">⌫ Strike</button>
       </div>
-      <div class="hint"><b>Enter</b> to save draft · <b>Cmd+Enter</b> to fix now · <b>Esc</b> to cancel</div>
+      <div class="hint"><b>Enter</b> to save draft · <b>Cmd/Ctrl+Enter</b> to fix now · <b>Esc</b> to cancel</div>
     </div>
     <div class="callout">
-      <b>Fast path preserved:</b> <kbd>Cmd</kbd>+<kbd>Enter</kbd> = comment &amp; fix now,
-      <kbd>Cmd</kbd>+<kbd>Backspace</kbd> = strike &amp; fix now. Today's instant behavior is one modifier away,
+      <b>Fast path preserved:</b> <kbd>Cmd/Ctrl</kbd>+<kbd>Enter</kbd> = comment &amp; fix now,
+      <kbd>Cmd/Ctrl</kbd>+<kbd>Backspace</kbd> = strike &amp; fix now. Today's instant behavior is one modifier away,
       with no hidden mode to remember.
     </div>
   </div>
@@ -235,7 +235,7 @@
     <tr><td>Drafts section header</td><td><span class="new">Drafts</span> + count</td></tr>
     <tr><td>Connection dot, idle</td><td><span class="old">Claude session is idle</span> → <span class="new">Connected - agent is idle</span></td></tr>
     <tr><td>Connection dot, working</td><td><span class="old">Claude is working on N…</span> → <span class="new">Agent is working on N comments on this page</span></td></tr>
-    <tr><td>Popover hint (connected)</td><td><span class="new">Enter to save draft · Cmd+Enter to fix now · Esc to cancel</span></td></tr>
+    <tr><td>Popover hint (connected)</td><td><span class="new">Enter to save draft · Cmd/Ctrl+Enter to fix now · Esc to cancel</span></td></tr>
   </table>
 
   <h2>5 · Why modeless beats a mode switch</h2>
@@ -251,7 +251,7 @@
       <p>Disconnected mode already works this way: notes accumulate, stay editable, and export via an explicit
       Copy. Connected mode becomes "disconnected + Fix buttons" instead of a third behavior to learn and test.</p></div>
     <div class="w"><b><span class="num">4</span>The fast path survives</b>
-      <p>The one extra click for a quick single fix is erased by Cmd+Enter / Cmd+Backspace. Power users keep
+      <p>The one extra click for a quick single fix is erased by Cmd/Ctrl+Enter / Cmd/Ctrl+Backspace. Power users keep
       today's zero-friction flow; everyone else gets a review step by default.</p></div>
   </div>
   <p>Bonus, specific to this tool: with instant send the agent live-morphs the DOM while you are still annotating,

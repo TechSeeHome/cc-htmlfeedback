@@ -108,7 +108,7 @@ export. The banner still advertises `/cc-htmlfeedback`.
 
 ## 4. Data model changes (widget-local)
 
-```
+```text
 store[id] = {
   id, quote, context, section, note, type, removed,
   // connected mode:

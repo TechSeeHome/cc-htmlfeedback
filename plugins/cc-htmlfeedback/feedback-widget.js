@@ -192,6 +192,45 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   const store = {};  // id -> { id, quote, context, section, note, type, removed } — single source of truth
   function visibleItems(){ return Object.values(store).filter(f => !f.removed).sort((a, b) => statusRank(a) - statusRank(b) || a.id - b.id); }
 
+  /* ---- draft persistence: sessionStorage, key derived from the normalized path (matches
+     lib/queue.js's fileOf so it lines up conceptually with the server's board key, even
+     though the widget never receives the server's hashed key directly) ---- */
+  const DRAFT_KEY = 'ccfb-drafts:' + (function(){ let p = location.pathname; if (p.endsWith('/')) p += 'index.html'; return p; })();
+  let persistTimer = null;
+  // eslint-disable-next-line no-unused-vars -- wired into add()/submitDraft()/reconcile()/setRemoved() in a later task
+  function schedulePersist(){ if(!CCFB) return; clearTimeout(persistTimer); persistTimer = setTimeout(persistDrafts, 300); }
+  // Persists any entry that is a draft OR not yet board-seen (reconcile() sets boardSeen once
+  // it actually observes the ticket in board data). A recorded sid alone is NOT enough to stop
+  // persisting: the POST response returns the sid seconds before the skill merges the inbox
+  // into the board, and GET /__ccfb/tickets reads only the board — dropping the entry at
+  // sid-time would make it vanish on a reload in that gap.
+  function persistDrafts(){
+    if(!CCFB) return;
+    const snapshot = Object.values(store)
+      .filter(f => !f.removed && (f.draft || !f.boardSeen))
+      .map(f => ({ id: f.id, quote: f.quote, context: f.context, section: f.section, note: f.note,
+        type: f.type, draft: f.draft, sid: f.sid, page: f.page }));
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot)); } catch{ /* sessionStorage unavailable (private mode/quota) — draft stays in-memory only */ }
+  }
+  // Runs once at startup, before subscribeSSE()/loadTickets(), so reconcile() can match
+  // restored entries by sid or content instead of creating fresh duplicates.
+  // eslint-disable-next-line no-unused-vars -- wired into startup in a later task
+  function restoreDrafts(){
+    if(!CCFB) return;
+    let saved; try { saved = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '[]'); } catch{ saved = []; }
+    saved.forEach(s => {
+      uid = Math.max(uid, s.id);
+      // draft:false with no sid means a reload interrupted a POST whose outcome is unknown —
+      // revert to draft (a visible Fix button beats a card stranded in To do forever; if the
+      // POST did land, the ticket surfaces as a separate board card the user can ✕).
+      const f = store[s.id] = { id: s.id, quote: s.quote, context: s.context, section: s.section,
+        note: s.note, type: s.type, removed: false, page: s.page, status: 'todo', result: '', files: [],
+        draft: s.draft || !s.sid, sid: s.sid, boardSeen: false };
+      if(f.page === location.href && f.quote) reanchor(f);
+    });
+  }
+  window.addEventListener('pagehide', persistDrafts);
+
   /* ---- connected mode (companion server injects window.__CCFB) ---- */
   const CCFB = window.__CCFB || null;
   const ORDER = { draft:-1, todo:0, 'in-progress':1, error:2, done:3 };

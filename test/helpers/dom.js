@@ -26,14 +26,20 @@ const WIDGET_SRC_RAW = fs.readFileSync(
 // the same window. So we splice a one-line alias, `window.store = store; window.render =
 // render;`, right before fbInit()'s closing brace (where store/render are still in scope) —
 // giving later eval() calls a bare `store`/`render` that resolves via normal global-object
-// property lookup. Extend this list if a later test needs another internal (e.g. `uid`,
-// `restoreDrafts`) — for a plain value like `uid` a getter/setter pair is needed instead of a
-// straight alias, since aliasing only copies the current value, not a live reference.
-const EXPOSE_HOOK = '\n  window.store = store; window.render = render;\n';
+// property lookup. Extend this list if a later test needs another internal — for a function
+// (like `persistDrafts`/`restoreDrafts` below) a plain alias is fine, since the test only ever
+// calls it, never expects reassignment to be visible back in the widget. For a plain value like
+// `uid` a getter/setter pair is needed instead of a straight alias, since aliasing only copies
+// the current value, not a live reference: a getter/setter closes over the `uid` binding
+// itself, so reads/writes through `window.uid` stay in sync with the widget's own `++uid` etc.
+const EXPOSE_HOOK =
+  '\n  window.store = store; window.render = render;\n' +
+  '  window.persistDrafts = persistDrafts; window.restoreDrafts = restoreDrafts;\n' +
+  "  Object.defineProperty(window, 'uid', { configurable: true, get(){ return uid; }, set(v){ uid = v; } });\n";
 const FBINIT_CLOSE_ANCHOR = '\n  }\n  if (document.body) fbInit();';
-if (!WIDGET_SRC_RAW.includes(FBINIT_CLOSE_ANCHOR)) {
+if (WIDGET_SRC_RAW.split(FBINIT_CLOSE_ANCHOR).length !== 2) {
   throw new Error(
-    'test/helpers/dom.js: fbInit() closing-brace anchor not found in extension/feedback-widget.js — ' +
+    'test/helpers/dom.js: fbInit() closing-brace anchor not found exactly once in extension/feedback-widget.js — ' +
       "build.js's generated template likely changed; update FBINIT_CLOSE_ANCHOR/EXPOSE_HOOK."
   );
 }

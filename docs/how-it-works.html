@@ -460,7 +460,7 @@
   const STEPS = [
     { from:0, to:1, tag:'GET /page.html', c:C.user,
       title:'You open the page',
-      desc:'The server reads your HTML from disk and injects one <script> tag - the widget. Nothing about your file changes on disk.' },
+      desc:'The server reads your HTML from disk and injects one &lt;script&gt; tag - the widget. Nothing about your file changes on disk.' },
     { from:0, to:1, tag:'POST /__ccfb/tickets', c:C.user,
       title:'You highlight text and comment',
       desc:'Select text → popover → 💬 Comment or ⌫ Strike. The widget bundles a ticket: your note plus quote (exact selection), context (surrounding block), section (nearest heading), page URL.' },
@@ -475,7 +475,7 @@
       desc:'The session copies the ticket into feedback_tasks.json as todo, then claims it in-progress at dispatch. The session is the board’s only writer.' },
     { from:1, to:0, tag:'SSE · board changed', c:C.work,
       title:'Your highlight starts pulsing',
-      desc:'The server watches the board and pushes every change over the page’s open SSE stream. The widget just renders the board - dot goes pulsing blue, your exact text pulses too.' },
+      desc:'The server polls the board about once a second and pushes any change over the page’s open SSE stream. The widget just renders the board - dot goes pulsing blue, your exact text pulses too.' },
     { from:3, to:3, tag:'rg quote → minimal edit → verify', c:C.work,
       title:'A fresh subagent fixes it',
       desc:'Up to 5 run concurrently, one ticket each: find the quote in source with rg, make the minimal edit the note asks for, then verify in its OWN browser tab against a rubric - intent satisfied and nothing newly broken. Your tab is never touched.' },

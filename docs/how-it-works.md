@@ -83,10 +83,12 @@ The widget automatically packages four pieces of location info with your note - 
 
 ### 2. Persistence: two files per page, one writer each
 
-For each page, the queue holds two files with strict ownership. This is the whole
-concurrency design - because each file has exactly one writer, browser and AI never conflict.
+For each page, the queue holds two files with strict ownership - each has exactly one
+writer, so browser and AI never conflict on them. (The shared `index.json` below is a
+separate read-modify-write path and isn't covered by that guarantee - concurrent first
+comments on different new pages can race and drop an entry.)
 
-```
+```text
 .cc-htmlfeedback/
   index.json                       # { "<pagekey>": { page, file, firstSeen } }
   pages/<pagekey>/
@@ -116,9 +118,9 @@ board as `todo`, then claims them as `in-progress` at dispatch time.
 
 ### 4. Live status in your tab
 
-The page keeps an open **SSE** connection (`/__ccfb/events`). The server watches the board
-file and pushes every status change to the browser instantly. The widget just renders the
-board: the connection dot goes red (offline) / amber (connecting) / green (idle) /
+The page keeps an open **SSE** connection (`/__ccfb/events`). The server polls each page's
+`feedback_tasks.json` about once a second and pushes any change to the browser over that
+connection. The widget just renders the board: the connection dot goes red (offline) / amber (connecting) / green (idle) /
 pulsing blue (working), and the exact text you commented on pulses while an agent works it.
 
 ```mermaid

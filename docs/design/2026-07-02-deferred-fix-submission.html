@@ -75,8 +75,9 @@
   .fb-quote.s{border-left-color:#d9402f;text-decoration:line-through}
   .fb-note-e{font:13px/1.45 -apple-system,sans-serif;border:1px dashed #d7dbe6;border-radius:6px;padding:4px 6px;color:var(--ink)}
   .fb-note-ro{font:13px/1.45 -apple-system,sans-serif;color:var(--ink)}
-  .fixbtn{margin-top:9px;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;border-radius:8px;background:var(--blue);color:#fff;font:700 12px/1 -apple-system,sans-serif;cursor:pointer}
-  .fixbtn:hover{background:var(--blue-d)}
+  /* amber = "send to the agent", everywhere - blue stays reserved for Copy feedback */
+  .fixbtn{margin-top:9px;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;border-radius:8px;background:#f0a020;color:#231f04;font:700 12px/1 -apple-system,sans-serif;cursor:pointer}
+  .fixbtn:hover{background:#d98d12}
   .st{display:inline-block;margin-bottom:6px;font:700 9px/1.4 -apple-system,sans-serif;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:999px}
   .st.prog{background:#e7f0ff;color:#1257c4}.st.todo{background:#eef1f4;color:var(--mut)}.st.done{background:#e3f6ec;color:var(--green)}
   .fb-result{font:12px/1.4 -apple-system,sans-serif;color:#1f7a52;background:#f1faf5;border-radius:6px;padding:5px 7px;margin-top:6px}
@@ -128,7 +129,7 @@
 
   <div class="decision"><b>Decision: modeless drafts.</b> No "instant vs. batch" mode switch. The draft state and its
   <b>Fix</b> button <i>are</i> the UI - what you see is what will (not) be sent. A keyboard fast path
-  (<kbd>Cmd/Ctrl</kbd>+<kbd>Enter</kbd> = comment &amp; fix now) preserves today's zero-friction single-fix flow.</div>
+  (<kbd>Cmd/Ctrl</kbd>+<kbd>Enter</kbd> or <kbd>Cmd/Ctrl</kbd>+click = comment &amp; fix now) preserves today's zero-friction single-fix flow.</div>
 
   <h2>1 · Flow: current vs. proposed</h2>
   <div class="cols">
@@ -156,7 +157,8 @@
   <h2>2 · Panel mockup</h2>
   <p><b>Fix all is amber, not blue</b> - today's big blue header button is Copy feedback, and reusing that
   exact look for the least reversible action in the widget would route copy-click muscle memory into
-  submit-everything. Copy feedback keeps its blue, below.</p>
+  submit-everything. Copy feedback keeps its blue, below. Amber is the "send to the agent" color
+  everywhere: the per-card Fix button is amber too, never blue.</p>
   <p>Drafts get a new top section built on the existing collapsible-section framework. A draft card keeps the
   editable note (same as disconnected mode today) and carries a <b>Fix</b> button; submitted cards look exactly
   as they do now. The header gains <b>Fix all (N)</b> as the primary action whenever drafts exist.</p>
@@ -212,7 +214,8 @@
 
   <h2>3 · Popover mockup</h2>
   <p>The annotation flow is untouched - <kbd>Enter</kbd> saves a comment, <kbd>Backspace</kbd> on an empty box
-  saves a strike. Only the hint line changes, and two new shortcuts submit immediately for the quick-single-fix case.</p>
+  saves a strike. Only the hint line changes, and three fast paths (two chords + Cmd/Ctrl+click on either
+  button) submit immediately for the quick-single-fix case.</p>
 
   <div class="mock">
     <div class="fb-pop">
@@ -241,6 +244,8 @@
     <tr><td>Drafts section header</td><td><span class="new">Drafts</span> + count</td></tr>
     <tr><td>Connection dot, idle</td><td><span class="old">Claude session is idle</span> → <span class="new">Connected - agent is idle</span></td></tr>
     <tr><td>Connection dot, working</td><td><span class="old">Claude is working on N…</span> → <span class="new">Agent is working on N comments on this page</span></td></tr>
+    <tr><td>Connection dot, disconnected</td><td><span class="old">Run /cc-htmlfeedback on Claude Code for auto fixes</span> → <span class="new">Run /cc-htmlfeedback to enable live fixes</span></td></tr>
+    <tr><td>Popover button tooltips</td><td><span class="new">Comment (Cmd/Ctrl+click: fix now)</span> · <span class="new">Strike (Cmd/Ctrl+click: fix now)</span></td></tr>
     <tr><td>Popover hint (connected)</td><td><span class="new">Enter to save draft · Backspace (empty) to strike · Cmd/Ctrl+Enter to fix now · Shift+Enter for newline · Esc to cancel</span></td></tr>
     <tr><td>Disconnected banner</td><td><span class="old">Want Claude to fix these live? Run /cc-htmlfeedback in Claude Code.</span> → <span class="new">Want these fixed live? Run /cc-htmlfeedback.</span></td></tr>
   </table>

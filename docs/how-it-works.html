@@ -14,8 +14,8 @@
     --hl:      #fbe96b;   /* selection highlight yellow      */
     --hl-hot:  #ffd43b;
     --work:    #4d8dff;   /* in-progress blue (pulse)        */
-    --done:    #2fbf83;   /* done green                      */
-    --err:     #e05c4b;   /* strike / error red              */
+    --done:    #1f9d6b;   /* done green                      */
+    --err:     #c0392b;   /* strike / error red              */
     --amber:   #f0a020;   /* connecting                      */
 
     --bg:      #0c1017;
@@ -456,7 +456,7 @@
 /* ---------------- the signal path stepper ---------------- */
 (function(){
   // lanes: 0 You+Widget · 1 Server · 2 Queue · 3 Claude
-  const C = { user:'#fbe96b', srv:'#f0a020', disk:'#8b96ad', work:'#4d8dff', done:'#2fbf83' };
+  const C = { user:'#fbe96b', srv:'#f0a020', disk:'#8b96ad', work:'#4d8dff', done:'#1f9d6b' };
   const STEPS = [
     { from:0, to:1, tag:'GET /page.html', c:C.user,
       title:'You open the page',

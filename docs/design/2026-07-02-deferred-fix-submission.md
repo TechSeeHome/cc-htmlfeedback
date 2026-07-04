@@ -82,7 +82,7 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 | Per-card button (draft) | `Fix` |
 | Per-card tooltip | `Send to the agent to fix` |
 | Drafts section header | `Drafts` with count |
-| Connection dot tooltips | `Connected - agent is idle` / `Agent is working on N comments on this page` / `Run /cc-htmlfeedback to enable live fixes` (not "auto fixes" - fixes are no longer automatic) |
+| Connection dot tooltips | `Connected - agent is idle` / `Agent is working on N comments on this page` / `Connecting to the agent session…` (today names Claude) / `Run /cc-htmlfeedback to enable live fixes` (not "auto fixes" - fixes are no longer automatic) |
 | Popover button tooltips | `Comment (Cmd/Ctrl+click: fix now)` / `Strike (Cmd/Ctrl+click or Cmd/Ctrl+Backspace: fix now)` - the fast paths' discoverability lives here |
 | Popover hint (connected) | `Enter to save draft · Backspace (empty) to strike · Cmd/Ctrl+Enter to fix now · Shift+Enter for newline · Esc to cancel` (keeps today's strike + newline discoverability - the hint is the only place new users learn them) |
 | Disconnected banner | `Want these fixed live? Run /cc-htmlfeedback.` (today's copy names Claude twice) |
@@ -95,8 +95,10 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   strike draft. Identical to today; only the destination changes (local draft, not POST).
 - **Cmd/Ctrl+Enter** = comment + fix now (draft is created and immediately submitted).
   Implementation note: the existing plain-Enter branch (`e.key === 'Enter' && !e.shiftKey`)
-  also matches Cmd/Ctrl+Enter - the modifier branch must be checked *before* it (or the plain
-  branch must exclude `metaKey`/`ctrlKey`), else the fast path is unreachable.
+  also matches Cmd/Ctrl+Enter, and the plain-Backspace branch
+  (`e.key === 'Backspace' && ta.value === ''`) likewise matches Cmd/Ctrl+Backspace - both
+  modifier branches must be checked *before* their plain counterparts (or the plain branches
+  must exclude `metaKey`/`ctrlKey`), else the fast paths silently save drafts instead.
 - **Cmd/Ctrl+Backspace** (empty box - same gate as plain Backspace) = strike + fix now. With
   text in the box the chord keeps its native word-delete / delete-to-line-start behavior, so
   it can never fire mid-edit. Key-repeat is ignored (`e.repeat`) - holding the chord to
@@ -253,9 +255,10 @@ store[id] = {
 - `cardHTML` gains a draft branch: in connected mode a draft renders the disconnected-style
   contenteditable note, and *always* renders the note element for drafts even when empty
   (the current connected branch renders no note element at all for an empty note - an empty
-  strike draft would have nothing to type into). `submitDraft` forces a card rebuild on the
-  draft→submitted transition: `ensureCard` reuses card DOM and never re-runs `cardHTML`, so
-  without an explicit rebuild the note would stay editable after send. The payload is
+  strike draft would have nothing to type into). `submitDraft` forces a card rebuild on *both* directions of the
+  draft↔submitted transition - at send (note locks) and on the failure return to `Drafts`
+  (note unlocks, Fix button back): `ensureCard` reuses card DOM and never re-runs
+  `cardHTML`, so without explicit rebuilds the card's chrome would not follow the state. The payload is
   serialized at send, so the rebuild also prevents mid-flight edits from silently diverging
   from what the agent received.
 - `reconcile()`'s content matcher gains one condition: `!x.draft` (it currently adopts any

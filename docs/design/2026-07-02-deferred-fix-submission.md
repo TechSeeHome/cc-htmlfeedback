@@ -60,6 +60,7 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 | Drafts section header | `Drafts` with count |
 | Connection dot tooltips | `Connected - agent is idle` / `Agent is working on N comments on this page` / `Run /cc-htmlfeedback to enable auto fixes` |
 | Popover hint (connected) | `Enter to save draft · Cmd/Ctrl+Enter to fix now · Esc to cancel` |
+| Disconnected banner | `Want these fixed live? Run /cc-htmlfeedback.` (today's copy names Claude twice) |
 
 ## 3. UX specification
 
@@ -68,7 +69,12 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 - Select text, type a note. **Enter** = save comment draft. **Backspace** (empty box) = save
   strike draft. Identical to today; only the destination changes (local draft, not POST).
 - **Cmd/Ctrl+Enter** = comment + fix now (draft is created and immediately submitted).
-- **Cmd/Ctrl+Backspace** = strike + fix now.
+  Implementation note: the existing plain-Enter branch (`e.key === 'Enter' && !e.shiftKey`)
+  also matches Cmd/Ctrl+Enter - the modifier branch must be checked *before* it (or the plain
+  branch must exclude `metaKey`/`ctrlKey`), else the fast path is unreachable.
+- **Cmd/Ctrl+Backspace** (empty box - same gate as plain Backspace) = strike + fix now. With
+  text in the box the chord keeps its native word-delete / delete-to-line-start behavior, so
+  it can never fire mid-edit.
 - Hint line updated per the copy table above. Disconnected mode keeps the current hint.
 
 ### 3.2 Panel
@@ -92,30 +98,37 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 
 ### 3.3 Submission semantics
 
-- Submitting a draft POSTs the same payload as today; on success the card moves from `Drafts`
-  to `To do`, the note becomes read-only, and the server id (`sid`) is recorded. The inbox
-  file grows only here, so `watch-inbox` wake semantics keep meaning "real work arrived".
+- Submitting a draft POSTs the same payload as today. The card moves from `Drafts` to `To do`
+  when the POST is *sent* and the note becomes read-only; on success the server id (`sid`) is
+  recorded, on failure the card returns to `Drafts` (see next bullet). The inbox file grows
+  only here, so `watch-inbox` wake semantics keep meaning "real work arrived".
 - POST failure: card stays in `Drafts`, error toast (`Could not reach the server - draft
   kept`). `Fix all` submits sequentially and stops on first failure, leaving the rest as
   drafts. Retrying `Fix all` resumes from the failed item (earlier successes are no longer
   drafts, so they aren't resubmitted). A draft that keeps failing can be fixed individually
   via its own Fix button, or discarded to unblock the rest.
-- **Draft persistence**: any entry without a confirmed `sid` yet (drafts and just-submitted,
-  not-yet-board-visible tickets alike) is saved to `sessionStorage` (key
-  `ccfb-drafts:<page-key>`, scoped per tab - no cross-tab clobbering) on every change and
-  restored on load, re-anchored with the existing `reanchor()` path, which (as today) skips
-  entries with an empty quote - insertion-point drafts restore into the list without a live
-  on-page mark, same as any anchor-lost entry. On restore, `uid` is advanced past the highest
-  restored `id` before any new annotation can be created, so a fresh draft can never reuse a
-  restored one's id. A reload never eats unsent or just-submitted notes (the inbox→board
-  ingestion gap doesn't make a submitted ticket disappear); closing the tab does lose unsent
-  drafts (the tradeoff for avoiding cross-tab collisions). Once `reconcile()` confirms a
-  `sid`, the entry becomes server-authoritative as today.
+- **Draft persistence**: any entry that is a draft *or* not yet **board-seen** is saved to
+  `sessionStorage` (key `ccfb-drafts:<page-key>`, scoped per tab - no cross-tab clobbering) on
+  every change and restored on load. `reconcile()` marks an entry board-seen when it matches
+  it in board data (by `sid` or content-adoption) - note a recorded `sid` alone is NOT enough
+  to stop persisting: the POST response returns the `sid` seconds before the skill merges the
+  inbox into the board, and `GET /__ccfb/tickets` reads only the board, so dropping the entry
+  at `sid`-time would make it vanish on a reload in that gap. Restored entries are re-anchored
+  with the existing `reanchor()` path, which (as today) skips entries with an empty quote -
+  insertion-point drafts restore into the list without a live on-page mark, same as any
+  anchor-lost entry. On restore, `uid` is advanced past the highest restored `id` before any
+  new annotation can be created, so a fresh draft can never reuse a restored one's id. A
+  reload never eats unsent or just-submitted notes; closing the tab does lose unsent drafts
+  (the tradeoff for avoiding cross-tab collisions). Once board-seen, the entry is dropped from
+  the snapshot and becomes server-authoritative as today (a restored entry that gains its
+  board match dedups by `sid` - no duplicate card).
 
 ### 3.4 Disconnected mode
 
-Unchanged. No Fix buttons (there is nothing to send to), flat list, editable notes, Copy
-export. The banner still advertises `/cc-htmlfeedback`.
+Unchanged in behavior. No Fix buttons (there is nothing to send to), flat list, editable
+notes, Copy export. The banner still advertises `/cc-htmlfeedback`, but its copy is updated
+per the naming table above (the current banner names Claude twice, violating this design's
+own agent-agnostic rule).
 
 ## 4. Data model changes (widget-local)
 
@@ -132,10 +145,12 @@ store[id] = {
 - `add(type)` no longer POSTs; it creates a draft and persists it.
 - New `submitDraft(f)` wraps today's `ccfbPost` + `sid` bookkeeping. It flips `draft = false`
   when the POST is *sent* (not when it resolves), and back to `true` if the POST fails.
-- `reconcile()` is unchanged: it already matches a sid-less local entry by
-  `quote`+`note`+`page`. Flipping `draft` at send time (not success time) means an unsent
-  draft is never in the matching pool, while an in-flight submission is - the same as any
-  ticket today.
+- `reconcile()`'s content matcher gains one condition: `!x.draft` (it currently adopts any
+  sid-less entry matching `quote`+`note`+`page`). Together with the send-time flip: an unsent
+  draft is `draft: true` and never adopted; an in-flight submission is `draft: false` and
+  immediately adoptable - so the existing SSE-beats-POST race stays closed, while a server
+  ticket that merely shares text with an unsent draft (another tab, a duplicate note) creates
+  its own card instead of stealing the draft.
 - `isComposing()` gains "a draft note is focused" - already covered by the `.fb-note` check.
 
 ## 5. Out of scope (explicitly)

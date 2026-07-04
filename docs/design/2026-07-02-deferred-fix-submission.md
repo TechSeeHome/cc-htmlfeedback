@@ -17,9 +17,9 @@ Consequences:
   turns read-only the moment it exists. You cannot refine, reconsider, or discard before the
   agent spends work on it.
 - **The page changes under you.** When a ticket completes, the widget live-morphs the DOM
-  (`applyMorph`). With instant send, the agent starts rewriting the page while you are still
-  annotating it - content shifts, and later selections risk lost anchors (re-anchoring is
-  substring-only; see CLAUDE.md backlog).
+  (`applyMorph`). The morph is already deferred while you are mid-compose (`isComposing`),
+  but it still lands *between* annotations: content shifts under the selection you were
+  about to make, and existing marks must re-anchor (substring-only; see CLAUDE.md backlog).
 
 ## 2. Decision
 
@@ -36,16 +36,36 @@ A mode toggle was considered and rejected:
    send when they meant to batch. A visible per-card **Fix** button *is* the state - a draft
    card has one, a submitted card has a status pill instead.
 2. **Nothing is ever sent implicitly.** Explicit submission is predictable and safe: the agent
-   acts only on an explicit user action. This follows the same contract as GitHub's PR review
-   flow (comments are pending until "Submit review") - a model users already know.
+   acts only on an explicit user action. Same explicit-send contract as GitHub's PR review
+   flow (comments are pending until "Submit review") - the analogy is about predictability of
+   when the other side sees your words, not about batching benefits.
 3. **It unifies the two widget modes.** Disconnected mode already works exactly like this:
    notes accumulate, stay editable, and are exported by an explicit action (Copy). Connected
    mode becomes "disconnected mode + Fix buttons" instead of a third behavior to learn, test,
    and document.
-4. **The fast path survives via keyboard.** The one-click cost for a quick single fix is
-   erased by **Cmd/Ctrl+Enter** in the popover ("comment and fix now") and
-   **Cmd/Ctrl+Backspace** ("strike and fix now"). Power users keep today's zero-friction flow;
-   everyone else gets safety by default.
+4. **The fast path survives - keyboard and mouse.** The one-click cost for a quick single fix
+   is erased by **Cmd/Ctrl+Enter** in the popover ("comment and fix now"),
+   **Cmd/Ctrl+Backspace** ("strike and fix now"), and **Cmd/Ctrl+click** on the popover's
+   Comment/Strike buttons (mouse parity - mouse-first users must not be the only ones who
+   lose today's one-action flow). Power users keep today's zero friction; everyone else gets
+   safety by default.
+
+**Stated usage assumption:** reviewing a generated page normally produces feedback in small
+bursts (read a section, leave several notes, submit) rather than one isolated note per
+session, so the extra click is paid once per burst via **Fix all**. When a single quick fix
+*is* the whole session, the fast path keeps it at today's zero friction. If real usage turns
+out to be overwhelmingly single-note-and-wait, this default should be revisited.
+
+Two other alternatives were weighed and rejected:
+
+- **Undo-send grace window** (Gmail style: send instantly, show a ~5 s "Undo" toast). Solves
+  take-back at zero added clicks, but keeps *implicit* sending as the default (violates
+  point 2), adds time pressure at exactly the moment the user is re-reading their note, only
+  delays the mid-annotation morph problem by the grace period, and does nothing to unify the
+  two widget modes.
+- **Two-button popover** ("Save draft" / "Fix now" side by side). Mouse-friendly, but doubles
+  the decision cost of every single annotation and breaks the shared muscle-memory Enter
+  flow. The modifier chord + modifier-click cover the same need without a second button.
 
 ### Naming: agent-agnostic
 
@@ -59,7 +79,7 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 | Per-card tooltip | `Send to the agent to fix` |
 | Drafts section header | `Drafts` with count |
 | Connection dot tooltips | `Connected - agent is idle` / `Agent is working on N comments on this page` / `Run /cc-htmlfeedback to enable auto fixes` |
-| Popover hint (connected) | `Enter to save draft · Cmd/Ctrl+Enter to fix now · Esc to cancel` |
+| Popover hint (connected) | `Enter to save draft · Backspace (empty) to strike · Cmd/Ctrl+Enter to fix now · Shift+Enter for newline · Esc to cancel` (keeps today's strike + newline discoverability - the hint is the only place new users learn them) |
 | Disconnected banner | `Want these fixed live? Run /cc-htmlfeedback.` (today's copy names Claude twice) |
 
 ## 3. UX specification
@@ -75,21 +95,42 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 - **Cmd/Ctrl+Backspace** (empty box - same gate as plain Backspace) = strike + fix now. With
   text in the box the chord keeps its native word-delete / delete-to-line-start behavior, so
   it can never fire mid-edit.
+- **Cmd/Ctrl+click** on the 💬 Comment / ⌫ Strike buttons = the same fix-now fast path for
+  mouse-first users (parity with the keyboard chords; plain click saves a draft).
+- **First-use cue**: the first time a draft is saved, a one-time toast (existing `showToast`,
+  gated by a localStorage flag like the banner's `ccfb-banner-dismissed`) explains the new
+  default: `Saved as draft - nothing is sent until you click Fix`. This is the in-product
+  migration cue for the behavior change; release notes alone don't reach extension users.
 - Hint line updated per the copy table above. Disconnected mode keeps the current hint.
 
 ### 3.2 Panel
 
 - **Sections** (connected mode), in order: `Drafts`, `In progress`, `To do`, `Error`, `Done`.
   `Drafts` reuses the existing collapsible-section framework: `SEC_ORDER` gains `draft` at
-  rank 0, and `statusOf(f)` returns `'draft'` when `f.draft` is true (checked before the
+  rank 0, `SEC_LABEL` gains `draft: 'Drafts'` (without it the header renders "undefined"),
+  and `statusOf(f)` returns `'draft'` when `f.draft` is true (checked before the
   `f.status || 'todo'` fallback), so the existing section-bucketing keys on it directly.
   Section hidden when empty, like the others.
 - **Draft cards**: editable note (same contenteditable used in disconnected mode), a **Fix**
-  button, and the existing ✕ discard. No status pill - the Fix button is the status.
+  button, and the ✕ discard. No status pill - the Fix button is the status. Draft cards keep
+  the existing anchor-lost marker; an anchor-lost draft can still be fixed (quote/context
+  were captured at creation and are matched against *source*, not the live DOM) - if the
+  quote no longer exists in source, the agent fails cleanly and the ticket surfaces as
+  `error`, as with any ticket. No submit-blocking warning: the existing error path already
+  handles it end to end.
+- **✕ and undo**: ✕ on a draft deletes it from the store *and* the sessionStorage snapshot.
+  ✕ on an in-flight or submitted card hides it locally as today - it cannot cancel the
+  submission (the ticket is already queued; the agent may still fix it). Undo (Cmd+Z)
+  restores a discarded draft as today; there is no undo for Fix - unsending is impossible
+  once the inbox has grown.
 - **Submitted cards**: exactly as today (status pill, read-only note, result line).
-- **Header**: `Fix all (N)` appears as the primary button whenever N ≥ 1 drafts exist for this
-  page; `Copy feedback` remains below it (it exports drafts + submitted alike, as today).
-  Clicking `Fix all` submits drafts in creation order.
+- **Header**: `Fix all (N)` is a full-width **amber** button above `Copy feedback`, which
+  keeps today's blue primary styling *unchanged*. Rationale: today's big blue header button
+  IS Copy feedback - styling Fix all identically in that slot would route years of
+  copy-click muscle memory into the least reversible action in the widget. Distinct color,
+  no confirmation step needed. `Fix all` appears whenever N ≥ 1 drafts exist for this page;
+  `Copy feedback` exports drafts + submitted alike, as today. Clicking `Fix all` submits
+  drafts in creation order.
 - **Badge / count**: outstanding = drafts + submitted-but-not-done. A page with only drafts
   still shows a red badge - work is pending, just not sent.
 - **Clean** clears drafts along with everything else - also removes the persisted
@@ -102,26 +143,38 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   when the POST is *sent* and the note becomes read-only; on success the server id (`sid`) is
   recorded, on failure the card returns to `Drafts` (see next bullet). The inbox file grows
   only here, so `watch-inbox` wake semantics keep meaning "real work arrived".
-- POST failure: card stays in `Drafts`, error toast (`Could not reach the server - draft
-  kept`). `Fix all` submits sequentially and stops on first failure, leaving the rest as
-  drafts. Retrying `Fix all` resumes from the failed item (earlier successes are no longer
-  drafts, so they aren't resubmitted). A draft that keeps failing can be fixed individually
-  via its own Fix button, or discarded to unblock the rest.
-- **Draft persistence**: any entry that is a draft *or* not yet **board-seen** is saved to
-  `sessionStorage` (key `ccfb-drafts:<page-key>`, scoped per tab - no cross-tab clobbering) on
-  every change and restored on load. `reconcile()` marks an entry board-seen when it matches
-  it in board data (by `sid` or content-adoption) - note a recorded `sid` alone is NOT enough
-  to stop persisting: the POST response returns the `sid` seconds before the skill merges the
-  inbox into the board, and `GET /__ccfb/tickets` reads only the board, so dropping the entry
-  at `sid`-time would make it vanish on a reload in that gap. Restored entries are re-anchored
-  with the existing `reanchor()` path, which (as today) skips entries with an empty quote -
-  insertion-point drafts restore into the list without a live on-page mark, same as any
-  anchor-lost entry. On restore, `uid` is advanced past the highest restored `id` before any
-  new annotation can be created, so a fresh draft can never reuse a restored one's id. A
-  reload never eats unsent or just-submitted notes; closing the tab does lose unsent drafts
-  (the tradeoff for avoiding cross-tab collisions). Once board-seen, the entry is dropped from
-  the snapshot and becomes server-authoritative as today (a restored entry that gains its
-  board match dedups by `sid` - no duplicate card).
+- POST failure: the card *returns* to `Drafts` (it moved to `To do` at send), error toast
+  (`Could not reach the server - draft kept`). `Fix all` submits sequentially and stops on
+  first failure, leaving the rest as drafts. Retrying `Fix all` resumes from the failed item
+  (earlier successes are no longer drafts, so they aren't resubmitted). A draft that keeps
+  failing can be fixed individually via its own Fix button, or discarded to unblock the rest.
+- **Drafts survive morphs**: `add()` sets `page` at creation (today it is set only on the
+  POST path), so drafts pass `applyMorph`'s existing post-morph re-anchor filter
+  (`f.page === location.href && statusOf(f) !== 'done'`). Without this one line, the first
+  completed fix would strip every remaining draft's highlight permanently - and "a fix lands
+  while other drafts exist" is this design's normal case.
+- **Draft persistence** (`sessionStorage`, key `ccfb-drafts:` + `location.pathname` - the
+  widget never receives the server's hashed page key, so the key derives from the URL):
+  - **What persists**: any entry that is a draft *or* not yet **board-seen**, written on
+    change (debounced ~300 ms - contenteditable fires per keystroke). `reconcile()` marks an
+    entry board-seen when it matches it in board data (by `sid` or content-adoption). A
+    recorded `sid` alone is NOT enough to stop persisting: the POST response returns the
+    `sid` seconds before the skill merges the inbox into the board, and
+    `GET /__ccfb/tickets` reads only the board - dropping the entry at `sid`-time would make
+    it vanish on a reload in that gap.
+  - **Restore**: entries re-anchor via the existing `reanchor()` path, which (as today)
+    skips empty-quote entries - insertion-point drafts restore into the list without a live
+    on-page mark, same as any anchor-lost entry. `uid` is advanced past the highest restored
+    `id` before any new annotation can be created, so a fresh draft can never reuse a
+    restored one's id.
+  - **End of life**: once board-seen, the entry is dropped from the snapshot and becomes
+    server-authoritative as today (a restored entry that gains its board match dedups by
+    `sid` - no duplicate card). ✕ and Clean also purge snapshot entries.
+  - **Honest scope note**: sessionStorage is per-tab only *approximately* - browsers copy it
+    on tab-duplicate (a duplicated tab duplicates unsent drafts; fixing from both submits
+    twice) and restore it on tab-restore. A reload never eats unsent or just-submitted
+    notes; closing the tab usually does (the accepted tradeoff for avoiding cross-tab
+    clobbering).
 
 ### 3.4 Disconnected mode
 
@@ -141,17 +194,33 @@ store[id] = {
 }
 ```
 
-- `visibleItems()` ranks drafts first (`statusRank` returns -1 for drafts).
-- `add(type)` no longer POSTs; it creates a draft and persists it.
+- `ORDER` gains `draft: -1` (so `statusRank` ranks drafts first - a sort tiebreak only;
+  section *placement* comes from the `byKey[statusOf(f)]` bucketing) and `SEC_LABEL` gains
+  `draft: 'Drafts'`.
+- `add(type)` no longer POSTs; it creates a draft - setting `page` at creation (see §3.3,
+  morph survival) - and persists it.
 - New `submitDraft(f)` wraps today's `ccfbPost` + `sid` bookkeeping. It flips `draft = false`
   when the POST is *sent* (not when it resolves), and back to `true` if the POST fails.
+  Response bookkeeping is `f.sid = f.sid || t.id` - the response never overwrites a `sid`
+  already stamped by SSE content-adoption, so two identical in-flight submissions (e.g. two
+  strikes on repeated text, both with empty notes) cannot cross-assign sids and orphan a
+  ticket into a permanent duplicate card.
+- `cardHTML` gains a draft branch: in connected mode a draft renders the disconnected-style
+  contenteditable note, and *always* renders the note element for drafts even when empty
+  (the current connected branch renders no note element at all for an empty note - an empty
+  strike draft would have nothing to type into). `submitDraft` forces a card rebuild on the
+  draft→submitted transition: `ensureCard` reuses card DOM and never re-runs `cardHTML`, so
+  without an explicit rebuild the note would stay editable after send. The payload is
+  serialized at send, so the rebuild also prevents mid-flight edits from silently diverging
+  from what the agent received.
 - `reconcile()`'s content matcher gains one condition: `!x.draft` (it currently adopts any
   sid-less entry matching `quote`+`note`+`page`). Together with the send-time flip: an unsent
   draft is `draft: true` and never adopted; an in-flight submission is `draft: false` and
   immediately adoptable - so the existing SSE-beats-POST race stays closed, while a server
   ticket that merely shares text with an unsent draft (another tab, a duplicate note) creates
   its own card instead of stealing the draft.
-- `isComposing()` gains "a draft note is focused" - already covered by the `.fb-note` check.
+- `isComposing()` needs no change - draft notes carry the `.fb-note` class its existing
+  check already covers.
 
 ## 5. Out of scope (explicitly)
 
@@ -172,6 +241,13 @@ store[id] = {
   rescan-before-sleep change to the drain loop - both are skill/server-protocol changes, out of
   scope here. In practice a narrow window: a full fix+verify cycle takes much longer than a
   handful of sequential localhost POSTs.
+- **Auto-expiry of submitted-pending entries.** If the board is wiped externally (Clean from
+  another session, server restarted on a fresh queue) while a submission is pending
+  board-merge, the persisted entry lingers as a card the server no longer knows about. The
+  widget cannot distinguish "board wiped" from "skill just hasn't merged yet" (that gap can
+  legitimately last minutes while the skill is busy), and auto-reverting to draft would
+  invite duplicate submissions - so v1 has no auto-expiry. ✕ or Clean is the escape hatch
+  (both purge the snapshot).
 
 ## 6. Release notes
 
@@ -180,14 +256,24 @@ intentional and the default cannot be configured (no mode). Per the release chec
 bump `extension/manifest.json` + `package.json`, plus plugin versions
 (`plugins/cc-htmlfeedback/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`),
 run `node build.js`, and update README / SKILL.md wording where it says comments are fixed
-immediately.
+immediately. The one-time first-draft toast (§3.1) is the in-product migration cue; these
+release notes are the record, not the delivery mechanism.
 
 ## 7. Test plan (high level)
 
 - Unit (new - the repo's `node --test` harness covers server/lib only; widget-internal logic
-  needs its own tests): `add()` creates draft without POST; `submitDraft` POSTs and flips
-  state; `Fix all` order + first-failure stop; sessionStorage round-trip + re-anchor on load;
-  reconcile does not duplicate drafts; badge counts drafts.
-- Chrome E2E (new - no E2E infra exists yet): draft card renders in `Drafts` with editable
-  note; Fix moves it to `To do`; Cmd/Ctrl+Enter fast path; reload restores drafts; disconnected
-  mode unchanged.
+  needs its own tests): `add()` creates a draft with `page` set, no POST; `submitDraft` flips
+  state at send, reverts on failure, and never overwrites an SSE-stamped `sid`; `Fix all`
+  creation order + stop-on-first-failure + resume-from-failed-item on retry; board-seen
+  persistence (an entry with a recorded `sid` still persists until board data contains it);
+  restore advances `uid` past the highest restored id; ✕ and Clean purge the snapshot;
+  `statusOf`/`SEC_ORDER`/`SEC_LABEL`/`ORDER` render a Drafts section (no "undefined" header);
+  reconcile skips `draft: true` entries and does not duplicate restored ones; badge counts
+  drafts.
+- Chrome E2E (new - no E2E infra exists yet): draft card renders in `Drafts` with an editable
+  note, including an *empty-note strike draft*; Fix moves it to `To do` and locks the note;
+  Cmd/Ctrl+Enter and Cmd/Ctrl+click fast paths; plain Enter still saves a draft
+  (branch-ordering regression guard); Cmd/Ctrl+Backspace fires only on an empty box; reload
+  in the sid→board gap restores the just-submitted card; a completed fix morphs the page and
+  every remaining draft's highlight survives; the first-draft toast shows exactly once;
+  disconnected mode unchanged.

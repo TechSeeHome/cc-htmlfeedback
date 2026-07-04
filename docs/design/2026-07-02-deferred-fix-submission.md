@@ -74,8 +74,10 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
 ### 3.2 Panel
 
 - **Sections** (connected mode), in order: `Drafts`, `In progress`, `To do`, `Error`, `Done`.
-  `Drafts` reuses the existing collapsible-section framework (`SEC_ORDER` gains `draft` at
-  rank 0). Section hidden when empty, like the others.
+  `Drafts` reuses the existing collapsible-section framework: `SEC_ORDER` gains `draft` at
+  rank 0, and `statusOf(f)` returns `'draft'` when `f.draft` is true (checked before the
+  `f.status || 'todo'` fallback), so the existing section-bucketing keys on it directly.
+  Section hidden when empty, like the others.
 - **Draft cards**: editable note (same contenteditable used in disconnected mode), a **Fix**
   button, and the existing ✕ discard. No status pill - the Fix button is the status.
 - **Submitted cards**: exactly as today (status pill, read-only note, result line).
@@ -98,12 +100,17 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   drafts. Retrying `Fix all` resumes from the failed item (earlier successes are no longer
   drafts, so they aren't resubmitted). A draft that keeps failing can be fixed individually
   via its own Fix button, or discarded to unblock the rest.
-- **Draft persistence**: drafts are saved to `sessionStorage` (key `ccfb-drafts:<page-key>`,
-  scoped per tab - no cross-tab clobbering) on every change and restored on load, re-anchored
-  with the existing `reanchor()` path, which (as today) skips entries with an empty quote -
-  insertion-point drafts restore into the list without a live on-page mark, same as any
-  anchor-lost entry. A reload never eats unsent notes; closing the tab does (the tradeoff for
-  avoiding cross-tab collisions). Submitted tickets stay server-authoritative as today.
+- **Draft persistence**: any entry without a confirmed `sid` yet (drafts and just-submitted,
+  not-yet-board-visible tickets alike) is saved to `sessionStorage` (key
+  `ccfb-drafts:<page-key>`, scoped per tab - no cross-tab clobbering) on every change and
+  restored on load, re-anchored with the existing `reanchor()` path, which (as today) skips
+  entries with an empty quote - insertion-point drafts restore into the list without a live
+  on-page mark, same as any anchor-lost entry. On restore, `uid` is advanced past the highest
+  restored `id` before any new annotation can be created, so a fresh draft can never reuse a
+  restored one's id. A reload never eats unsent or just-submitted notes (the inbox→board
+  ingestion gap doesn't make a submitted ticket disappear); closing the tab does lose unsent
+  drafts (the tradeoff for avoiding cross-tab collisions). Once `reconcile()` confirms a
+  `sid`, the entry becomes server-authoritative as today.
 
 ### 3.4 Disconnected mode
 
@@ -116,17 +123,19 @@ export. The banner still advertises `/cc-htmlfeedback`.
 store[id] = {
   id, quote, context, section, note, type, removed,
   // connected mode:
-  draft: true|false,      // NEW - true until successfully POSTed
+  draft: true|false,      // NEW - true until the ticket is POSTed (see submitDraft below)
   sid, status, page, result, files, anchorLost
 }
 ```
 
 - `visibleItems()` ranks drafts first (`statusRank` returns -1 for drafts).
 - `add(type)` no longer POSTs; it creates a draft and persists it.
-- New `submitDraft(f)` wraps today's `ccfbPost` + `sid` bookkeeping and flips `draft = false`.
+- New `submitDraft(f)` wraps today's `ccfbPost` + `sid` bookkeeping. It flips `draft = false`
+  when the POST is *sent* (not when it resolves), and back to `true` if the POST fails.
 - `reconcile()` is unchanged: it already matches a sid-less local entry by
-  `quote`+`note`+`page` while a POST is in flight, regardless of any local flag - a draft
-  becomes matchable the moment it's actually submitted, the same as any ticket today.
+  `quote`+`note`+`page`. Flipping `draft` at send time (not success time) means an unsent
+  draft is never in the matching pool, while an in-flight submission is - the same as any
+  ticket today.
 - `isComposing()` gains "a draft note is focused" - already covered by the `.fb-note` check.
 
 ## 5. Out of scope (explicitly)

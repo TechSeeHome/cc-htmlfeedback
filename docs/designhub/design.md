@@ -3,7 +3,7 @@
 > **Status: draft v0.1 · 2026-07-02 · open for comments**
 > A platform for publishing HTML/MD design docs from our repos to a Google-login-gated
 > hub, collecting in-page feedback from the whole company (including PMs and management
-> without GitHub accounts), and growing into TechSee's org knowledge portal.
+> without GitHub accounts), and growing into an org knowledge portal.
 >
 > Visual version: [`design.html`](./design.html) - or review it with cc-htmlfeedback itself:
 > `node server.js --root docs/designhub` and comment away.
@@ -35,12 +35,12 @@
 | D7 | V1 scope | Publish + view + tree · in-page comments → Sheet · agent comment access. **PR sync deferred to phase 2** | Removes all GitHub-write integration from v1 |
 | D8 | Portal trajectory | DesignHub is **module 1 of an org knowledge portal**; navigation is catalog-driven from day one | Existing Docs/Slides/Sheets get registered into the same catalog later without redesign |
 | D9 | Publish metadata defaults | Skill infers repo/branch/feature/jira from **git + session context**, shows resolved values for **user approval** before publishing; anything unknown gets the explicit placeholder **`unassigned`** | No silent guessing - the publisher confirms; `unassigned` is greppable and can't be mistaken for a real value |
-| D10 | MD rendering | **Client-side for v1** (bundled renderer at view time); revisit server-side only if output quality demands | Zero server work, one less moving part; easy to swap later |
-| D11 | Permissions | **Whole-domain read for v1** via one shared folder. Native Drive ACLs can be tightened manually per repo/feature folder anytime | Caveat: the web app executes as the publisher account, so once folders are tightened, the serving layer must also check the viewer's Drive access before serving - v1 domain-wide read avoids that code |
+| D10 | MD rendering | **Client-side for v1** (bundled renderer at view time); revisit server-side only if output quality demands. Bundle must include **mermaid** support - design docs (like this one) use mermaid blocks | Zero server work, one less moving part; easy to swap later |
+| D11 | Permissions | **Whole-domain read for v1** via one shared folder. **Tightening folder ACLs is NOT supported until the serving-layer viewer check ships** (same milestone): the web app serves as the owner account, so a manually tightened folder would still be served to any domain user - a silent leak, not protection. V1 contract: publish only what the whole domain may read | Native Drive ACLs make tightening *look* available, but owner-serving bypasses them; pairing ACL support with the viewer-access check keeps the contract honest |
 | D12 | Comment lifecycle | V1 ships `open → in-progress → resolved/declined` as-is; richer states (`acknowledged` etc.) are **out of scope for v1**. V2 candidates: sort comments by creation date / update date | Don't overdesign the lifecycle before real usage; sorting emerged as a concrete v2 need |
-| D13 | Accounts | **Developers publish as themselves** - the skill uses their own Google OAuth, `owner` = their email. The **web app script owner** starts as Igor's account, migrates to a dedicated `designhub@` later | Script owner only affects what account serves files and whose quota is used - never authorship; publishing and serving are separate roles |
-| D14 | Naming | **Filenames stay original** - whatever the file is called in the repo (or whatever the publisher chose). No versions in filenames: version/date belong **inside the doc content** and in index metadata (`updatedAt`, Drive revisions) | Renaming on publish breaks the repo ↔ Drive mapping; Drive revisions + the index already track versions |
-| D15 | Re-publish vs comments | Open comments whose quoted text is gone in the new version are **auto-resolved with the distinct terminal status `anchor-lost`** - clearly marked as *not fixed*, never confused with `resolved`. The publish flow runs the re-anchor check (same quote search the widget uses) and writes the status. Good enough for v1; collect feedback and refine later | No manual triage burden in v1; the separate status keeps auto-closed feedback honest, filterable, and recoverable (reopen = new comment or status flip) |
+| D13 | Accounts | **Developers publish as themselves** - the skill uses their own Google OAuth, `owner` = their email. The **web app script owner** starts as a personal admin account, migrates to a dedicated `designhub@` service user later. The publish skill **grants the serving account editor access** on the companion Sheet and feature `_index` it creates - comment writes go through the bridge as that account | Script owner only affects what account serves files and whose quota is used - never authorship; publishing and serving are separate roles |
+| D14 | Naming | **Filenames stay original and the repo-relative subpath is preserved** under the feature folder (`docs/api/design.md` → `<feature>/docs/api/design.md`), so identical basenames never collide. No versions in filenames: version/date belong **inside the doc content** and in index metadata (`updatedAt`, Drive revisions) | Renaming on publish breaks the repo ↔ Drive mapping; subpath mirroring is collision-proof by construction; Drive revisions + the index already track versions |
+| D15 | Re-publish vs comments | Open comments whose quoted text is gone in the new version are **auto-resolved with the distinct terminal status `anchor-lost`** - clearly marked as *not fixed*, never confused with `resolved`. The publish flow runs the re-anchor check using the **full anchor triple** (quote + context + section - a bare quote match at a different occurrence counts as lost, unlike the widget's quote-only search) and writes the status. Good enough for v1; collect feedback and refine later | No manual triage burden in v1; the separate status keeps auto-closed feedback honest, filterable, and recoverable (reopen = new comment or status flip) |
 | D16 | Repo strategy | **Monorepo in the fork**, sync-safe: DesignHub lives in additive-only paths (`designhub/`, `plugins/designhub/`) and **never edits upstream files** (sole exception: a 5-line `marketplace.json` entry). The widget variant is generated by our own **fail-loud build transform** (`designhub/build-designhub.js`) from upstream's untouched `feedback-widget.html`. Sync = `git merge upstream/main` + rebuild + tests (never GitHub's "Sync fork" button); a fork-side CI check runs build + tests on every merge. Long-term: offer the transport-adapter refactor upstream | Single widget source keeps UX improvements flowing to both products; additive paths make upstream merges conflict-free indefinitely; the one brittle joint (transport transform) fails loudly at build time, not silently |
 
 ## 3. Architecture (v1)
@@ -88,10 +88,12 @@ tomorrow with zero data loss. Concretely:
 2. **Serving** - `?doc=<path>` reads the file from Drive, injects the adapted widget
    (same trick as cc-htmlfeedback's `inject.js`), returns via `HtmlService`. MD is
    rendered to HTML at view time (client-side, bundled renderer - D10), then gets the
-   same widget - PMs comment on rendered Markdown exactly like on HTML.
+   same widget - PMs comment on rendered Markdown exactly like on HTML. Injection also
+   sets `<base target="_top">` (and rewrites bare anchors) - HtmlService's IFRAME
+   sandbox requires explicit link targets or in-doc links silently fail to navigate.
 3. **Comments** - widget → `google.script.run` bridge (no CORS, no endpoints to secure)
    → append row to the doc's Sheet. Each bridge function is deliberately shaped like a
-   REST endpoint so a future non-Google host implements the same five calls.
+   REST endpoint so a future non-Google host implements the same six calls.
 4. **Agents** - no custom API in v1: **the Sheet is the API.** Agents use Drive/Sheets
    REST with normal OAuth creds (from Claude Code, CI, or any cloud) against a
    documented schema. They get **full context at three levels**, all from existing
@@ -106,7 +108,7 @@ tomorrow with zero data loss. Concretely:
 
 ### Layering
 
-```
+```text
 Catalog   - what exists and how it is organized   (feature _index shards + derived _portal-index)
 Storage   - the assets and their conversations    (Drive files + comment Sheets)
 Serving   - thin and disposable                   (Apps Script now, anything later)
@@ -165,11 +167,11 @@ Index row schema (same in shards and rollup; the rollup adds nothing):
 
 ### Drive tree
 
-```
+```text
 DesignHub/                          (shared folder or Shared Drive)
   _portal-index                     (Sheet - derived rollup, disposable cache)
   <repo>/
-    <feature-or-JIRA>/              e.g. HELM-123-crm-evaluation
+    <feature-or-JIRA>/              e.g. PROJ-123-crm-evaluation
       _index                        (Sheet - this feature's docs, source of truth)
       dashboard.html                published doc, byte-exact source
       dashboard.comments            (Sheet - this doc's comment DB)
@@ -221,8 +223,8 @@ publish history (one row per re-publish).
 
 ### Repo layout (per D16 - sync-safe monorepo in the fork)
 
-```
-cc-htmlfeedback/                     (TechSeeHome fork)
+```text
+cc-htmlfeedback/                     (our fork)
   feedback-widget.html               upstream widget source - NEVER edited
   build.js · server.js · lib/ ...    upstream local tool - NEVER edited
   plugins/

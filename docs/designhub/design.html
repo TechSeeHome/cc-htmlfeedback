@@ -169,10 +169,10 @@
   <span class="badge-draft">Draft v0.1 · open for comments · 2026-07-02</span>
   <h1>DesignHub:<br>publish, <em>review</em>, remember.</h1>
   <p class="lede">A hub on Google Workspace where <b>design docs from our repos become shareable, rendered pages</b> -
-  reviewable by anyone with a TechSee Google account, PMs and management included, with in-page
+  reviewable by anyone with a company Google account, PMs and management included, with in-page
   highlight-and-comment feedback (borrowed from cc-htmlfeedback) stored as structured data agents can act on.
   Module one of an org knowledge portal.</p>
-  <div class="meta-line">TechSee · platform design proposal · <a href="./design.md">markdown version</a> · builds on <a href="../how-it-works.md">how cc-htmlfeedback works</a></div>
+  <div class="meta-line">Platform design proposal · <a href="./design.md">markdown version</a> · builds on <a href="../how-it-works.md">how cc-htmlfeedback works</a></div>
 </header>
 
 <!-- ============ 01 problem ============ -->
@@ -215,17 +215,17 @@
     <div class="drow"><div class="did">D9</div><div class="dq">Publish defaults</div>
       <div class="da">Skill infers repo/branch/feature/jira from <b>git + session context</b>, shows resolved values for <b>user approval</b> before publishing; anything unknown gets the explicit placeholder <b>unassigned</b>.<small>No silent guessing - the publisher confirms; "unassigned" is greppable and can't be mistaken for a real value.</small></div></div>
     <div class="drow"><div class="did">D10</div><div class="dq">MD rendering</div>
-      <div class="da"><b>Client-side for v1</b> (bundled renderer at view time); revisit server-side only if output quality demands.<small>Zero server work, one less moving part; easy to swap later.</small></div></div>
+      <div class="da"><b>Client-side for v1</b> (bundled renderer at view time, incl. <b>mermaid</b> support - design docs use mermaid blocks); revisit server-side only if output quality demands.<small>Zero server work, one less moving part; easy to swap later.</small></div></div>
     <div class="drow"><div class="did">D11</div><div class="dq">Permissions</div>
-      <div class="da"><b>Whole-domain read for v1</b> via one shared folder. Native Drive ACLs - tighten manually per repo/feature folder anytime.<small>Caveat: the web app executes as the publisher account, so once folders are tightened the serving layer must also check the viewer's Drive access before serving - v1 domain-wide read avoids that code.</small></div></div>
+      <div class="da"><b>Whole-domain read for v1</b> via one shared folder. <b>Tightening folder ACLs is NOT supported until the serving-layer viewer check ships</b> (same milestone) - the web app serves as the owner account, so a tightened folder would still be served to any domain user: a silent leak, not protection. V1 contract: publish only what the whole domain may read.<small>Owner-serving bypasses Drive ACLs; pairing ACL support with the viewer-access check keeps the contract honest.</small></div></div>
     <div class="drow"><div class="did">D12</div><div class="dq">Comment lifecycle</div>
       <div class="da">V1 ships <b>open → in-progress → resolved/declined</b> as-is; richer states are out of scope for v1. V2 candidates: sort comments by creation / update date.<small>Don't overdesign the lifecycle before real usage; sorting emerged as a concrete v2 need.</small></div></div>
     <div class="drow"><div class="did">D13</div><div class="dq">Accounts</div>
-      <div class="da"><b>Developers publish as themselves</b> (own Google OAuth; owner = their email). The <b>web app script owner</b> starts as Igor's account, migrates to a dedicated designhub@ later.<small>Script owner only affects what account serves files and whose quota is used - never authorship. Publishing and serving are separate roles.</small></div></div>
+      <div class="da"><b>Developers publish as themselves</b> (own Google OAuth; owner = their email). The <b>web app script owner</b> starts as a personal admin account, migrates to a dedicated designhub@ service user later. The publish skill <b>grants the serving account editor access</b> on the companion Sheet and feature _index it creates - comment writes go through the bridge as that account.<small>Script owner only affects what account serves files and whose quota is used - never authorship. Publishing and serving are separate roles.</small></div></div>
     <div class="drow"><div class="did">D14</div><div class="dq">Naming</div>
-      <div class="da"><b>Filenames stay original</b> - whatever the file is called in the repo (or the publisher's choice). No versions in filenames: version/date belong <b>inside the doc content</b> and in index metadata (updatedAt, Drive revisions).<small>Renaming on publish breaks the repo ↔ Drive mapping; Drive revisions + the index already track versions.</small></div></div>
+      <div class="da"><b>Filenames stay original and the repo-relative subpath is preserved</b> under the feature folder (docs/api/design.md → &lt;feature&gt;/docs/api/design.md) - identical basenames never collide. No versions in filenames: version/date belong <b>inside the doc content</b> and in index metadata (updatedAt, Drive revisions).<small>Renaming on publish breaks the repo ↔ Drive mapping; subpath mirroring is collision-proof by construction; Drive revisions + the index already track versions.</small></div></div>
     <div class="drow"><div class="did">D15</div><div class="dq">Re-publish</div>
-      <div class="da">Open comments whose quoted text is gone in the new version are <b>auto-resolved with the distinct terminal status anchor-lost</b> - clearly marked as not fixed, never confused with resolved. The publish flow runs the re-anchor check and writes the status.<small>No manual triage burden in v1; the separate status keeps auto-closed feedback honest, filterable, and recoverable. Collect feedback, refine later.</small></div></div>
+      <div class="da">Open comments whose quoted text is gone in the new version are <b>auto-resolved with the distinct terminal status anchor-lost</b> - clearly marked as not fixed, never confused with resolved. The publish flow runs the re-anchor check using the <b>full anchor triple</b> (quote + context + section - a bare quote match at a different occurrence counts as lost) and writes the status.<small>No manual triage burden in v1; the separate status keeps auto-closed feedback honest, filterable, and recoverable. Collect feedback, refine later.</small></div></div>
     <div class="drow"><div class="did">D16</div><div class="dq">Repo strategy</div>
       <div class="da"><b>Monorepo in the fork, sync-safe:</b> DesignHub lives in additive-only paths (designhub/, plugins/designhub/) and <b>never edits upstream files</b> (sole exception: a 5-line marketplace.json entry). The widget variant is generated by a <b>fail-loud build transform</b> from upstream's untouched feedback-widget.html. Sync = git merge upstream/main + rebuild + tests; fork-side CI checks every merge.<small>Single widget source keeps UX improvements flowing to both products; additive paths make upstream merges conflict-free indefinitely; the one brittle joint fails loudly at build time. Long-term: offer the transport-adapter refactor upstream.</small></div></div>
   </div>
@@ -249,7 +249,7 @@
       <div class="detail">
         <b>Deploy:</b> "execute as me" (dedicated publisher account eventually), access "anyone in the domain".
         <b>Identity for free:</b> Session.getActiveUser().getEmail() - no OAuth prompts, no tokens in the browser.<br><br>
-        <b>Serving:</b> ?doc=&lt;path&gt; reads the file from Drive, injects the adapted cc-htmlfeedback widget (same inject.js trick), returns via HtmlService. MD renders to HTML at view time (client-side, bundled renderer - D10), then gets the same widget - PMs comment on rendered Markdown exactly like on HTML.<br><br>
+        <b>Serving:</b> ?doc=&lt;path&gt; reads the file from Drive, injects the adapted cc-htmlfeedback widget (same inject.js trick), returns via HtmlService. MD renders to HTML at view time (client-side, bundled renderer - D10), then gets the same widget - PMs comment on rendered Markdown exactly like on HTML. Injection also sets &lt;base target="_top"&gt; - HtmlService's IFRAME sandbox requires explicit link targets or in-doc links silently fail.<br><br>
         <b>Comments:</b> widget → google.script.run bridge (no CORS, nothing to secure) → append row to the doc's Sheet.
         The bridge functions are deliberately REST-shaped: listCatalog · getDoc · submitComment · listComments · reply · setStatus -
         a future host on any cloud implements the same six calls.<br><br>
@@ -307,7 +307,7 @@
   <pre class="tree">DesignHub/                          <span class="d">(shared folder or Shared Drive)</span>
   <span class="y">_portal-index</span>                     <span class="d">(Sheet - derived rollup, disposable cache)</span>
   &lt;repo&gt;/
-    &lt;feature-or-JIRA&gt;/              <span class="d">e.g. HELM-123-crm-evaluation</span>
+    &lt;feature-or-JIRA&gt;/              <span class="d">e.g. PROJ-123-crm-evaluation</span>
       <span class="y">_index</span>                        <span class="d">(Sheet - this feature's docs, source of truth)</span>
       <span class="g">dashboard.html</span>                <span class="d">published doc, byte-exact source</span>
       <span class="y">dashboard.comments</span>            <span class="d">(Sheet - this doc's comment DB)</span></pre>
@@ -337,7 +337,7 @@
   </table>
   </div>
 
-  <pre class="tree" style="margin-top:16px">cc-htmlfeedback/                     <span class="d">(TechSeeHome fork - sync-safe monorepo, D16)</span>
+  <pre class="tree" style="margin-top:16px">cc-htmlfeedback/                     <span class="d">(our fork - sync-safe monorepo, D16)</span>
   feedback-widget.html               <span class="d">upstream widget source - NEVER edited</span>
   build.js · server.js · lib/ ...    <span class="d">upstream local tool - NEVER edited</span>
   plugins/

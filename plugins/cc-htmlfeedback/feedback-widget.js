@@ -194,8 +194,8 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
 
   /* ---- connected mode (companion server injects window.__CCFB) ---- */
   const CCFB = window.__CCFB || null;
-  const ORDER = { todo:0, 'in-progress':1, error:2, done:3 };
-  function statusOf(f){ return CCFB ? (f.status || 'todo') : null; }
+  const ORDER = { draft:-1, todo:0, 'in-progress':1, error:2, done:3 };
+  function statusOf(f){ return CCFB ? (f.draft ? 'draft' : (f.status || 'todo')) : null; }
   function statusRank(f){ return CCFB ? (ORDER[statusOf(f)] ?? 0) : 0; }
   function ccfbBase(){ return (CCFB && CCFB.endpoint) || ''; }
   function ccfbPost(t){ return fetch(ccfbBase() + '/__ccfb/tickets', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(t) }); }
@@ -403,8 +403,8 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     if(result){ result.textContent = txt; result.style.display = txt ? 'block' : 'none'; }
     card.classList.toggle('fb-orphan', !!f.anchorLost);
   }
-  const SEC_ORDER = ['in-progress', 'todo', 'error', 'done'];
-  const SEC_LABEL = { 'in-progress':'In progress', 'todo':'To do', 'error':'Error', 'done':'Done' };
+  const SEC_ORDER = ['draft', 'in-progress', 'todo', 'error', 'done'];
+  const SEC_LABEL = { draft:'Drafts', 'in-progress':'In progress', 'todo':'To do', 'error':'Error', 'done':'Done' };
   // Build/reuse a card node. Reused across re-renders so a card being edited is never rebuilt.
   function ensureCard(f){
     let card = list.querySelector('.fb-card[data-fb-id="' + f.id + '"]');

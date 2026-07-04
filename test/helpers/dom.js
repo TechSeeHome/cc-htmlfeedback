@@ -1,14 +1,43 @@
 // Shared jsdom bootstrap for widget tests. jsdom has no layout engine, so geometry reads
 // (popover positioning) and innerText (needs layout) are stubbed — tests only exercise
 // widget LOGIC, never pixel positioning.
+// Safety note: this file and its callers use window.eval() to run the widget inside a
+// disposable jsdom sandbox and to poke its state from tests. The evaluated source is always
+// our own locally-built, trusted widget code (or literal test fixtures) — never untrusted
+// input — so eval here is the intended test mechanism, not a security concern.
 const { JSDOM } = require('jsdom');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const WIDGET_SRC = fs.readFileSync(
+const WIDGET_SRC_RAW = fs.readFileSync(
   path.join(__dirname, '..', '..', 'extension', 'feedback-widget.js'),
   'utf8'
 );
+
+// Tests poke the widget's internal state directly (e.g. `store[1] = {...}; render();`
+// via a second, separate window.eval() call — see widget.test.js). That only works because
+// of this splice: build.js nests all widget logic inside fbInit() (see build.js), so
+// store/render are local to that one function call and vanish once it returns; nothing
+// makes them reachable from a later, independent eval(). Worse, jsdom's window.eval doesn't
+// share a persistent global *lexical* environment across separate calls the way real
+// browsers do — top-level `let`/`const` from one eval() are invisible to the next — so even
+// hoisting them out of fbInit wouldn't be enough. Real *properties* of the global object
+// (window.foo = ...) don't have that problem: they're always live for every later eval() in
+// the same window. So we splice a one-line alias, `window.store = store; window.render =
+// render;`, right before fbInit()'s closing brace (where store/render are still in scope) —
+// giving later eval() calls a bare `store`/`render` that resolves via normal global-object
+// property lookup. Extend this list if a later test needs another internal (e.g. `uid`,
+// `restoreDrafts`) — for a plain value like `uid` a getter/setter pair is needed instead of a
+// straight alias, since aliasing only copies the current value, not a live reference.
+const EXPOSE_HOOK = '\n  window.store = store; window.render = render;\n';
+const FBINIT_CLOSE_ANCHOR = '\n  }\n  if (document.body) fbInit();';
+if (!WIDGET_SRC_RAW.includes(FBINIT_CLOSE_ANCHOR)) {
+  throw new Error(
+    'test/helpers/dom.js: fbInit() closing-brace anchor not found in extension/feedback-widget.js — ' +
+      "build.js's generated template likely changed; update FBINIT_CLOSE_ANCHOR/EXPOSE_HOOK."
+  );
+}
+const WIDGET_SRC = WIDGET_SRC_RAW.replace(FBINIT_CLOSE_ANCHOR, EXPOSE_HOOK + FBINIT_CLOSE_ANCHOR);
 
 function stubGeometry(window) {
   const zeroRect = () => ({

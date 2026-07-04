@@ -12,7 +12,15 @@
     "build": "node build.js",
     "check": "node build.js --check",
     "test": "node --test --test-force-exit",
-    "serve": "node server.js"
+    "serve": "node server.js",
+    "lint": "npm run build --silent && oxlint extension/feedback-widget.js server.js lib build.js test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "jsdom": "25.0.1",
+    "oxlint": "1.72.0",
+    "prettier": "3.9.4"
   },
   "license": "MIT",
   "private": false

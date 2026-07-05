@@ -19,3 +19,4 @@ npm-debug.log*
 
 # Internal design docs / planning (kept locally, not published)
 docs/superpowers/
+.playwright-mcp

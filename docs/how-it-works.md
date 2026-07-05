@@ -11,7 +11,7 @@
 
 | Piece | What it is | Where it runs |
 |---|---|---|
-| **Widget** (`feedback-widget.js`) | Self-contained, zero-dependency script that draws the Feedback pill, the comment popover, and the side panel | Inside your page, in the browser |
+| **Widget** (`feedback-widget.js`) | Self-contained, zero-dependency script that draws the Feedback pill, the comment popover, and the side panel with its ⚡ Fix / ⚡ Fix all send buttons; keeps notes as local drafts until you send | Inside your page, in the browser |
 | **Companion server** (`server.js`) | Tiny Node HTTP server (default port `4317`) that serves your HTML and injects the widget into every page | Your machine, `127.0.0.1` only |
 | **Queue** (`.cc-htmlfeedback/`) | Plain files on disk next to your HTML - the only communication channel between browser and AI | Your working tree (gitignored) |
 | **Claude Code session** (the "loop") | Reads the queue, dispatches one subagent per comment to edit the source, writes results back | Your terminal |
@@ -87,9 +87,12 @@ form a **ticket** once the draft is sent:
 | `section` | Nearest heading above the selection | Human-readable locator |
 | `page` | The page URL | Maps to the source file |
 
-Drafts stay editable in the side panel and can be discarded. Clicking **Fix** on a draft (or
-**Fix all** to send every pending draft, one after another) is what actually POSTs it to the
-server - only then does it become a ticket the session can see. A fast path skips the draft
+Drafts stay editable in the side panel and can be discarded. Clicking **⚡ Fix** on a draft (or
+**⚡ Fix all (N)** to send every pending draft, one after another) is what actually POSTs it to the
+server - only then does it become a ticket the session can see. **Fix all sends sequentially and
+stops at the first failure**, keeping the unsent notes as drafts (with a toast saying how many were
+sent vs kept). Drafts survive reloads in the same tab - they are persisted per project namespace
+and restored on load. A fast path skips the draft
 stage for a quick single fix: **Cmd/Ctrl+Enter** (comment), **Cmd/Ctrl+Backspace** (strike, on
 an empty box), or **Cmd/Ctrl+click** on either button - all three save and send in one step.
 
@@ -138,13 +141,15 @@ pulsing blue (working), and the exact text you commented on pulses while an agen
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> todo: comment submitted
+    [*] --> draft: note saved locally
+    draft --> todo: ⚡ Fix / ⚡ Fix all
     todo --> inprogress: session claims at dispatch
     inprogress --> done: fix applied + verified
     inprogress --> error: failed / edit collision
     done --> [*]: page morphs in place
     error --> todo: resurfaced / retried
 
+    draft: draft (browser-only, invisible to the session)
     inprogress: in-progress (highlight pulses)
 ```
 

@@ -711,7 +711,7 @@ Expected: run 1 prints the dry-run JSON; run 2 prints WARN listing the three rel
   "name": "designhub",
   "version": "0.1.0",
   "description": "Publish design docs to DesignHub (Google-login-gated hub with in-page comments) and work with their comment Sheets.",
-  "author": { "name": "your-org" }
+  "author": { "name": "<DH_ORG_NAME>" }
 }
 ```
 

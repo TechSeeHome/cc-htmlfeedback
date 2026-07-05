@@ -18,3 +18,4 @@ Setup: copy this file to `environment.local.md` and fill in your org's values.
 | `<DH_PUBLISHER_ACCOUNT>` | Google account that publishes docs (clasp login, OAuth consent) | `you@your-org.example` |
 | `<DH_AGENT_ACCOUNT>` | Non-publisher agent identity granted Shared Drive membership (D18) | `agent@your-org.example` |
 | `<DH_FORK_REPO>` | GitHub `owner/repo` slug of the fork that PRs target | `your-org/cc-htmlfeedback` |
+| `<DH_ORG_NAME>` | Display name for `plugins/designhub/.claude-plugin/plugin.json`'s `author.name` (cosmetic - not read programmatically) | `Your Org` |

@@ -48,7 +48,8 @@ designhub/
   build-designhub.js            fail-loud transform: feedback-widget.html -> gas/widget.html (Task 7)
   gas/                          clasp project (rootDir), created Task 1, deployed Task 8
     appsscript.json
-    config.js                   DH_CONFIG: root folder id, asset file ids
+    config.example.js           DH_CONFIG template (committed - placeholders only)
+    config.js                   real DH_CONFIG - GITIGNORED (org ids stay out of the fork)
     main.js                     doGet router: tree | ?doc= | ?asset=
     drive.js                    DriveApp/SpreadsheetApp adapters (thin, no unit tests)
     bridge.js                   getIdentity/listCatalog/listComments/submitComment/reply/setStatus
@@ -64,7 +65,8 @@ designhub/
       serve-and-comment.mjs     dev-browser E2E (Task 13)
 plugins/designhub/
   .claude-plugin/plugin.json
-  designhub.config.json         rootFolderId + execUrl for the skill
+  designhub.config.json         skill config TEMPLATE (committed - placeholders only)
+  designhub.config.local.json   real rootFolderId + execUrl - GITIGNORED (Task 8)
   skills/publish-design/
     SKILL.md
     scripts/gauth.mjs           OAuth: refresh-or-consent, token cache            (Task 10)
@@ -74,7 +76,14 @@ plugins/designhub/
 docs/designhub/agent-access.md  "the Sheet is the API" how-to                     (Task 11)
 .github/workflows/designhub.yml CI: builds --check + all tests                    (Task 12)
 .claude-plugin/marketplace.json +1 entry (the sole upstream-file edit, D16)       (Task 12)
+.gitignore                      +3 lines: the local config files above            (Task 1)
 ```
+
+**Config policy (matches `environment.example.md` and the repo's org-identifier scrub):
+committed files carry `<DH_*>` placeholders only.** Real org values live exclusively in
+gitignored files - `designhub/gas/config.js`, `designhub/gas/.clasp.json`,
+`plugins/designhub/designhub.config.local.json` - filled from `environment.local.md`.
+Nothing in this plan ever commits a real folder id, script id, deployment id, or exec URL.
 
 **Test command for everything:** `node --test designhub/test/` (root `package.json` is upstream - do NOT add scripts to it).
 
@@ -84,8 +93,9 @@ docs/designhub/agent-access.md  "the Sheet is the API" how-to                   
 
 **Files:**
 - Create: `designhub/gas/appsscript.json`
-- Create: `designhub/gas/config.js`
+- Create: `designhub/gas/config.example.js` (+ gitignored working copy `config.js`)
 - Create: `designhub/test/.gitkeep`
+- Modify: `.gitignore` (fork-local file - already carries fork-only sections; NOT in D16's upstream list)
 
 - [ ] **Step 0: Confirm a non-main work branch** (repo rule: never commit to main - branch + PR): `git branch --show-current` must NOT print `main`; if it does, `git checkout -b feat/designhub-v1` first. Task 14 opens the PR.
 
@@ -111,11 +121,16 @@ docs/designhub/agent-access.md  "the Sheet is the API" how-to                   
 
 (`script.scriptapp` is new vs poc1: the rollup reconciler installs a time trigger, Task 6.)
 
-- [ ] **Step 2: Create `designhub/gas/config.js`:**
+- [ ] **Step 2: Create `designhub/gas/config.example.js`** (committed TEMPLATE - the real
+`config.js` is gitignored in Step 2b so org-specific ids never land in the public fork,
+same policy as `environment.local.md`):
 
 ```js
-// DesignHub deployment configuration. IDs are not secrets (access is enforced
-// by Drive ACLs), so this is committed. POC fixtures live in DesignHub-POC.
+// DesignHub deployment configuration TEMPLATE (committed). Copy to config.js
+// in this directory and fill in the real ids from
+// docs/designhub/plans/environment.local.md. config.js is gitignored: the ids
+// are not secrets (access is enforced by Drive ACLs), but they are org-specific
+// and this fork stays generic. clasp pushes config.js from disk regardless of git.
 var DH_CONFIG = {
   rootFolderId: '<DH_ROOT_FOLDER_ID>',                  // DesignHub (prod root)
   assets: {
@@ -127,6 +142,23 @@ var DH_CONFIG = {
 if (typeof module !== 'undefined') module.exports = DH_CONFIG;
 ```
 
+- [ ] **Step 2b: Gitignore the local config files, then create the real `config.js`.**
+Append to `.gitignore`:
+
+```text
+# DesignHub local deployment values (org-specific - never committed; the committed
+# templates are designhub/gas/config.example.js + plugins/designhub/designhub.config.json,
+# real values come from docs/designhub/plans/environment.local.md)
+designhub/gas/config.js
+designhub/gas/.clasp.json
+plugins/designhub/designhub.config.local.json
+```
+
+Then `cp designhub/gas/config.example.js designhub/gas/config.js` and replace the three
+`<DH_*>` placeholders with the real values from `environment.local.md`. With the ignore
+rules in place, every later `git add designhub/` in this plan is safe - git never sees
+the filled file. (Node tests never require `config.js`; only `clasp push` reads it.)
+
 - [ ] **Step 3: Sanity-run the (empty) test suite**
 
 Run: `node --test designhub/test/ 2>&1 | tail -3`
@@ -135,7 +167,7 @@ Expected: `pass 0` (no test files yet, exit 0). If node errors on the empty dir,
 - [ ] **Step 4: Commit**
 
 ```bash
-git add designhub/
+git add designhub/ .gitignore
 git commit -m "designhub: scaffold GAS project config (additive paths per D16)"
 ```
 
@@ -452,6 +484,7 @@ test('serveHtml injects __CCFB config + widget asset tag before </body>', () => 
   assert.match(out, new RegExp(EXEC.replace(/[/.]/g, '\\$&') + '\\?asset=widget'));
   assert.ok(out.indexOf('?asset=widget') < out.indexOf('</body>'));
   assert.match(out, /"mode":"proxy"/);   // disables the widget's morph path
+  assert.match(out, /d\.id="dh-identity"/);   // the Task 13 E2E finds the chip by this id
 });
 
 test('mdShell embeds MD as JSON, inlines marked, loads mermaid as asset', () => {
@@ -533,7 +566,7 @@ var DH_RENDER = (function () {
       'var h=document.querySelector("#fb-panel .fb-head");' +
       'if((!h||!window.google)&&++n<40)return;clearInterval(t);if(!h||!window.google)return;' +
       'google.script.run.withSuccessHandler(function(r){var d=document.createElement("div");' +
-      'd.style.cssText="font:11px monospace;color:#5b6072;padding:2px 0";' +
+      'd.id="dh-identity";d.style.cssText="font:11px monospace;color:#5b6072;padding:2px 0";' +
       'd.textContent="signed in as "+(r.server||"unknown");h.appendChild(d);}).getIdentity();' +
       '},500);})();</scr' + 'ipt>';
   }
@@ -832,7 +865,13 @@ function doGet(e) {
     var md = r.file.getBlob().getDataAsString('UTF-8');
     var markedJs = DriveApp.getFileById(DH_CONFIG.assets.marked).getBlob().getDataAsString('UTF-8');
     var shell = DH_RENDER.mdShell(md, markedJs, dhExecUrl_() + '?asset=mermaid', r.parsed.fileName);
-    out = shell.replace('</body></html>', DH_RENDER.widgetTags(p.doc, dhExecUrl_()) + '</body></html>');
+    // Splice the widget in at the shell's KNOWN tail. A replace of the FIRST
+    // '</body></html>' would hit a literal one inside the MD_SOURCE JSON string
+    // if the markdown ever quotes closing tags - and widgetTags contains real
+    // </script> sequences, which would truncate that script block.
+    var tail = '</body></html>';
+    out = shell.slice(0, shell.length - tail.length) +
+      DH_RENDER.widgetTags(p.doc, dhExecUrl_()) + tail;
   } else {
     out = DH_RENDER.serveHtml(r.file.getBlob().getDataAsString('UTF-8'), p.doc, dhExecUrl_());
   }
@@ -857,7 +896,7 @@ The complete upstream transport surface (verified by reading `feedback-widget.ht
 - `loadTickets()` - GET `/__ccfb/tickets?page=` (board pull)
 - `subscribeSSE()` - EventSource `/__ccfb/events` (live updates - dropped in v1 per design section 6, replaced by 30 s polling)
 - the Clean handler's POST `/__ccfb/clean` (dropped: on DesignHub the Sheet is authoritative; Clean stays local-view-only, which also sidesteps upstream's known clean-deletes-unseen-tickets issue)
-- 10 textual occurrences of `location.href` for page keying: 2 on the `FILE` line, 1 inside a `//` comment in the draft-persistence block, 7 more in code (one of which - the Clean handler's - is removed by R4). On DesignHub the page key is the doc path, injected as `window.__CCFB.docPath`. NOTE: that same draft-persistence comment also mentions `/__ccfb/tickets`, so post-transform endpoint guards must ignore comment lines.
+- 10 textual occurrences of `location.href` for page keying: 2 on the `FILE` line, 1 inside the `//` comment above `add()`'s new-entry `store[id] = ...` line ("a later morph's re-anchor pass (which filters on f.page === location.href)"), 7 more in code (one of which - the Clean handler's - is removed by R4). On DesignHub the page key is the doc path, injected as `window.__CCFB.docPath`. NOTE: a separate `//` comment in the draft-persistence block mentions `/__ccfb/tickets`, so post-transform endpoint guards must ignore comment lines.
 - `window.__CCFB.mode === 'proxy'` already disables the morph path - we inject `mode:'proxy'`.
 
 **Files:**
@@ -970,10 +1009,10 @@ function transform(src) {
     'clean handler');
 
   // -- R5: page keying by doc path. After R4, exactly 9 location.href remain
-  //    (FILE x2, restore-time reanchor, a draft-persistence CODE COMMENT,
-  //    new-entry page, reconcile re-anchor guard, morph fetch [dead in proxy
-  //    mode], morph re-anchor, pageParam [now unused]). The global replace also
-  //    rewrites the comment occurrence - harmless. --
+  //    (FILE x2, restore-time reanchor, the CODE COMMENT above add()'s new-entry
+  //    line, new-entry page, reconcile re-anchor guard, morph fetch [dead in
+  //    proxy mode], morph re-anchor, pageParam [now unused]). The global replace
+  //    also rewrites the comment occurrence - harmless. --
   const count = (body.match(/location\.href/g) || []).length;
   if (count !== 9) throw new Error('expected exactly 9 location.href sites after clean removal, found ' + count + ' - upstream changed, re-audit page keying');
   body = body.replace(/location\.href/g, 'dhPage()');
@@ -1043,8 +1082,9 @@ Expected: `wrote .../widget.html (~66000 bytes)` then `build-designhub: up to da
 Manual-ish task (browser consent involved) - follow exactly; poc1's Results section is the reference for every quirk you will see.
 
 **Files:**
-- Create: `designhub/gas/.clasp.json` (generated by clasp, committed)
-- Create: `plugins/designhub/designhub.config.json`
+- Create: `designhub/gas/.clasp.json` (generated by clasp - GITIGNORED, the scriptId is org-specific)
+- Create: `plugins/designhub/designhub.config.json` (committed placeholder template)
+- Create: `plugins/designhub/designhub.config.local.json` (GITIGNORED - real values)
 
 - [ ] **Step 1: Create the Apps Script project without clobbering local files.** `clasp create-script` clones the remote `appsscript.json` over local files, so create in a scratch dir and move the `.clasp.json`:
 
@@ -1057,7 +1097,7 @@ cd "$REPO_ROOT/designhub/gas"
 node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('.clasp.json','utf8'));j.rootDir='.';fs.writeFileSync('.clasp.json',JSON.stringify(j,null,2))"
 ```
 
-Expected: "Created new script: https://script.google.com/d/<SCRIPT_ID>/edit". clasp v3 is installed and logged in as the publisher account `<DH_PUBLISHER_ACCOUNT>` (P1); verify with `clasp show-authorized-user` if unsure.
+Expected: "Created new script: https://script.google.com/d/<SCRIPT_ID>/edit". clasp v3 is installed and logged in as the publisher account `<DH_PUBLISHER_ACCOUNT>` (P1); verify with `clasp show-authorized-user` if unsure. `.clasp.json` stays local (gitignored in Task 1 Step 2b); record the printed `<SCRIPT_ID>` in `environment.local.md`.
 
 - [ ] **Step 2: Push and deploy:**
 
@@ -1089,18 +1129,32 @@ EOF
 
 Expected: tree page prints "No docs published yet...". (The `?asset=widget` route is exercised end-to-end by Task 13 - navigating to a ContentService JS URL directly downloads rather than renders, so do not smoke-test it by navigation.)
 
-- [ ] **Step 6: Create `plugins/designhub/designhub.config.json`** with the real values from Step 2:
+- [ ] **Step 6: Create the skill config pair** - the committed file keeps placeholders (the
+fork stays generic); the gitignored `.local` file carries the real values from Step 2 and
+wins at run time (publish.mjs prefers it, Task 10). Record `<SCRIPT_ID>`/`<DEPLOYMENT_ID>`
+in `environment.local.md` too.
+
+`plugins/designhub/designhub.config.json` (committed template):
 
 ```json
 {
   "rootFolderId": "<DH_ROOT_FOLDER_ID>",
-  "execUrl": "https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec",
-  "scriptId": "<SCRIPT_ID>",
-  "deploymentId": "<DEPLOYMENT_ID>"
+  "execUrl": "https://script.google.com/macros/s/<DH_DEPLOYMENT_ID>/exec"
 }
 ```
 
-- [ ] **Step 7: Commit:** `git add designhub/gas/.clasp.json plugins/designhub/ && git commit -m "designhub: production web app deployed (execute-as-me, domain access)"`
+`plugins/designhub/designhub.config.local.json` (gitignored - fill with the REAL ids):
+
+```json
+{
+  "rootFolderId": "<real root folder id>",
+  "execUrl": "https://script.google.com/macros/s/<real deployment id>/exec",
+  "scriptId": "<real script id>",
+  "deploymentId": "<real deployment id>"
+}
+```
+
+- [ ] **Step 7: Commit:** `git add plugins/designhub/ && git commit -m "designhub: production web app deployed (execute-as-me, domain access)"` - `.clasp.json` and `designhub.config.local.json` stay local via the Task 1 ignore rules; `git status` must show them as ignored, not staged.
 
 ---
 
@@ -1497,8 +1551,16 @@ import { accessToken, api } from './gauth.mjs';
 import { scanAssets, featureDir, newIndexRow, TICKET_COLS, INDEX_COLS, META_COLS } from './publish-lib.mjs';
 import { reanchorPass } from './anchors.mjs';
 
-const CONFIG = JSON.parse(fs.readFileSync(
-  new URL('../../../designhub.config.json', import.meta.url), 'utf8'));
+// Config: the gitignored .local file (real org values, Task 8) wins; the
+// committed designhub.config.json is a generic placeholder template.
+const cfgLocal = new URL('../../../designhub.config.local.json', import.meta.url);
+const cfgMain = new URL('../../../designhub.config.json', import.meta.url);
+const CONFIG = JSON.parse(fs.readFileSync(fs.existsSync(cfgLocal) ? cfgLocal : cfgMain, 'utf8'));
+if (/^<DH_/.test(String(CONFIG.rootFolderId || ''))) {
+  console.error('designhub.config.local.json is missing - copy designhub.config.json ' +
+    'next to it and fill the real values (see docs/designhub/plans/environment.local.md)');
+  process.exit(2);
+}
 const SAD = 'supportsAllDrives=true';
 const LIST = `${SAD}&includeItemsFromAllDrives=true`;
 const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -1669,7 +1731,7 @@ console.log('Comments Sheet: https://docs.google.com/spreadsheets/d/' + companio
 
 - [ ] **Step 7: Full suite green:** `node --test designhub/test/`
 
-- [ ] **Step 8: Integration dry-run against the POC area** (NOT prod): edit `plugins/designhub/designhub.config.json`, set `rootFolderId` to `<DH_POC_FOLDER_ID>` (DesignHub-POC, see `environment.local.md`), run the two commands below, then restore with `git checkout -- plugins/designhub/designhub.config.json`:
+- [ ] **Step 8: Integration dry-run against the POC area** (NOT prod): edit `plugins/designhub/designhub.config.local.json`, set `rootFolderId` to `<DH_POC_FOLDER_ID>` (DesignHub-POC, see `environment.local.md`), run the two commands below, then put the prod `rootFolderId` back (the file is gitignored - restore it by hand, there is nothing to `git checkout`):
 
 ```bash
 node plugins/designhub/skills/publish-design/scripts/publish.mjs \
@@ -1680,7 +1742,7 @@ node plugins/designhub/skills/publish-design/scripts/publish.mjs \
   --feature design/designhub-platform --allow-assets   # design.html has nav links only; assets list must be EMPTY - if BLOCK appears, the scan is misclassifying
 ```
 
-Expected: run 1 prints the dry-run JSON; run 2 prints WARN for the two nav links, no BLOCK, then `Published: <execUrl>?doc=cc-htmlfeedback/design--designhub-platform/docs/designhub/design.html`. Run the publish twice - the second run must not duplicate the index row (check the printed Sheet). Then restore the config (git checkout above).
+Expected: run 1 prints the dry-run JSON; run 2 prints WARN listing the three relative nav links (`./design.md`, `../how-it-works.md`, `../how-it-works.html`), no BLOCK, then `Published: <execUrl>?doc=cc-htmlfeedback/design--designhub-platform/docs/designhub/design.html`. Run the publish twice - the second run must not duplicate the index row (check the printed Sheet). Then restore the prod `rootFolderId` in the local config.
 
 - [ ] **Step 9: Commit:** `git add plugins/designhub/ designhub/ && git commit -m "designhub: /publish-design flow - poc2 mechanics + D9/D14/D15/D19 (TDD)"`
 
@@ -1891,8 +1953,16 @@ for (let i = 0; i < 45 && !frame; i++) {
   }
 }
 if (!frame) throw new Error("widget never appeared");
-const identity = await frame.evaluate(() =>
-  (document.querySelector("#fb-panel .fb-head div:last-child") || {}).textContent || "");
+// The chip (#dh-identity, set by widgetTags in render.js) lands asynchronously:
+// widgetTags polls for the panel + google.script.run, then a bridge round trip -
+// poll for it instead of reading immediately. (Do NOT use a positional selector
+// like ".fb-head div:last-child": it matches the Clean/dock button row.)
+let identity = "";
+for (let i = 0; i < 20 && !identity; i++) {
+  await page.waitForTimeout(1000);
+  identity = await frame.evaluate(() =>
+    (document.getElementById("dh-identity") || {}).textContent || "");
+}
 console.log("identity chip:", identity);
 const selected = await frame.evaluate(() => {
   const p = [...document.querySelectorAll("p,td,li")].find(el => el.innerText.trim().length > 60);
@@ -1962,6 +2032,10 @@ REST. Spec: `docs/designhub/design.md` (D1-D19). POC evidence:
 - `test/` - `node --test designhub/test/`; `test/e2e/` are manual dev-browser scripts.
 - Publishing: the `designhub` plugin's `/publish-design` skill
   (`plugins/designhub/`).
+- Org-specific config is never committed: copy `gas/config.example.js` to
+  `gas/config.js` and `plugins/designhub/designhub.config.json` to
+  `designhub.config.local.json`, then fill both from
+  `docs/designhub/plans/environment.local.md` (all three local files gitignored).
 ```
 
 - [ ] **Step 2: Update the design doc status line** - in `docs/designhub/design.md`, change the `> **Status: draft v0.1 ...**` line to:
@@ -2008,4 +2082,5 @@ gh pr create --repo <DH_FORK_REPO> --base main \
 - [ ] D17 design-§9 attack re-run against PRODUCTION (poc1 only proved it on the POC app): from the served doc page's console, call the bridge with a forged `authorEmail` (row must stamp the session user) and call `setStatus` on an existing ticket (a `meta` audit row must appear)
 - [ ] `<DH_AGENT_ACCOUNT>` can reply via REST per `agent-access.md` (poc4 recipe) against a PRODUCTION companion Sheet
 - [ ] Re-publish of an edited doc: same URL, D15 statuses flip where expected
-- [ ] `git log upstream/main..HEAD -- feedback-widget.html build.js server.js lib/ plugins/cc-htmlfeedback/` is EMPTY (D16 honored)
+- [ ] `git log upstream/main..HEAD -- feedback-widget.html build.js server.js lib/ plugins/cc-htmlfeedback/` is EMPTY (D16 honored; add the remote first if missing: `git remote add upstream https://github.com/leetwito/cc-htmlfeedback.git && git fetch upstream`)
+- [ ] Config policy held: the committed `designhub/gas/config.example.js` and `plugins/designhub/designhub.config.json` still contain `<DH_*>` placeholders (never real ids), and `git status --ignored designhub/gas plugins/designhub | grep -E 'config\.js|\.clasp\.json|config\.local\.json'` shows all three local files as ignored

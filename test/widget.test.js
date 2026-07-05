@@ -88,6 +88,28 @@ test('persistence: persistDrafts saves drafts and not-yet-board-seen entries, ex
   );
 });
 
+test('persistence: DRAFT_KEY prefers the stable ns over sessionId when the server injects one', () => {
+  // ns is a stable per-project hash (survives server restarts); sessionId is fresh per start.
+  // Keying by ns keeps drafts reachable across a same-project restart; the sessionId fallback
+  // covers older servers that don't inject ns.
+  const { window } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'fresh-uuid', mode: 'static', ns: 'stablens' },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href };
+    persistDrafts();
+  `);
+  assert.ok(
+    window.sessionStorage.getItem('ccfb-drafts:stablens:/test.html'),
+    'snapshot is stored under the ns-scoped key'
+  );
+  assert.equal(
+    window.sessionStorage.getItem('ccfb-drafts:fresh-uuid:/test.html'),
+    null,
+    'sessionId is not used when ns is present'
+  );
+});
+
 test('persistence: restoreDrafts brings entries back and advances uid past the highest restored id', () => {
   const { window } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
   window.sessionStorage.setItem(

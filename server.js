@@ -18,6 +18,10 @@ const MIME = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
 function startServer({ root, queueDir, port = 0, sessionId = crypto.randomUUID(), widgetPath, proxy, onShutdown } = {}) {
   fs.mkdirSync(queueDir, { recursive: true });
   root = path.resolve(root);
+  // Stable per-project namespace for the widget's persisted drafts (same sha1/12 idiom as
+  // lib/queue.js pageKey): keyed on the queue dir so it survives server restarts of the same
+  // project, unlike sessionId, while still separating projects that share a port+path.
+  const ns = crypto.createHash('sha1').update(path.resolve(queueDir)).digest('hex').slice(0, 12);
   // In the bundled plugin the widget sits co-located next to server.js; in the dev repo it's
   // under extension/. Prefer the co-located copy, fall back to the extension build.
   if (!widgetPath) {
@@ -49,7 +53,7 @@ function startServer({ root, queueDir, port = 0, sessionId = crypto.randomUUID()
         const chunks = [];
         upRes.on('data', c => chunks.push(c));
         upRes.on('end', () => {
-          const html = injectWidget(Buffer.concat(chunks).toString('utf8'), sessionId, 'proxy');
+          const html = injectWidget(Buffer.concat(chunks).toString('utf8'), sessionId, 'proxy', ns);
           const h = Object.assign({}, upRes.headers);
           delete h['content-length']; delete h['content-encoding']; delete h['transfer-encoding'];
           res.writeHead(upRes.statusCode, h);
@@ -146,7 +150,7 @@ function startServer({ root, queueDir, port = 0, sessionId = crypto.randomUUID()
       const ext = path.extname(filePath);
       if (ext === '.html') {
         res.writeHead(200, {'content-type':'text/html; charset=utf-8'});
-        return res.end(injectWidget(buf.toString('utf8'), sessionId, 'static'));
+        return res.end(injectWidget(buf.toString('utf8'), sessionId, 'static', ns));
       }
       res.writeHead(200, {'content-type': MIME[ext] || 'application/octet-stream'});
       res.end(buf);

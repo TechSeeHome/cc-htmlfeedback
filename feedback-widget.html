@@ -195,14 +195,16 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   /* ---- draft persistence: sessionStorage, key derived from the normalized path (matches
      lib/queue.js's fileOf so it lines up conceptually with the server's board key, even
      though the widget never receives the server's hashed key directly) plus the server's
-     sessionId (window.__CCFB, injected fresh per server start) - without it, stopping one
-     /cc-htmlfeedback project and starting another on the same default port+path would restore
-     the first project's drafts into the second. References window.__CCFB directly since CCFB
-     itself isn't assigned until below. ---- */
+     project namespace (window.__CCFB.ns, a stable hash of the queue dir) - without it,
+     stopping one /cc-htmlfeedback project and starting another on the same default port+path
+     would restore the first project's drafts into the second. ns survives restarts of the
+     same project's server; sessionId (fresh per start) is only the fallback for an older
+     server that doesn't inject ns. References window.__CCFB directly since CCFB itself
+     isn't assigned until below. ---- */
   const DRAFT_KEY = 'ccfb-drafts:' + (function(){
-    const sid = (window.__CCFB && window.__CCFB.sessionId) || '';
+    const ns = (window.__CCFB && (window.__CCFB.ns || window.__CCFB.sessionId)) || '';
     let p = location.pathname; if (p.endsWith('/')) p += 'index.html';
-    return (sid ? sid + ':' : '') + p;
+    return (ns ? ns + ':' : '') + p;
   })();
   let persistTimer = null;
   function schedulePersist(){ if(!CCFB) return; clearTimeout(persistTimer); persistTimer = setTimeout(persistDrafts, 300); }

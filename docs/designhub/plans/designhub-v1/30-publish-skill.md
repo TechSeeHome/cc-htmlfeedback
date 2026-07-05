@@ -96,6 +96,14 @@ test('context ellipsis from the widget clip is tolerated', async () => {
   const { reanchorPass } = await mod();
   assert.deepEqual(reanchorPass([t({ context: 'The quick brown fox jumps…' })], DOC, true), []);
 });
+
+test('html entities are decoded before matching (source encodes what the browser rendered)', async () => {
+  const { reanchorPass } = await mod();
+  const doc = '<html><body><h2>Intro</h2><p>Foo &amp; Bar &lt;3 the quick brown fox jumps over the lazy dog.</p></body></html>';
+  const ticket = t({ quote: 'Foo & Bar <3 the quick brown fox',
+    context: 'Foo & Bar <3 the quick brown fox jumps over the lazy dog.' });
+  assert.deepEqual(reanchorPass([ticket], doc, true), []);
+});
 ```
 
 - [ ] **Step 2: Run to verify FAIL:** `node --test designhub/test/anchors.test.js`
@@ -104,11 +112,24 @@ test('context ellipsis from the widget clip is tolerated', async () => {
 
 ```js
 // D15 re-anchor pass, pure. Matching runs on normalized RENDERED-equivalent
-// TEXT (html: tags stripped; md: inline markdown syntax stripped; whitespace
-// collapsed) because the widget's quote/context come from rendered text, not
-// source bytes - raw-source matching would false-lose any quote spanning
-// **bold**, `code`, or a [link](url).
+// TEXT (html: tags stripped + entities decoded; md: inline markdown syntax
+// stripped; whitespace collapsed) because the widget's quote/context come
+// from rendered text, not source bytes - raw-source matching would false-lose
+// any quote spanning **bold**, `code`, a [link](url), or an HTML entity like
+// &amp; (a strike whose quote only LOOKS gone due to entity mismatch would
+// otherwise wrongly auto-resolve as fixed - the exact outcome D15 exists to
+// prevent).
 const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+const decodeEntities = (s) => String(s)
+  .replace(/&amp;/g, '&')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"')
+  .replace(/&(?:#0*39|apos);/g, "'")
+  .replace(/&nbsp;/g, ' ')
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+  .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 
 // Approximate md-to-text: conservative in the right direction - leftovers only
 // ADD characters to the haystack; the needle (quote/context) is rendered text.
@@ -125,7 +146,7 @@ const mdText = (md) => String(md)
   .replace(/\|/g, ' ');                      // table pipes
 
 const textify = (source, isHtml) => norm(isHtml
-  ? String(source).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' ')
+  ? decodeEntities(String(source).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' '))
   : mdText(source));
 
 // The widget clips context to 160 chars with a trailing ellipsis - strip it

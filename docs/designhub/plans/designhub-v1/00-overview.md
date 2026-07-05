@@ -62,8 +62,9 @@ designhub/
       render.js                 injectBase/anchor rewrite/md shell/tree html     (Task 5)
   test/
     schema.test.js  paths.test.js  rollup.test.js  render.test.js  transform.test.js  anchors.test.js  publish.test.js
-    e2e/
-      serve-and-comment.mjs     dev-browser E2E (Task 13)
+  e2e/                           NOT under test/ - node's test runner would try to execute it
+    serve-and-comment.mjs       dev-browser E2E (Task 13)
+  README.md                     (Task 14)
 plugins/designhub/
   .claude-plugin/plugin.json
   designhub.config.json         skill config TEMPLATE (committed - placeholders only)
@@ -121,5 +122,5 @@ file holding its task.
 - [ ] D17 design-§9 attack re-run against PRODUCTION (poc1 only proved it on the POC app): from the served doc page's console, call the bridge with a forged `authorEmail` (row must stamp the session user) and call `setStatus` on an existing ticket (a `meta` audit row must appear)
 - [ ] `<DH_AGENT_ACCOUNT>` can reply via REST per `agent-access.md` (poc4 recipe) against a PRODUCTION companion Sheet
 - [ ] Re-publish of an edited doc: same URL, D15 statuses flip where expected
-- [ ] `git log upstream/main..HEAD -- feedback-widget.html build.js server.js lib/ plugins/cc-htmlfeedback/` is EMPTY (D16 honored; add the remote first if missing: `git remote add upstream https://github.com/leetwito/cc-htmlfeedback.git && git fetch upstream`)
+- [ ] `git log origin/main..HEAD -- feedback-widget.html build.js server.js lib/ plugins/cc-htmlfeedback/` is EMPTY (D16 honored). Use `origin/main` - THIS fork's main, where the PR lands - not the `leetwito/cc-htmlfeedback` upstream: that history carries pre-existing fork-side widget commits unrelated to this plan, so diffing against it always shows commits and never proves anything about D16.
 - [ ] Config policy held: the committed `designhub/config.example.js` and `plugins/designhub/designhub.config.json` still contain `<DH_*>` placeholders (never real ids), and `git status --ignored designhub/gas plugins/designhub | grep -E 'config\.js|\.clasp\.json|config\.local\.json'` shows all three local files as ignored

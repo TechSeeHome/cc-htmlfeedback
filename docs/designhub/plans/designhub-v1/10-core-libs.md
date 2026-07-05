@@ -289,22 +289,85 @@ if (typeof module !== 'undefined') module.exports = DH_PATHS;
 
 ### Task 4: `lib/rollup.js` - port the poc5 reconciler logic
 
-poc5's `rollup-lib.mjs` is proven (8/8 tests + live convergence). Port it to the dual-use module convention; port its tests verbatim.
+poc5's `rollup-lib.mjs` is proven (8/8 tests + live convergence). Port it to the dual-use module convention. The poc's own test file lives under the gitignored, dev-machine-local `docs/designhub/pocs/` tree - absent from fresh clones and from git worktrees, which this plan's recommended subagent-driven execution uses - so the 8 cases are inlined below instead of copied, re-derived directly from the proven `upsertRow`/`buildRollup` contract in Step 3.
 
 **Files:**
-- Create: `designhub/gas/lib/rollup.js` (from `docs/designhub/pocs/poc5/rollup-lib.mjs`)
-- Test: `designhub/test/rollup.test.js` (from `docs/designhub/pocs/poc5/rollup-lib.test.mjs`)
+- Create: `designhub/gas/lib/rollup.js` (poc5 `rollup-lib.mjs` logic, ported to the dual-use convention)
+- Test: `designhub/test/rollup.test.js` (self-contained - see Step 1)
 
-- [ ] **Step 1: Create the test** - copy `docs/designhub/pocs/poc5/rollup-lib.test.mjs` to `designhub/test/rollup.test.js`, converting ESM to CJS and importing columns from schema:
+- [ ] **Step 1: Write the failing test** (`designhub/test/rollup.test.js`):
 
 ```js
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { upsertRow, buildRollup } = require('../gas/lib/rollup.js');
 const { INDEX_COLS } = require('../gas/lib/schema.js');
-```
 
-Then keep every test case from the poc file unchanged (the `row(...)` helper and all 8 tests - copy them verbatim, they only use `INDEX_COLS`, `upsertRow`, `buildRollup`).
+function row(over) {
+  const o = Object.assign({ id: 'u1', type: 'html', title: 't', repo: 'r',
+    feature: 'f', jira: 'unassigned', tags: '', owner: 'me@example.com',
+    driveFileId: 'F1', commentSheetId: 'C1', url: 'U', status: 'active',
+    publishedAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }, over);
+  return INDEX_COLS.map((c) => o[c]);
+}
+const DFI = INDEX_COLS.indexOf('driveFileId');
+const TITLE = INDEX_COLS.indexOf('title');
+
+test('upsertRow appends when the key is new', () => {
+  const r = upsertRow([], row({ driveFileId: 'F1' }));
+  assert.equal(r.action, 'appended');
+  assert.equal(r.rows.length, 1);
+});
+
+test('upsertRow updates in place without mutating the input array', () => {
+  const original = [row({ driveFileId: 'F1', title: 'old' })];
+  const r = upsertRow(original, row({ driveFileId: 'F1', title: 'new' }));
+  assert.equal(r.action, 'updated');
+  assert.equal(r.rows.length, 1);
+  assert.equal(r.rows[0][TITLE], 'new');
+  assert.equal(original[0][TITLE], 'old');   // input array untouched
+});
+
+test('buildRollup returns [] for no shards', () => {
+  assert.deepEqual(buildRollup([]), []);
+});
+
+test('buildRollup unions rows across multiple shards', () => {
+  const out = buildRollup([[row({ driveFileId: 'F1' })], [row({ driveFileId: 'F2' })]]);
+  assert.equal(out.length, 2);
+});
+
+test('buildRollup dedups by driveFileId, newest updatedAt wins', () => {
+  const stale = row({ driveFileId: 'F1', title: 'stale', updatedAt: '2026-01-01T00:00:00Z' });
+  const fresh = row({ driveFileId: 'F1', title: 'fresh', updatedAt: '2026-02-01T00:00:00Z' });
+  const out = buildRollup([[stale], [fresh]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][TITLE], 'fresh');
+});
+
+test('buildRollup skips ghost rows (empty driveFileId)', () => {
+  const out = buildRollup([[row({ driveFileId: '' }), row({ driveFileId: 'F1' })]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][DFI], 'F1');
+});
+
+test('buildRollup sorts by repo, then feature, then title', () => {
+  const out = buildRollup([[
+    row({ driveFileId: 'F1', repo: 'b', feature: 'x', title: 'z' }),
+    row({ driveFileId: 'F2', repo: 'a', feature: 'y', title: 'a' }),
+    row({ driveFileId: 'F3', repo: 'a', feature: 'x', title: 'z' }),
+  ]]);
+  assert.deepEqual(out.map((r) => r[DFI]), ['F3', 'F2', 'F1']);
+});
+
+test('buildRollup is idempotent: rebuilding from its own output converges', () => {
+  const shards = [[row({ driveFileId: 'F1', updatedAt: '2026-01-01T00:00:00Z' })],
+    [row({ driveFileId: 'F1', updatedAt: '2026-01-02T00:00:00Z' })]];
+  const first = buildRollup(shards);
+  const second = buildRollup([first]);
+  assert.deepEqual(second, first);
+});
+```
 
 - [ ] **Step 2: Run to verify FAIL:** `node --test designhub/test/rollup.test.js`
 

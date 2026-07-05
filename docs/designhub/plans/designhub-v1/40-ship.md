@@ -59,7 +59,7 @@ jobs:
 node build.js --check && npm test && node designhub/build-designhub.js --check && node --test designhub/test/
 ```
 
-Expected: all four green. (`npm test` and `build.js --check` prove the D16 promise: our additions did not disturb upstream.)
+Expected: all four green. (`npm test` and `build.js --check` prove the D16 promise: our additions did not disturb upstream.) `npm test` runs `node --test --test-force-exit`, a flag added in Node 20.14 - CI's `setup-node@v4` with `node-version: 20` resolves to a current 20.x and is fine, but if this fails locally with `bad option: --test-force-exit`, the dev machine's pinned node is older; `nvm install 20 && nvm use 20` (or bump the symlink per the user's global CLAUDE.md npm-globals note) before continuing. Do NOT edit upstream's `package.json` to work around it (D16).
 
 - [ ] **Step 4: Commit:** `git add .claude-plugin/marketplace.json .github/ && git commit -m "designhub: marketplace entry + fork-side CI (D16)"`
 
@@ -68,15 +68,15 @@ Expected: all four green. (`npm test` and `build.js --check` prove the D16 promi
 ### Task 13: E2E script + dogfood publish (the real thing, end to end)
 
 **Files:**
-- Create: `designhub/test/e2e/serve-and-comment.mjs` (dev-browser script - run manually, not in CI)
+- Create: `designhub/e2e/serve-and-comment.mjs` (dev-browser script - run manually, not in CI)
 
-- [ ] **Step 1: Create `designhub/test/e2e/serve-and-comment.mjs`.** This is a dev-browser stdin script (poc1/poc3 pattern). IMPORTANT: dev-browser scripts run in a QuickJS sandbox with NO `process`/env access - parameters are baked in by `sed` at run time:
+- [ ] **Step 1: Create `designhub/e2e/serve-and-comment.mjs`.** This is a dev-browser stdin script (poc1/poc3 pattern). IMPORTANT: dev-browser scripts run in a QuickJS sandbox with NO `process`/env access - parameters are baked in by `sed` at run time:
 
 ```bash
 # Run:
 sed -e 's|__DH_EXEC__|https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec|' \
     -e 's|__DH_DOC__|cc-htmlfeedback/design--designhub-platform/docs/designhub/design.html|' \
-    designhub/test/e2e/serve-and-comment.mjs | dev-browser --browser designhub --timeout 180
+    designhub/e2e/serve-and-comment.mjs | dev-browser --browser designhub --timeout 180
 ```
 
 ```js
@@ -146,7 +146,7 @@ Expected: two `Published:` URLs under the production exec URL.
 
 - [ ] **Step 4: Check the tree page** (exec URL with no params) in dev-browser: both docs listed under `cc-htmlfeedback / design/designhub-platform`.
 
-- [ ] **Step 5: Commit:** `git add designhub/test/e2e/ && git commit -m "designhub: E2E serve-and-comment script + dogfood publish verified"`
+- [ ] **Step 5: Commit:** `git add designhub/e2e/ && git commit -m "designhub: E2E serve-and-comment script + dogfood publish verified"`
 
 ---
 
@@ -170,7 +170,7 @@ REST. Spec: `docs/designhub/design.md` (D1-D19). POC evidence:
   `feedback-widget.html` (never edit either output or upstream; `--check` in CI).
 - `gas/` - the Apps Script web app (clasp project). Deploy:
   `cd designhub/gas && clasp push -f && clasp create-deployment -i <id> -d "<desc>"`.
-- `test/` - `node --test designhub/test/`; `test/e2e/` are manual dev-browser scripts.
+- `test/` - `node --test designhub/test/`; `e2e/` (sibling dir, NOT under `test/` - the node test runner would try to execute it) holds manual dev-browser scripts.
 - Publishing: the `designhub` plugin's `/publish-design` skill
   (`plugins/designhub/`).
 - Org-specific config is never committed: copy `config.example.js` to

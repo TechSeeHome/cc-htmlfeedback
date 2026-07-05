@@ -232,6 +232,9 @@ publish history (one row per re-publish).
 | `reply(path, parentId, note)` | `POST /docs/{path}/comments/{id}/replies` |
 | `setStatus(path, id, status)` | `PATCH /docs/{path}/comments/{id}` |
 
+Note: in v1 `getDoc` is not a bridge function - doc retrieval IS `doGet(?doc=path)`
+(a bridge `getDoc` has no consumer until a client-side router exists).
+
 Every mutating call carries the doc `path`: with one companion Sheet per doc, the
 bridge resolves the target Sheet directly from the path - via the feature `_index`
 row's `commentSheetId` - instead of scanning every Sheet for a comment UUID

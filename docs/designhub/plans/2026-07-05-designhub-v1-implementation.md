@@ -13,7 +13,7 @@
 ## Required reading (in order)
 
 1. `docs/designhub/design.md` - the spec. Decisions D1-D19 are binding; §5 data contracts are the law.
-2. `docs/designhub/pocs/README.md` + each `pocN/README.md` **Results** section - every task below builds on a POC-proven mechanism; the POC code is the reference implementation.
+2. `docs/designhub/pocs/README.md` + each `pocN/README.md` **Results** section - every task below builds on a POC-proven mechanism; the POC code is the reference implementation. NOTE: `docs/designhub/pocs/` is gitignored (org-specific) - it exists on the dev machine only, not in fresh clones.
 3. Repo `CLAUDE.md` - especially: never hand-edit `plugins/cc-htmlfeedback/` build artifacts, never use em dashes, bump versions on user-facing changes.
 
 ## Non-negotiable constraints (from D16 + POC findings)
@@ -67,9 +67,10 @@ plugins/designhub/
   designhub.config.json         rootFolderId + execUrl for the skill
   skills/publish-design/
     SKILL.md
-    scripts/gauth.mjs           OAuth: refresh-or-consent, token cache
+    scripts/gauth.mjs           OAuth: refresh-or-consent, token cache            (Task 10)
     scripts/anchors.mjs         D15 re-anchor pure logic                          (Task 9)
-    scripts/publish.mjs         the publish flow                                  (Task 10)
+    scripts/publish-lib.mjs     pure publish helpers: scan/infer/rows/featureDir  (Task 10)
+    scripts/publish.mjs         the publish flow CLI                              (Task 10)
 docs/designhub/agent-access.md  "the Sheet is the API" how-to                     (Task 11)
 .github/workflows/designhub.yml CI: builds --check + all tests                    (Task 12)
 .claude-plugin/marketplace.json +1 entry (the sole upstream-file edit, D16)       (Task 12)
@@ -85,6 +86,8 @@ docs/designhub/agent-access.md  "the Sheet is the API" how-to                   
 - Create: `designhub/gas/appsscript.json`
 - Create: `designhub/gas/config.js`
 - Create: `designhub/test/.gitkeep`
+
+- [ ] **Step 0: Confirm a non-main work branch** (repo rule: never commit to main - branch + PR): `git branch --show-current` must NOT print `main`; if it does, `git checkout -b feat/designhub-v1` first. Task 14 opens the PR.
 
 - [ ] **Step 1: Create `designhub/gas/appsscript.json`** (scopes proven in poc1; `userinfo.email` is what makes `Session.getActiveUser()` return the viewer):
 
@@ -354,15 +357,18 @@ Then keep every test case from the poc file unchanged (the `row(...)` helper and
 // D19 rollup logic: publish-time direct upsert + reconciler rebuild-from-shards.
 // Pure functions - the live Sheets I/O lives in drive.js (GAS) / publish.mjs (skill).
 var DH_ROLLUP = (function () {
-  var COLS = (typeof DH_SCHEMA !== 'undefined') ? DH_SCHEMA.INDEX_COLS
-    : require('./schema.js').INDEX_COLS;
-  var KEY = COLS.indexOf('driveFileId');
-  var UPDATED = COLS.indexOf('updatedAt');
-  var REPO = COLS.indexOf('repo');
-  var FEATURE = COLS.indexOf('feature');
-  var TITLE = COLS.indexOf('title');
+  // Columns resolve LAZILY, inside each call. Load-time resolution would kill
+  // the whole GAS project: clasp pushes files alphabetically, so this file
+  // loads BEFORE lib/schema.js - DH_SCHEMA would be undefined at load and
+  // require() does not exist in the GAS runtime, so doGet and every bridge
+  // call would die with a load-time ReferenceError.
+  function cols_() {
+    return (typeof DH_SCHEMA !== 'undefined') ? DH_SCHEMA.INDEX_COLS
+      : require('./schema.js').INDEX_COLS;
+  }
 
   function upsertRow(rows, row) {
+    var KEY = cols_().indexOf('driveFileId');
     for (var i = 0; i < rows.length; i++) {
       if (rows[i][KEY] === row[KEY]) {
         var next = rows.slice(); next[i] = row;
@@ -373,6 +379,12 @@ var DH_ROLLUP = (function () {
   }
 
   function buildRollup(shards) {
+    var COLS = cols_();
+    var KEY = COLS.indexOf('driveFileId');
+    var UPDATED = COLS.indexOf('updatedAt');
+    var REPO = COLS.indexOf('repo');
+    var FEATURE = COLS.indexOf('feature');
+    var TITLE = COLS.indexOf('title');
     var byKey = {};
     shards.forEach(function (rows) {
       rows.forEach(function (r) {
@@ -425,6 +437,8 @@ test('injectBase rewrites bare #anchor links to target=_self (poc1 finding)', ()
   const out = R.injectBase('<head></head><a href="#sec">jump</a><a href="https://x">out</a>');
   assert.match(out, /<a target="_self" href="#sec">/);
   assert.doesNotMatch(out, /target="_self" href="https/);
+  // single-quoted attributes get the same treatment
+  assert.match(R.injectBase("<head></head><a href='#s2'>j</a>"), /<a target="_self" href='#s2'>/);
 });
 
 test('injectBase prepends base when there is no head', () => {
@@ -447,6 +461,9 @@ test('mdShell embeds MD as JSON, inlines marked, loads mermaid as asset', () => 
   assert.match(out, /var marked=/);
   assert.match(out, /\?asset=mermaid/);
   assert.match(out, /<base target="_top">/);
+  // poc1: rendered #anchor links must get target=_self at runtime or a TOC
+  // click navigates the top window out of the sandbox
+  assert.match(out, /a\.target="_self"/);
 });
 
 test('mdShell defuses </script> inside the markdown payload', () => {
@@ -502,7 +519,7 @@ var DH_RENDER = (function () {
     html = /<head[^>]*>/i.test(html)
       ? html.replace(/<head[^>]*>/i, function (m) { return m + base; })
       : base + html;
-    return html.replace(/<a\s([^>]*href="#)/gi, '<a target="_self" $1');
+    return html.replace(/<a\s([^>]*href=["']#)/gi, '<a target="_self" $1');
   }
   function widgetTags(docPath, execUrl) {
     var cfg = { endpoint: '', sessionId: 'designhub', mode: 'proxy',
@@ -543,6 +560,13 @@ var DH_RENDER = (function () {
       '<scr' + 'ipt>var MD_SOURCE=' + mdJson + ';\n' +
       'var root=document.getElementById("md-root");\n' +
       'root.innerHTML=marked.parse(MD_SOURCE);\n' +
+      // poc1 MANDATORY rewrite, MD flavor: marked renders <a href="#..."> at
+      // runtime, after injectBase-style source rewrites could ever see them -
+      // without target="_self" a TOC click navigates the TOP window into the
+      // raw googleusercontent sandbox URL (page + widget lost). marked emits no
+      // heading ids in v1 (poc3), so these clicks are safe no-ops until
+      // marked-gfm-heading-id lands (backlog).
+      'document.querySelectorAll("a").forEach(function(a){var h=a.getAttribute("href");if(h&&h.charAt(0)==="#")a.target="_self";});\n' +
       'document.querySelectorAll("pre code.language-mermaid").forEach(function(c){\n' +
       '  var d=document.createElement("pre");d.className="mermaid";d.textContent=c.textContent;\n' +
       '  c.parentElement.replaceWith(d);});\n' +
@@ -833,7 +857,7 @@ The complete upstream transport surface (verified by reading `feedback-widget.ht
 - `loadTickets()` - GET `/__ccfb/tickets?page=` (board pull)
 - `subscribeSSE()` - EventSource `/__ccfb/events` (live updates - dropped in v1 per design section 6, replaced by 30 s polling)
 - the Clean handler's POST `/__ccfb/clean` (dropped: on DesignHub the Sheet is authoritative; Clean stays local-view-only, which also sidesteps upstream's known clean-deletes-unseen-tickets issue)
-- 9 uses of `location.href` for page keying (2 on the `FILE` line) - on DesignHub the page key is the doc path, injected as `window.__CCFB.docPath`
+- 10 textual occurrences of `location.href` for page keying: 2 on the `FILE` line, 1 inside a `//` comment in the draft-persistence block, 7 more in code (one of which - the Clean handler's - is removed by R4). On DesignHub the page key is the doc path, injected as `window.__CCFB.docPath`. NOTE: that same draft-persistence comment also mentions `/__ccfb/tickets`, so post-transform endpoint guards must ignore comment lines.
 - `window.__CCFB.mode === 'proxy'` already disables the morph path - we inject `mode:'proxy'`.
 
 **Files:**
@@ -857,9 +881,13 @@ test('transform produces a self-injecting widget with GAS transport', () => {
   assert.match(out, /google\.script\.run/);
   assert.match(out, /dhRun\('submitComment'/);
   assert.match(out, /dhRun\('listComments'/);
-  assert.doesNotMatch(out, /\/__ccfb\//);        // no server endpoints remain
+  // Upstream comment lines legitimately MENTION /__ccfb/ - assert on code lines only.
+  const code = out.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  assert.doesNotMatch(code, /\/__ccfb\//);        // no live server endpoints remain
   assert.doesNotMatch(out, /EventSource/);        // SSE fully removed (v1)
-  assert.doesNotMatch(out, /location\.href/);     // all page keying goes through dhPage()
+  // Page keying goes through dhPage(); its own fallback is the ONE allowed use.
+  assert.equal((code.match(/location\.href/g) || []).length, 1,
+    'only the dhPage() fallback may reference location.href');
   assert.match(out, /function dhPage\(\)/);
   assert.match(out, /setInterval\(loadTickets, 30000\)/);
   assert.match(out, /__fbWidgetLoaded/);          // self-injection guard kept
@@ -941,18 +969,23 @@ function transform(src) {
     "    /* DesignHub: Clean clears the local view only - comments stay in the Sheet. */",
     'clean handler');
 
-  // -- R5: page keying by doc path. After R4, exactly 8 location.href remain
-  //    (FILE x2, restoreDrafts, new-entry page, reconcile, morph fetch [dead in
-  //    proxy mode], morph re-anchor, pageParam [now unused]). --
+  // -- R5: page keying by doc path. After R4, exactly 9 location.href remain
+  //    (FILE x2, restore-time reanchor, a draft-persistence CODE COMMENT,
+  //    new-entry page, reconcile re-anchor guard, morph fetch [dead in proxy
+  //    mode], morph re-anchor, pageParam [now unused]). The global replace also
+  //    rewrites the comment occurrence - harmless. --
   const count = (body.match(/location\.href/g) || []).length;
-  if (count !== 8) throw new Error('expected exactly 8 location.href sites after clean removal, found ' + count + ' - upstream changed, re-audit page keying');
+  if (count !== 9) throw new Error('expected exactly 9 location.href sites after clean removal, found ' + count + ' - upstream changed, re-audit page keying');
   body = body.replace(/location\.href/g, 'dhPage()');
 
   // -- prepend the bridge helpers (function declarations hoist above first use) --
   body = "\n  function dhPage(){ return (window.__CCFB && window.__CCFB.docPath) || location.href; }\n" +
     "  function dhRun(fn){ var args = [].slice.call(arguments, 1); return new Promise(function(res, rej){ var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej); r[fn].apply(r, args); }); }\n" + body;
 
-  if (/\/__ccfb\//.test(body)) throw new Error('a /__ccfb/ endpoint survived the transform');
+  // Upstream comment lines legitimately mention /__ccfb/ (the draft-persistence
+  // block documents the old GET endpoint) - guard on code lines only.
+  const codeOnly = body.split('\n').filter(function (l) { return !l.trim().startsWith('//'); }).join('\n');
+  if (/\/__ccfb\//.test(codeOnly)) throw new Error('a /__ccfb/ endpoint survived the transform');
 
   const esc = s => s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
   return `/*! widget-designhub.js - the cc-htmlfeedback widget with google.script.run transport.
@@ -1020,6 +1053,8 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$(mktemp -d)" && npx -y @google/clasp create-script --title "DesignHub" --type standalone
 mv .clasp.json "$REPO_ROOT/designhub/gas/.clasp.json"
 cd "$REPO_ROOT/designhub/gas"
+# clasp records the CREATION dir as rootDir - pin it to this dir or push grabs nothing:
+node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('.clasp.json','utf8'));j.rootDir='.';fs.writeFileSync('.clasp.json',JSON.stringify(j,null,2))"
 ```
 
 Expected: "Created new script: https://script.google.com/d/<SCRIPT_ID>/edit". clasp v3 is installed and logged in as the publisher account `<DH_PUBLISHER_ACCOUNT>` (P1); verify with `clasp show-authorized-user` if unsure.
@@ -1071,7 +1106,7 @@ Expected: tree page prints "No docs published yet...". (The `?asset=widget` rout
 
 ### Task 9: `anchors.mjs` - the D15 re-anchor pass (pure logic)
 
-Runs at publish time inside the skill. D15 verbatim: every non-terminal ticket (`open` AND `in-progress`) is checked against the NEW doc content using the full anchor triple; quote gone -> `anchor-lost` (never `resolved`), EXCEPT a `strike` whose quote is gone auto-closes `resolved`; a bare quote match whose context no longer matches counts as lost.
+Runs at publish time inside the skill. D15 verbatim: every non-terminal ticket (`open` AND `in-progress`) is checked against the NEW doc content using the full anchor triple (quote + context + section); quote gone -> `anchor-lost` (never `resolved`), EXCEPT a `strike` whose quote is gone auto-closes `resolved`; a quote that matches but whose context OR section no longer matches counts as lost. Matching must run on RENDERED-equivalent text: widget quotes come from rendered pages, so HTML docs get tags stripped and MD docs get inline markdown syntax stripped - raw-source matching would false-flag every quote spanning `**bold**` or a link.
 
 **Files:**
 - Create: `plugins/designhub/skills/publish-design/scripts/anchors.mjs`
@@ -1128,8 +1163,28 @@ test('terminal tickets and replies are never touched', async () => {
 
 test('html tags do not break matching (matching runs on text content)', async () => {
   const { reanchorPass } = await mod();
-  const doc = '<p>The <b>quick</b> brown fox jumps over the lazy dog.</p>';
+  const doc = '<h2>Intro</h2><p>The <b>quick</b> brown fox jumps over the lazy dog.</p>';
   assert.deepEqual(reanchorPass([t()], doc, true), []);
+});
+
+test('markdown syntax does not break matching (quotes come from RENDERED text)', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nThe **quick** `brown` [fox](https://x.example) jumps over the lazy dog.\n';
+  assert.deepEqual(reanchorPass([t()], md, false), []);
+});
+
+test('markdown table decoration is stripped before matching', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\n| a | b |\n|---|---|\n| The quick brown fox jumps over the lazy dog. | x |\n';
+  assert.deepEqual(reanchorPass([t()], md, false), []);
+});
+
+test('quote and context present but section heading gone -> anchor-lost (full triple)', async () => {
+  const { reanchorPass } = await mod();
+  const doc = '<html><body><h2>Renamed</h2><p>The quick brown fox jumps over the lazy dog.</p></body></html>';
+  const out = reanchorPass([t()], doc, true);
+  assert.equal(out[0].status, 'anchor-lost');
+  assert.match(out[0].result, /section/);
 });
 
 test('context ellipsis from the widget clip is tolerated', async () => {
@@ -1143,13 +1198,30 @@ test('context ellipsis from the widget clip is tolerated', async () => {
 - [ ] **Step 3: Implement `plugins/designhub/skills/publish-design/scripts/anchors.mjs`:**
 
 ```js
-// D15 re-anchor pass, pure. Matching runs on normalized TEXT (tags stripped
-// for html, whitespace collapsed) because the widget's quote/context come from
-// rendered text, not source bytes.
+// D15 re-anchor pass, pure. Matching runs on normalized RENDERED-equivalent
+// TEXT (html: tags stripped; md: inline markdown syntax stripped; whitespace
+// collapsed) because the widget's quote/context come from rendered text, not
+// source bytes - raw-source matching would false-lose any quote spanning
+// **bold**, `code`, or a [link](url).
 const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+// Approximate md-to-text: conservative in the right direction - leftovers only
+// ADD characters to the haystack; the needle (quote/context) is rendered text.
+const mdText = (md) => String(md)
+  .replace(/^```[^\n]*$/gm, ' ')             // code-fence delimiter lines
+  .replace(/`([^`]*)`/g, '$1')               // inline code
+  .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')  // images -> alt text
+  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')   // links -> link text
+  .replace(/^#{1,6}\s+/gm, '')               // heading markers
+  .replace(/(\*\*|__)([^*_]+)\1/g, '$2')     // bold
+  .replace(/(\*|_)([^*_]+)\1/g, '$2')        // emphasis
+  .replace(/^\s*[-*+]\s+/gm, '')             // list bullets
+  .replace(/^\s*>\s?/gm, '')                 // blockquote markers
+  .replace(/\|/g, ' ');                      // table pipes
+
 const textify = (source, isHtml) => norm(isHtml
   ? String(source).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' ')
-  : String(source));
+  : mdText(source));
 
 // The widget clips context to 160 chars with a trailing ellipsis - strip it
 // and require a reasonable core before using context as a disambiguator.
@@ -1174,6 +1246,14 @@ export function reanchorPass(tickets, docSource, isHtml) {
     if (ctx.length >= 12 && !text.includes(ctx)) {
       changes.push({ id: t.id, status: 'anchor-lost',
         result: 'quote exists but its context moved - treated as lost (D15 full-triple rule)' });
+      continue;
+    }
+    // Third leg of the triple: the section heading must still exist somewhere
+    // in the doc (headings are body text once tags/markers are stripped).
+    const sec = norm(t.section);
+    if (sec && !text.includes(sec)) {
+      changes.push({ id: t.id, status: 'anchor-lost',
+        result: 'quote exists but its section heading is gone (D15 full-triple rule)' });
     }
   }
   return changes;
@@ -1188,7 +1268,7 @@ export function reanchorPass(tickets, docSource, isHtml) {
 
 ### Task 10: The publish flow - `gauth.mjs`, `publish-lib.mjs`, `publish.mjs`
 
-The Google call sequence is poc2's proven `publish-dry-run.mjs`, upgraded with: D9 metadata inference helpers, the two-severity asset scan (poc2 learning #1), the D15 pass (Task 9), and the D19 rollup upsert (poc5). Pure helpers live in `publish-lib.mjs` (tested); `publish.mjs` is the CLI; `gauth.mjs` owns tokens. (Addendum to the file map: `scripts/publish-lib.mjs`.)
+The Google call sequence is poc2's proven `publish-dry-run.mjs`, upgraded with: D9 metadata inference helpers, the two-severity asset scan (poc2 learning #1), the D15 pass (Task 9), and the D19 rollup upsert (poc5). Pure helpers live in `publish-lib.mjs` (tested); `publish.mjs` is the CLI; `gauth.mjs` owns tokens.
 
 **Files:**
 - Create: `plugins/designhub/skills/publish-design/scripts/gauth.mjs`
@@ -1231,6 +1311,13 @@ test('inferMetadata: unknowns become the explicit "unassigned" placeholder (D9)'
   assert.equal(m.jira, 'unassigned');
 });
 
+test('featureDir mirrors gas/lib/paths.js exactly (D14 - keep the two in sync)', async () => {
+  const { featureDir } = await mod();
+  const gas = require('../gas/lib/paths.js');
+  for (const f of ['design/designhub-platform', 'a\\b:c', 'x*y?"<>|', 'plain'])
+    assert.equal(featureDir(f), gas.featureDir(f));
+});
+
 test('newIndexRow shapes a section-4 row with stable uuid and active status', async () => {
   const { newIndexRow } = await mod();
   const row = newIndexRow({ type: 'html', title: 'T', repo: 'r', feature: 'f',
@@ -1266,6 +1353,12 @@ export function scanAssets(html) {
   }
   return { assets: [...new Set(assets)], links: [...new Set(links)] };
 }
+
+// D14 sanitizer - deliberate MIRROR of designhub/gas/lib/paths.js featureDir():
+// the installed plugin is self-contained and cannot import repo files at run
+// time. The repo test suite pins the two together - change BOTH or it fails.
+export const featureDir = (feature) =>
+  String(feature).replace(/[\/\\]/g, '--').replace(/[:*?"<>|]/g, '-');
 
 export function inferMetadata({ remoteUrl, branch }) {
   const repo = (String(remoteUrl).match(/\/([^/]+?)(\.git)?$/) || [])[1] || 'unassigned';
@@ -1329,6 +1422,8 @@ async function refresh(refreshToken) {
 
 async function consent() {
   const { id, secret } = clientCreds();
+  // dev-machine assumptions: fixed local port + macOS `open`; on other OSes
+  // the printed URL is the path (the spawn failure is swallowed on purpose)
   const port = 8765;
   const redirect = `http://localhost:${port}/`;
   const url = 'https://accounts.google.com/o/oauth2/auth?' + new URLSearchParams({
@@ -1373,7 +1468,13 @@ export async function accessToken() {
 export async function api(token, url, opts = {}) {
   const r = await fetch(url, { ...opts,
     headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
-  if (!r.ok) throw new Error(`${opts.method || 'GET'} ${url} -> ${r.status}: ${await r.text()}`);
+  if (!r.ok) {
+    // status is attached so callers can tell "missing tab" (400) from real
+    // failures (403/5xx) instead of swallowing everything
+    const e = new Error(`${opts.method || 'GET'} ${url} -> ${r.status}: ${await r.text()}`);
+    e.status = r.status;
+    throw e;
+  }
   return r.json();
 }
 ```
@@ -1393,7 +1494,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { accessToken, api } from './gauth.mjs';
-import { scanAssets, newIndexRow, TICKET_COLS, INDEX_COLS, META_COLS } from './publish-lib.mjs';
+import { scanAssets, featureDir, newIndexRow, TICKET_COLS, INDEX_COLS, META_COLS } from './publish-lib.mjs';
 import { reanchorPass } from './anchors.mjs';
 
 const CONFIG = JSON.parse(fs.readFileSync(
@@ -1416,7 +1517,7 @@ if (!FILE || !REPO || !FEATURE) {
   process.exit(2);
 }
 const PATH_IN_REPO = String(arg('path-in-repo', FILE)).replace(/^\.\//, '');
-const FEATURE_DIR = FEATURE.replace(/[\/\\]/g, '--').replace(/[:*?"<>|]/g, '-'); // D14 (mirror of gas/lib/paths.js)
+const FEATURE_DIR = featureDir(FEATURE);   // D14 (publish-lib mirror, test-pinned to gas/lib/paths.js)
 const FILE_NAME = path.basename(FILE);
 const IS_MD = /\.md$/i.test(FILE_NAME);
 const DOC_PATH = [REPO, FEATURE_DIR, ...PATH_IN_REPO.split('/')].join('/');
@@ -1448,6 +1549,13 @@ const ensure = async (parent, name, mime) =>
   (await child(parent, name, mime))?.id || (await mkChild(parent, name, mime)).id;
 const getVals = async (id, range) =>
   (await api(at, `${SHEETS}/${id}/values/${encodeURIComponent(range)}`)).values ?? [];
+// A brand-new spreadsheet has no named tab yet -> Sheets answers 400 ("Unable
+// to parse range"). ONLY that means "initialize this sheet"; 403/5xx/network
+// must surface, not silently re-create headers over an unreadable sheet.
+const valsOrNull = (id, range) => getVals(id, range).catch((e) => {
+  if (e.status === 400) return null;
+  throw e;
+});
 const putVals = (id, range, values) => api(at,
   `${SHEETS}/${id}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
   { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) });
@@ -1461,7 +1569,7 @@ const me = (await api(at, `${DRIVE}/about?fields=user(emailAddress)`)).user.emai
 const repoF = await ensure(CONFIG.rootFolderId, REPO, FOLDER_MIME);
 const featF = await ensure(repoF, FEATURE_DIR, FOLDER_MIME);
 const indexId = await ensure(featF, '_index', SHEET_MIME);
-let indexRows = await getVals(indexId, 'index!A2:N').catch(() => null);
+let indexRows = await valsOrNull(indexId, 'index!A2:N');
 if (indexRows === null) {   // brand-new sheet: name the tab + header
   const meta = await api(at, `${SHEETS}/${indexId}?fields=sheets(properties(sheetId))`);
   await api(at, `${SHEETS}/${indexId}:batchUpdate`, { method: 'POST',
@@ -1493,7 +1601,7 @@ const doc = existing
 
 // ---- 4. companion Sheet (full-filename convention) + meta history ----
 const companionId = await ensure(docParent, `${FILE_NAME}.comments`, SHEET_MIME);
-const head = await getVals(companionId, 'tickets!1:1').catch(() => null);
+const head = await valsOrNull(companionId, 'tickets!1:1');
 if (head === null || !head.length) {
   const meta = await api(at, `${SHEETS}/${companionId}?fields=sheets(properties(sheetId,title))`);
   const reqs = [];
@@ -1790,6 +1898,9 @@ const selected = await frame.evaluate(() => {
   const p = [...document.querySelectorAll("p,td,li")].find(el => el.innerText.trim().length > 60);
   const r = document.createRange(); r.selectNodeContents(p);
   const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  // The widget opens its popover ONLY on a real mouseup on the content (a
+  // programmatic Selection alone never triggers it) - synthesize one that bubbles.
+  p.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   return p.innerText.trim().slice(0, 40);
 });
 console.log("selected:", JSON.stringify(selected));
@@ -1820,7 +1931,7 @@ node plugins/designhub/skills/publish-design/scripts/publish.mjs \
 
 Expected: two `Published:` URLs under the production exec URL.
 
-- [ ] **Step 3: Run the E2E against both published docs** (html then md) with `DH_EXEC`/`DH_DOC` set accordingly. Expected: identity chip shows `signed in as <DH_PUBLISHER_ACCOUNT>`, a card appears after submit, screenshot looks right (check it - the human eye is part of this step). Verify the rows landed:  read the companion Sheet's `tickets` tab via REST and confirm the new row's `authorEmail`.
+- [ ] **Step 3: Run the E2E against both published docs** - run the Step 1 `sed | dev-browser` command twice: first exactly as shown (the html doc), then with the `__DH_DOC__` substitution changed to `cc-htmlfeedback/design--designhub-platform/docs/designhub/design.md`. Expected: identity chip shows `signed in as <DH_PUBLISHER_ACCOUNT>`, a card appears after submit, screenshot looks right (check it - the human eye is part of this step). Verify the rows landed:  read the companion Sheet's `tickets` tab via REST and confirm the new row's `authorEmail`.
 
 - [ ] **Step 4: Check the tree page** (exec URL with no params) in dev-browser: both docs listed under `cc-htmlfeedback / design/designhub-platform`.
 
@@ -1883,7 +1994,7 @@ gh pr create --repo <DH_FORK_REPO> --base main \
 
 - Phase 2 (design §7): Sync-to-PR, quote -> source-line mapping, the comment-driven agent fix loop skill (`plugins/designhub/skills/designhub-agent/`), multi-file docs.
 - Widget thread/reply UI (v1 shows top-level tickets; threads live in the Sheet).
-- Mermaid publish-time pre-render (poc3 finding 2, if the ~30 s diagram pop-in annoys) and `marked-gfm-heading-id` for MD TOC anchors.
+- Mermaid publish-time pre-render (poc3 finding 2, if the ~30 s diagram pop-in annoys) and `marked-gfm-heading-id` for MD TOC anchors (v1: marked emits no heading ids, so MD TOC links are safe no-ops - the mdShell `target="_self"` rewrite prevents the sandbox-escape navigation, but they do not scroll anywhere until the extension lands).
 - Live updates (SSE equivalent) - v1 polls every 30 s.
 - `designhub@` service account migration for the script owner (D13).
 
@@ -1894,6 +2005,7 @@ gh pr create --repo <DH_FORK_REPO> --base main \
 - [ ] `npm test` (upstream) - untouched and green
 - [ ] Tree page lists the dogfooded docs; both serve with the widget
 - [ ] A comment submitted in the browser lands in the companion Sheet with the VIEWER's email (not any client-claimed identity)
-- [ ] `home-knowledge@` can reply via REST per `agent-access.md` (poc4 recipe) against a PRODUCTION companion Sheet
+- [ ] D17 design-§9 attack re-run against PRODUCTION (poc1 only proved it on the POC app): from the served doc page's console, call the bridge with a forged `authorEmail` (row must stamp the session user) and call `setStatus` on an existing ticket (a `meta` audit row must appear)
+- [ ] `<DH_AGENT_ACCOUNT>` can reply via REST per `agent-access.md` (poc4 recipe) against a PRODUCTION companion Sheet
 - [ ] Re-publish of an edited doc: same URL, D15 statuses flip where expected
 - [ ] `git log upstream/main..HEAD -- feedback-widget.html build.js server.js lib/ plugins/cc-htmlfeedback/` is EMPTY (D16 honored)

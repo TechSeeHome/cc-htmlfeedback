@@ -169,7 +169,11 @@ Index row schema (same in shards and rollup; the rollup adds nothing):
   tree load would be slow. The rollup gives that surface as a regenerable cache: writes
   stay clean and distributed, reads stay unified, and losing the rollup costs a rebuild,
   not data. (Per-PR indexes were rejected outright: PRs are ephemeral, docs outlive
-  them - D3.)
+  them - D3.) Per-repo indexes were rejected too: a repo never expires, so one shared
+  index would grow forever and put every concurrent feature's publish in write
+  contention on the same Sheet - feature-scoped shards stay bounded, archivable with the
+  feature, and cap a bad shard's blast radius at one feature instead of a repo's full
+  history.
 
 ## 5. Data contracts (runtime-agnostic core)
 

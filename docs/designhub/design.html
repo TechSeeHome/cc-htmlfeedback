@@ -106,6 +106,31 @@
     padding:14px 18px; font-size:13px; color:#1c4635; border-radius:0 4px 4px 0;
   }
 
+  /* ------------ flow diagram ------------ */
+  .flow-wrap{ margin-bottom:26px }
+  .flowdiagram{ width:100%; height:auto; display:block }
+  .flowdiagram .lane-cap{ font:400 10.5px/1 var(--mono); letter-spacing:.14em; fill:var(--green) }
+  .flowdiagram .fb-html{ width:100%; height:100%; box-sizing:border-box; padding:9px 13px; display:flex; flex-direction:column; justify-content:center; gap:3px; font-family:var(--mono) }
+  .flowdiagram .fb-html b{ font:400 15px/1.15 var(--serif); color:var(--ink) }
+  .flowdiagram .fb-html span{ font-size:10.2px; line-height:1.4; color:var(--dim) }
+  .flowdiagram .fb-html.store b{ color:#1c4635 }
+  .flowdiagram .bracket-label{ font:400 10px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; fill:var(--faint) }
+  .flowdiagram .edge{ fill:none; stroke:var(--green); stroke-width:1.4; opacity:.6; marker-end:url(#fbArrow) }
+  .flowdiagram .elabel{ font:400 9.5px/1.3 var(--mono); fill:var(--dim) }
+  .flowdiagram .agent-note{ font:italic 400 10.5px/1.3 var(--mono); fill:var(--faint) }
+
+  /* ------------ status lifecycle chips ------------ */
+  .status-flow{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:14px 0 8px }
+  .sf-chip{ display:inline-block; font:400 11px/1 var(--mono); letter-spacing:.03em; padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink); white-space:nowrap }
+  .sf-chip.sm{ padding:2px 8px; font-size:10px }
+  .sf-chip.prog{ border-color:#d99a2b; color:#7c4a12; background:#f7e8c8 }
+  .sf-chip.done{ border-color:var(--green); color:#1c4635; background:var(--green2) }
+  .sf-chip.declined{ border-color:var(--faint); color:var(--dim); background:var(--paper2) }
+  .sf-chip.lost{ border-color:var(--err); color:var(--err); background:#f6e4e0 }
+  .sf-arrow{ color:var(--faint); font-size:13px }
+  .sf-branch{ display:flex; gap:6px; flex-wrap:wrap }
+  .sf-note{ font-size:11.5px; color:var(--dim); margin-top:2px }
+
   /* actors strip */
   .actors{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px }
   @media (max-width:720px){ .actors{ grid-template-columns:1fr } }
@@ -191,9 +216,193 @@
   </div>
 </section>
 
-<!-- ============ 02 decisions ============ -->
+<!-- ============ 02 architecture ============ -->
+<section id="arch">
+  <div class="sec-head"><span class="sec-num">02</span><h2>Architecture: three layers</h2></div>
+  <p class="sec-sub">Click a layer to expand it. The rule that holds everything: <b>all value lives in the bottom two layers under documented contracts; the top layer is disposable.</b></p>
+
+  <div class="actors">
+    <div class="actor"><b>Publisher</b><span>engineer or agent in any repo, any machine</span><span class="via">via /publish-design → Drive API</span></div>
+    <div class="actor"><b>Reviewer</b><span>eng · PM · management - anyone in the domain</span><span class="via">via Google login → web app</span></div>
+    <div class="actor"><b>AI agent</b><span>reads docs, reads/writes/reacts to comments, renders docs locally for visual context</span><span class="via">via Sheets/Drive REST API - no web-app login needed</span></div>
+  </div>
+
+  <div class="flow-wrap">
+    <p class="sec-sub" style="margin:0 0 12px">Three flows, one storage layer - the map before the clickable detail below.</p>
+    <div class="tbl-scroll">
+      <svg class="flowdiagram" viewBox="0 0 1040 400" style="min-width:880px" role="img"
+        aria-label="Publisher uploads docs and updates the index directly via the Drive API. Reviewers go through the Apps Script web app, which serves docs and bridges comments into the comment Sheet. AI agents read and write the index and comment Sheet directly via Sheets REST, bypassing the web app.">
+        <defs>
+          <marker id="fbArrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" style="fill:var(--green)"></path>
+          </marker>
+        </defs>
+
+        <!-- lane bands -->
+        <rect x="0" y="18" width="1040" height="123" style="fill:var(--paper2);opacity:.55"></rect>
+        <rect x="0" y="257" width="1040" height="123" style="fill:var(--paper2);opacity:.55"></rect>
+
+        <!-- edges (drawn first so boxes sit on top) -->
+        <g class="edges">
+          <path class="edge" d="M226,60 C420,60 480,66 658,66"></path>
+          <text class="elabel" x="232" y="50">upsert feature _index</text>
+
+          <path class="edge" d="M226,104 C380,104 480,185 658,190"></path>
+          <text class="elabel" x="232" y="118">Drive API — upload doc.html/.md</text>
+
+          <path class="edge" d="M226,199 L310,199"></path>
+          <text class="elabel" x="232" y="193">Google login</text>
+
+          <path class="edge" d="M570,172 C610,172 630,66 658,66"></path>
+          <text class="elabel" x="578" y="163">reads rollup</text>
+
+          <path class="edge" d="M570,199 L658,199"></path>
+          <text class="elabel" x="578" y="213">serve + inject</text>
+
+          <path class="edge" d="M570,226 C610,226 630,316 658,320"></path>
+          <text class="elabel" x="578" y="255">append row</text>
+
+          <path class="edge" d="M226,295 C440,295 560,66 658,70"></path>
+          <text class="elabel" x="232" y="270">Sheets REST — read/write index</text>
+
+          <path class="edge" d="M226,335 C400,335 520,325 658,325"></path>
+          <text class="elabel" x="232" y="352">Sheets REST — read/write comments</text>
+        </g>
+
+        <!-- nodes -->
+        <g class="nodes">
+          <text class="lane-cap" x="16" y="30">PUBLISH FLOW</text>
+          <rect x="19" y="43" width="210" height="84" rx="4" style="fill:#211d160d"></rect>
+          <rect x="16" y="40" width="210" height="84" rx="4" style="fill:var(--card);stroke:var(--line)"></rect>
+          <foreignObject x="16" y="40" width="210" height="84"><div xmlns="http://www.w3.org/1999/xhtml" class="fb-html">
+            <b>Publisher</b><span>/publish-design skill · engineer or agent, any repo</span>
+          </div></foreignObject>
+
+          <text class="lane-cap" x="16" y="147">REVIEW FLOW</text>
+          <rect x="19" y="160" width="210" height="84" rx="4" style="fill:#211d160d"></rect>
+          <rect x="16" y="157" width="210" height="84" rx="4" style="fill:var(--card);stroke:var(--line)"></rect>
+          <foreignObject x="16" y="157" width="210" height="84"><div xmlns="http://www.w3.org/1999/xhtml" class="fb-html">
+            <b>Reviewer</b><span>eng · PM · mgmt — any Google account</span>
+          </div></foreignObject>
+
+          <rect x="313" y="160" width="260" height="84" rx="4" style="fill:#211d160d"></rect>
+          <rect x="310" y="157" width="260" height="84" rx="4" style="fill:var(--card);stroke:var(--line)"></rect>
+          <foreignObject x="310" y="157" width="260" height="84"><div xmlns="http://www.w3.org/1999/xhtml" class="fb-html">
+            <b>Apps Script web app</b><span>tree UI · serve doc · comment bridge — thin, disposable</span>
+          </div></foreignObject>
+
+          <text class="lane-cap" x="16" y="264">AGENT FLOW</text>
+          <rect x="19" y="277" width="210" height="84" rx="4" style="fill:#211d160d"></rect>
+          <rect x="16" y="274" width="210" height="84" rx="4" style="fill:var(--card);stroke:var(--line)"></rect>
+          <foreignObject x="16" y="274" width="210" height="84"><div xmlns="http://www.w3.org/1999/xhtml" class="fb-html">
+            <b>AI agent</b><span>reads, writes, and reacts to comments</span>
+          </div></foreignObject>
+          <text class="agent-note" x="16" y="372">+ Drive REST: fetches doc.html to render locally for visual context</text>
+
+          <rect x="634" y="22" width="390" height="358" rx="4" style="fill:none;stroke:var(--line);stroke-dasharray:4 4"></rect>
+          <text class="bracket-label" x="642" y="14">Google Drive &amp; Sheets — shared, all state lives here</text>
+
+          <rect x="661" y="43" width="344" height="84" rx="4" style="fill:#211d160d"></rect>
+          <rect x="658" y="40" width="344" height="84" rx="4" style="fill:var(--green2);stroke:#bcdcc9"></rect>
+          <foreignObject x="658" y="40" width="344" height="84"><div xmlns="http://www.w3.org/1999/xhtml" class="fb-html store">
+            <b>Catalog</b><span>feature _index shards + _portal-index rollup</span>
+          </div></foreignObject>
+
+          <rect x="661" y="160" width="344" height="84" rx="4" style="fill:#211d160d"></rect>
+          <rect x="658" y="157" width="344" height="84" rx="4" style="fill:var(--green2);stroke:#bcdcc9"></rect>
+          <foreignObject x="658" y="157" width="344" height="84"><div xmlns="http://www.w3.org/1999/xhtml" class="fb-html store">
+            <b>Docs</b><span>DesignHub/&lt;repo&gt;/&lt;feature&gt;/doc.html · doc.md</span>
+          </div></foreignObject>
+
+          <rect x="661" y="277" width="344" height="84" rx="4" style="fill:#211d160d"></rect>
+          <rect x="658" y="274" width="344" height="84" rx="4" style="fill:var(--green2);stroke:#bcdcc9"></rect>
+          <foreignObject x="658" y="274" width="344" height="84"><div xmlns="http://www.w3.org/1999/xhtml" class="fb-html store">
+            <b>Comment Sheet</b><span>companion Sheet per doc — the tickets</span>
+          </div></foreignObject>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="arch" id="layers">
+    <div class="layer" data-l="0">
+      <h3>Serving <span class="tag warn">thin · disposable · Apps Script now</span></h3>
+      <p>One standalone Apps Script web app: tree UI, doc serving with widget injection, MD rendering, and a comment bridge. Deleted tomorrow → zero data loss.</p>
+      <div class="detail">
+        <b>Deploy:</b> "execute as me" (dedicated publisher account eventually), access "anyone in the domain".
+        <b>Identity for free:</b> Session.getActiveUser().getEmail() - no OAuth prompts, no tokens in the browser.<br><br>
+        <b>Serving:</b> ?doc=&lt;path&gt; reads the file from Drive, injects the adapted cc-htmlfeedback widget (same inject.js trick), returns via HtmlService. MD renders to HTML at view time (client-side, bundled renderer - D10), then gets the same widget - PMs comment on rendered Markdown exactly like on HTML. Injection also sets &lt;base target="_top"&gt; - HtmlService's IFRAME sandbox requires explicit link targets or in-doc links silently fail.<br><br>
+        <b>Comments:</b> widget → google.script.run bridge (no CORS, no extra HTTP endpoints to run) → append row to the doc's Sheet.
+        Doc scripts share the HtmlService page and can reach the bridge too - D17 defines the containment contract
+        (comment-rows-only surface, server-side identity stamping, audit trail).
+        The bridge functions are deliberately REST-shaped: listCatalog · getDoc · submitComment · listComments · reply · setStatus -
+        a future host on any cloud implements the same six calls. Every mutating call carries the doc path, so the bridge
+        resolves the target Sheet directly instead of scanning all Sheets for a comment UUID.<br><br>
+        <b>Agents - full context, no new infrastructure:</b> (1) structured - comments via Sheets REST, each carrying the
+        quote/context/section anchor triple that locates it in the doc text; (2) source - the byte-exact doc via Drive REST;
+        (3) visual - the agent renders the fetched doc in a local browser tool (dev-browser, Playwright) and locates the
+        anchors on the rendered page before acting. No Google login needed: the file comes from the Drive API - agents never
+        touch the web app. Read access = domain-wide sharing (D11); <b>write access = the designhub-agents@ editor grant (D13)</b>,
+        so a CI bot or non-publisher developer writes as itself after joining the group once.
+      </div>
+    </div>
+    <div class="layer" data-l="1">
+      <h3>Storage <span class="tag">Drive files + comment Sheets</span></h3>
+      <p>The published assets and their conversations. Physical tree: DesignHub/&lt;repo&gt;/&lt;feature&gt;/doc + a companion Sheet per doc as its comment DB.</p>
+      <div class="detail">
+        <b>Comment ticket schema</b> (carried from cc-htmlfeedback, extended for multi-user): id · parentId (threading) ·
+        type comment|strike|reply · status open → in-progress → resolved|declined|anchor-lost (auto-set on re-publish when the quote is gone - D15; an accepted strike auto-closes resolved instead) · the anchor triple quote/context/section ·
+        note · authorEmail/authorName · source web|agent · docVersion · result/files (agent outcomes) · timestamps.
+        <div class="status-flow" aria-label="comment status lifecycle">
+          <span class="sf-chip">open</span><span class="sf-arrow">→</span>
+          <span class="sf-chip prog">in-progress</span><span class="sf-arrow">→</span>
+          <span class="sf-branch">
+            <span class="sf-chip done">resolved</span>
+            <span class="sf-chip declined">declined</span>
+            <span class="sf-chip lost">anchor-lost</span>
+          </span>
+        </div>
+        <p class="sf-note">a <b>strike</b> ticket whose quote disappears on re-publish auto-closes straight to <span class="sf-chip done sm">resolved</span> - never <span class="sf-chip lost sm">anchor-lost</span> (D15).</p>
+        <br>
+        <b>Meta tab per doc:</b> repo, path-in-repo, branch, commit SHA, PR#, jira, publisher, publish history.<br><br>
+        <b>Anti-lock-in discipline:</b> no PropertiesService/CacheService as data stores, no Apps-Script-only formats.
+      </div>
+    </div>
+    <div class="layer" data-l="2">
+      <h3>Catalog <span class="tag">one _index Sheet per feature + derived rollup</span></h3>
+      <p>One _index Sheet per feature folder (per repo/feature) - never shared, never org-wide. Writes stay sharded: each
+      feature folder holds its own small _index Sheet (source of truth). Reads stay unified: a single org-wide
+      _portal-index rollup is derived from all the shards as a disposable cache. Navigation reads indexes, never folders - folders are physical storage, and coupling browsing to them would mean moving files every time taxonomy changes (team, epic, product area).</p>
+      <div class="detail">
+        <b>Row (same in shards and rollup):</b> id · type html|md (later + gdoc|gslides|gsheet|link) · title · repo · feature ·
+        jira · tags · owner · driveFileId · commentSheetId · url · status active|archived · publishedAt · updatedAt.<br><br>
+        <b>V1:</b> the publish skill writes only its feature's _index (+ pokes the rollup refresh); the tree UI reads the
+        _portal-index rollup grouped by repo/feature. Rollup rebuilds on publish + a periodic Apps Script trigger.<br>
+        <b>Portal phase:</b> existing Docs/Slides/Sheets register as index rows pointing at their current files, opened in native
+        viewers - same tree, search, and taxonomy across published designs and existing content. Bulk importer for whole folders.<br><br>
+        <b>Taxonomy lives in columns, not folder paths</b> - browsing by team, epic, or product area later is just another
+        view over the rollup. No file moves, no redesign.<br><br>
+        <b>Why shards + one derived rollup (not one master sheet, and not shards alone)?</b> Sharding the writes keeps each
+        index small, manageable as the org grows, ACL-able per repo/feature, with a tiny blast radius - while cross-repo
+        search and the portal still need a single queryable surface, and per-shard scatter-gather on every tree load would
+        be slow. The rollup gives that surface as a regenerable cache: writes stay clean and distributed, reads stay
+        unified, and losing the rollup costs a rebuild, not data. Per-PR indexes were rejected outright: PRs are ephemeral,
+        docs outlive them (see D3). Per-repo indexes were rejected too: a repo never expires, so one shared index would
+        grow forever and put every concurrent feature's publish in write contention on the same Sheet - feature-scoped
+        shards stay bounded, archivable with the feature, and cap a bad shard's blast radius at one feature instead of a
+        repo's full history.
+      </div>
+    </div>
+  </div>
+
+  <div class="arch-note">📌 <b>Riskiest assumption, tested first:</b> a real design HTML (the CRM dashboard) served through
+  HtmlService renders faithfully inside the iframe sandbox with the widget's comment round-trip working. Half-day spike -
+  validates or kills the v1 runtime while switching is still free.</div>
+</section>
+
+<!-- ============ 03 decisions ============ -->
 <section id="decisions">
-  <div class="sec-head"><span class="sec-num">02</span><h2>Decisions so far</h2></div>
+  <div class="sec-head"><span class="sec-num">03</span><h2>Decisions so far</h2></div>
   <p class="sec-sub">The log of what is already settled - challenge any of it in comments.</p>
   <div class="dlog">
     <div class="drow"><div class="did">D1</div><div class="dq">Audience &amp; identity</div>
@@ -231,78 +440,6 @@
     <div class="drow"><div class="did">D17</div><div class="dq">Doc scripts vs the bridge</div>
       <div class="da">Published HTML runs its own scripts in the same HtmlService page as the widget, so doc code <b>can call the privileged google.script.run bridge</b>. <b>V1 contains rather than isolates:</b> the bridge surface is comment-Sheet-rows only (and must never grow broader capabilities); every mutating call stamps authorEmail server-side from Session.getActiveUser() - client-supplied identity is ignored; status changes append to the audit history; v1 publishers are trusted domain developers (D11). <b>True isolation - doc content in a sandboxed iframe, widget bridging via postMessage - is a stated precondition for accepting content beyond trusted repos</b> and for the serving-layer graduation.<small>A sandboxed content frame breaks the widget's direct selection/anchoring model - too costly for v1. Capped blast radius + server-side attribution + audit keeps the worst case at "attributable comment noise from a doc a trusted colleague published".</small></div></div>
   </div>
-</section>
-
-<!-- ============ 03 architecture ============ -->
-<section id="arch">
-  <div class="sec-head"><span class="sec-num">03</span><h2>Architecture: three layers</h2></div>
-  <p class="sec-sub">Click a layer to expand it. The rule that holds everything: <b>all value lives in the bottom two layers under documented contracts; the top layer is disposable.</b></p>
-
-  <div class="actors">
-    <div class="actor"><b>Publisher</b><span>engineer or agent in any repo, any machine</span><span class="via">via /publish-design → Drive API</span></div>
-    <div class="actor"><b>Reviewer</b><span>eng · PM · management - anyone in the domain</span><span class="via">via Google login → web app</span></div>
-    <div class="actor"><b>AI agent</b><span>reads docs, reads/writes/reacts to comments, renders docs locally for visual context</span><span class="via">via Sheets/Drive REST API - no web-app login needed</span></div>
-  </div>
-
-  <div class="arch" id="layers">
-    <div class="layer" data-l="0">
-      <h3>Serving <span class="tag warn">thin · disposable · Apps Script now</span></h3>
-      <p>One standalone Apps Script web app: tree UI, doc serving with widget injection, MD rendering, and a comment bridge. Deleted tomorrow → zero data loss.</p>
-      <div class="detail">
-        <b>Deploy:</b> "execute as me" (dedicated publisher account eventually), access "anyone in the domain".
-        <b>Identity for free:</b> Session.getActiveUser().getEmail() - no OAuth prompts, no tokens in the browser.<br><br>
-        <b>Serving:</b> ?doc=&lt;path&gt; reads the file from Drive, injects the adapted cc-htmlfeedback widget (same inject.js trick), returns via HtmlService. MD renders to HTML at view time (client-side, bundled renderer - D10), then gets the same widget - PMs comment on rendered Markdown exactly like on HTML. Injection also sets &lt;base target="_top"&gt; - HtmlService's IFRAME sandbox requires explicit link targets or in-doc links silently fail.<br><br>
-        <b>Comments:</b> widget → google.script.run bridge (no CORS, no extra HTTP endpoints to run) → append row to the doc's Sheet.
-        Doc scripts share the HtmlService page and can reach the bridge too - D17 defines the containment contract
-        (comment-rows-only surface, server-side identity stamping, audit trail).
-        The bridge functions are deliberately REST-shaped: listCatalog · getDoc · submitComment · listComments · reply · setStatus -
-        a future host on any cloud implements the same six calls. Every mutating call carries the doc path, so the bridge
-        resolves the target Sheet directly instead of scanning all Sheets for a comment UUID.<br><br>
-        <b>Agents - full context, no new infrastructure:</b> (1) structured - comments via Sheets REST, each carrying the
-        quote/context/section anchor triple that locates it in the doc text; (2) source - the byte-exact doc via Drive REST;
-        (3) visual - the agent renders the fetched doc in a local browser tool (dev-browser, Playwright) and locates the
-        anchors on the rendered page before acting. No Google login needed: the file comes from the Drive API - agents never
-        touch the web app. Read access = domain-wide sharing (D11); <b>write access = the designhub-agents@ editor grant (D13)</b>,
-        so a CI bot or non-publisher developer writes as itself after joining the group once.
-      </div>
-    </div>
-    <div class="layer" data-l="1">
-      <h3>Storage <span class="tag">Drive files + comment Sheets</span></h3>
-      <p>The published assets and their conversations. Physical tree: DesignHub/&lt;repo&gt;/&lt;feature&gt;/doc + a companion Sheet per doc as its comment DB.</p>
-      <div class="detail">
-        <b>Comment ticket schema</b> (carried from cc-htmlfeedback, extended for multi-user): id · parentId (threading) ·
-        type comment|strike|reply · status open → in-progress → resolved|declined|anchor-lost (auto-set on re-publish when the quote is gone - D15; an accepted strike auto-closes resolved instead) · the anchor triple quote/context/section ·
-        note · authorEmail/authorName · source web|agent · docVersion · result/files (agent outcomes) · timestamps.<br><br>
-        <b>Meta tab per doc:</b> repo, path-in-repo, branch, commit SHA, PR#, jira, publisher, publish history.<br><br>
-        <b>Anti-lock-in discipline:</b> no PropertiesService/CacheService as data stores, no Apps-Script-only formats.
-      </div>
-    </div>
-    <div class="layer" data-l="2">
-      <h3>Catalog <span class="tag">feature _index shards + derived rollup</span></h3>
-      <p>Sharded writes, unified reads: each feature folder holds its own small _index Sheet (source of truth); an org-wide
-      _portal-index rollup is derived from the shards as a disposable cache. Navigation reads indexes, never folders.</p>
-      <div class="detail">
-        <b>Row (same in shards and rollup):</b> id · type html|md (later + gdoc|gslides|gsheet|link) · title · repo · feature ·
-        jira · tags · owner · driveFileId · commentSheetId · url · status active|archived · publishedAt · updatedAt.<br><br>
-        <b>V1:</b> the publish skill writes only its feature's _index (+ pokes the rollup refresh); the tree UI reads the
-        _portal-index rollup grouped by repo/feature. Rollup rebuilds on publish + a periodic Apps Script trigger.<br>
-        <b>Portal phase:</b> existing Docs/Slides/Sheets register as index rows pointing at their current files, opened in native
-        viewers - same tree, search, and taxonomy across published designs and existing content. Bulk importer for whole folders.<br><br>
-        <b>Taxonomy lives in columns, not folder paths</b> - browsing by team, epic, or product area later is just another
-        view over the rollup. No file moves, no redesign.<br><br>
-        <b>Why shards + one derived rollup (not one master sheet, and not shards alone)?</b> Sharding the writes keeps each
-        index small, manageable as the org grows, ACL-able per repo/feature, with a tiny blast radius - while cross-repo
-        search and the portal still need a single queryable surface, and per-shard scatter-gather on every tree load would
-        be slow. The rollup gives that surface as a regenerable cache: writes stay clean and distributed, reads stay
-        unified, and losing the rollup costs a rebuild, not data. Per-PR indexes were rejected outright: PRs are ephemeral,
-        docs outlive them (see D3).
-      </div>
-    </div>
-  </div>
-
-  <div class="arch-note">📌 <b>Riskiest assumption, tested first:</b> a real design HTML (the CRM dashboard) served through
-  HtmlService renders faithfully inside the iframe sandbox with the widget's comment round-trip working. Half-day spike -
-  validates or kills the v1 runtime while switching is still free.</div>
 </section>
 
 <!-- ============ 04 contracts ============ -->

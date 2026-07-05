@@ -12,8 +12,37 @@ test('harness: loadWidget boots the real widget (connected mode)', () => {
   const { document } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
   assert.equal(
     document.getElementById('fb-conn').title,
-    'Connecting to the Claude session…',
+    'Connecting to the agent session…',
     'connected mode starts the SSE connection attempt'
+  );
+});
+
+test('copy: disconnected dot tooltip is agent-agnostic', () => {
+  const { document } = loadWidget(); // disconnected
+  assert.equal(
+    document.getElementById('fb-conn').title,
+    'Run /cc-htmlfeedback to enable live fixes'
+  );
+});
+
+test('copy: connected-mode hint and popover tooltips are set on startup', () => {
+  const { document } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
+  assert.equal(
+    document.getElementById('fb-hint').textContent,
+    'Enter to save draft · Backspace (empty) to strike · Cmd/Ctrl+Enter to fix now · Shift+Enter for newline · Esc to cancel'
+  );
+  assert.equal(document.getElementById('fb-comment').title, 'Comment (Cmd/Ctrl+click: fix now)');
+  assert.equal(
+    document.getElementById('fb-strike').title,
+    'Strike (Cmd/Ctrl+click or Cmd/Ctrl+Backspace: fix now)'
+  );
+});
+
+test('copy: disconnected mode keeps the current hint (unchanged)', () => {
+  const { document } = loadWidget(); // disconnected
+  assert.equal(
+    document.getElementById('fb-hint').textContent,
+    'Enter to comment · Backspace to strike · Shift+Enter for newline · Esc to cancel'
   );
 });
 

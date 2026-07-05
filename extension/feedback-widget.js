@@ -120,7 +120,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
 @media (prefers-reduced-motion:reduce){.fb-mark.fb-working,.fb-mark.strike.fb-working{animation:none;background-color:#ffd43b}}`;
   var FB_MARKUP = `<div id="fb-launch" role="group" aria-label="Feedback">
   <button id="fb-open" type="button" title="Open feedback panel">
-    <span id="fb-conn" class="fb-conn" title="Run /cc-htmlfeedback on Claude Code for auto fixes" aria-hidden="true"></span>
+    <span id="fb-conn" class="fb-conn" title="Run /cc-htmlfeedback to enable live fixes" aria-hidden="true"></span>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     Feedback <span class="fb-badge">0</span>
   </button>
@@ -184,10 +184,10 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     connEl.className = 'fb-conn'
       + (connState === 'live' ? ' live' : connState === 'connecting' ? ' connecting' : '')
       + (working ? ' working' : '');
-    connEl.title = working ? ('Claude is working on ' + n + ' comment' + (n === 1 ? '' : 's') + ' on this page')
-      : connState === 'live' ? 'Connected — Claude session is idle (no comments in progress)'
-      : connState === 'connecting' ? 'Connecting to the Claude session…'
-      : 'Run /cc-htmlfeedback on Claude Code for auto fixes';
+    connEl.title = working ? ('Agent is working on ' + n + ' comment' + (n === 1 ? '' : 's') + ' on this page')
+      : connState === 'live' ? 'Connected - agent is idle'
+      : connState === 'connecting' ? 'Connecting to the agent session…'
+      : 'Run /cc-htmlfeedback to enable live fixes';
   }
   function setConn(state){ connState = state; paintConn(); }
   const copyBtn= document.getElementById('fb-copy');
@@ -794,7 +794,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     if(CCFB || dismissed) return;
     const head = panel.querySelector('.fb-head'); if(!head) return;
     const b = document.createElement('div'); b.className = 'fb-banner';
-    b.innerHTML = '<span>💡 Want Claude to fix these live? Run <code>/cc-htmlfeedback</code> in Claude Code.</span>' +
+    b.innerHTML = '<span>💡 Want these fixed live? Run <code>/cc-htmlfeedback</code>.</span>' +
       '<button class="fb-banner-copy" type="button" title="Copy prompt" aria-label="Copy prompt">⧉</button>' +
       '<button class="fb-banner-x" type="button" title="Dismiss" aria-label="Dismiss banner">✕</button>';
     head.insertBefore(b, head.firstChild);
@@ -805,6 +805,13 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     b.querySelector('.fb-banner-x').addEventListener('click', function(){ try { localStorage.setItem('ccfb-banner-dismissed','1'); } catch{} b.remove(); });
   }
 
+  // Mirrors the fb-hint/fb-comment/fb-strike defaults in the static markup above, adjusted for
+  // the connected-mode fast paths (Cmd/Ctrl+Enter, Cmd/Ctrl+Backspace, Cmd/Ctrl+click) - keep in sync.
+  if (CCFB) {
+    document.getElementById('fb-hint').textContent = 'Enter to save draft · Backspace (empty) to strike · Cmd/Ctrl+Enter to fix now · Shift+Enter for newline · Esc to cancel';
+    document.getElementById('fb-comment').title = 'Comment (Cmd/Ctrl+click: fix now)';
+    document.getElementById('fb-strike').title = 'Strike (Cmd/Ctrl+click or Cmd/Ctrl+Backspace: fix now)';
+  }
   if(CCFB){ restoreDrafts(); subscribeSSE(); loadTickets(); } else { setConn('offline'); maybeBanner(); }   // subscribeSSE sets 'connecting' itself
   render();
 

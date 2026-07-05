@@ -219,7 +219,6 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   }
   // Runs once at startup, before subscribeSSE()/loadTickets(), so reconcile() can match
   // restored entries by sid or content instead of creating fresh duplicates.
-  // eslint-disable-next-line no-unused-vars -- wired into startup in a later task
   function restoreDrafts(){
     if(!CCFB) return;
     let saved; try { saved = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '[]'); } catch{ saved = []; }
@@ -804,7 +803,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     b.querySelector('.fb-banner-x').addEventListener('click', function(){ try { localStorage.setItem('ccfb-banner-dismissed','1'); } catch{} b.remove(); });
   }
 
-  if(CCFB){ subscribeSSE(); loadTickets(); } else { setConn('offline'); maybeBanner(); }   // subscribeSSE sets 'connecting' itself
+  if(CCFB){ restoreDrafts(); subscribeSSE(); loadTickets(); } else { setConn('offline'); maybeBanner(); }   // subscribeSSE sets 'connecting' itself
   render();
 
   }

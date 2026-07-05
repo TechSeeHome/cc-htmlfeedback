@@ -646,3 +646,66 @@ test('first-use toast: broken localStorage fails closed (never nags) instead of 
     'still not shown on a second save - fails closed, not open'
   );
 });
+
+test('restore: a draft survives a simulated reload (fresh widget instance, same sessionStorage)', async () => {
+  const first = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
+  const p1 = first.document.getElementById('target');
+  select(first.window, p1.firstChild, 0, 11);
+  await tick();
+  first.document.getElementById('fb-text').value = 'persist me';
+  first.document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new first.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+  first.window.eval('persistDrafts()'); // normally debounced 300ms; force it for the test
+
+  const snapshot = first.window.sessionStorage.getItem('ccfb-drafts:/test.html');
+  assert.ok(snapshot, 'something was persisted');
+
+  // "Reload": a brand new window/widget instance, seeded with the same sessionStorage content.
+  const second = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
+  second.window.sessionStorage.setItem('ccfb-drafts:/test.html', snapshot);
+  second.window.eval('restoreDrafts(); render();');
+
+  const f = second.window.eval('store[1]');
+  assert.equal(f.note, 'persist me');
+  assert.equal(f.draft, true);
+  assert.ok(second.document.querySelector('.fb-mark'), 'the mark was re-anchored on the page');
+  const nextId = second.window.eval('++uid');
+  assert.equal(nextId, 2, 'a new annotation after restore cannot collide with the restored id');
+});
+
+test('restore: restoreDrafts() runs automatically on startup — regression guard for the wiring itself', () => {
+  // No manual restoreDrafts() call anywhere in this test. sessionStorage is seeded BEFORE
+  // loadWidget() evaluates the widget script, so the ONLY way store[1] can exist afterward is
+  // if the widget's own startup code called restoreDrafts() on its own. If the one-line wiring
+  // (`restoreDrafts();` on the startup line) were ever removed, this test — unlike the
+  // "simulated reload" test above, which calls restoreDrafts() itself — would catch it.
+  const seeded = JSON.stringify([
+    {
+      id: 1,
+      quote: 'Hello world',
+      context: '',
+      section: '',
+      note: 'auto restored',
+      type: 'comment',
+      draft: true,
+      page: 'http://127.0.0.1:4317/test.html',
+    },
+  ]);
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+    sessionStorageSeed: { 'ccfb-drafts:/test.html': seeded },
+  });
+
+  const f = window.eval('store[1]');
+  assert.ok(f, 'restoreDrafts() ran automatically during startup, before any test code executed');
+  assert.equal(f.note, 'auto restored');
+  assert.equal(f.draft, true);
+  assert.ok(
+    document.querySelector('.fb-mark'),
+    'the mark was re-anchored on the page during automatic startup'
+  );
+});

@@ -93,12 +93,17 @@ const DEFAULT_BODY = '<p id="target">Hello world, this is a test paragraph for s
 // browser would (the script auto-invokes on load — see build.js's fbInit() wrapper).
 // ccfb: pass an object to simulate connected mode (the server's window.__CCFB injection);
 // omit for disconnected mode. fetchImpl lets a test observe/control POST responses —
-// the default resolves every POST with a fresh id and empty ticket list.
+// the default resolves every POST with a fresh id and empty ticket list. sessionStorageSeed
+// (key -> string value) is written BEFORE the widget script is eval'd, so it's in place when
+// fbInit()'s own startup logic (restoreDrafts() etc.) runs — this is what lets a test prove
+// something happens automatically on load, as opposed to seeding sessionStorage afterward and
+// calling the function manually, which would pass even if the startup wiring were removed.
 function loadWidget({
   url = 'http://127.0.0.1:4317/test.html',
   bodyHTML = DEFAULT_BODY,
   ccfb = null,
   fetchImpl,
+  sessionStorageSeed,
 } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${bodyHTML}</body></html>`, {
     url,
@@ -129,6 +134,9 @@ function loadWidget({
         json: async () => ({ id, tickets: [] }),
       });
     });
+  if (sessionStorageSeed) {
+    Object.entries(sessionStorageSeed).forEach(([k, v]) => window.sessionStorage.setItem(k, v));
+  }
   window.eval(WIDGET_SRC);
   return { window, document: window.document, posted };
 }

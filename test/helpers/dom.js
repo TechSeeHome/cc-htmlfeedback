@@ -1,10 +1,10 @@
 // Shared jsdom bootstrap for widget tests. jsdom has no layout engine, so geometry reads
-// (popover positioning) and innerText (needs layout) are stubbed — tests only exercise
+// (popover positioning) and innerText (needs layout) are stubbed - tests only exercise
 // widget LOGIC, never pixel positioning.
 // Safety note: this file and its callers use window.eval() to run the widget inside a
 // disposable jsdom sandbox and to poke its state from tests. The evaluated source is always
-// our own locally-built, trusted widget code (or literal test fixtures) — never untrusted
-// input — so eval here is the intended test mechanism, not a security concern.
+// our own locally-built, trusted widget code (or literal test fixtures) - never untrusted
+// input - so eval here is the intended test mechanism, not a security concern.
 const { JSDOM } = require('jsdom');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,18 +15,18 @@ const WIDGET_SRC_RAW = fs.readFileSync(
 );
 
 // Tests poke the widget's internal state directly (e.g. `store[1] = {...}; render();`
-// via a second, separate window.eval() call — see widget.test.js). That only works because
+// via a second, separate window.eval() call - see widget.test.js). That only works because
 // of this splice: build.js nests all widget logic inside fbInit() (see build.js), so
 // store/render are local to that one function call and vanish once it returns; nothing
 // makes them reachable from a later, independent eval(). Worse, jsdom's window.eval doesn't
 // share a persistent global *lexical* environment across separate calls the way real
-// browsers do — top-level `let`/`const` from one eval() are invisible to the next — so even
+// browsers do - top-level `let`/`const` from one eval() are invisible to the next - so even
 // hoisting them out of fbInit wouldn't be enough. Real *properties* of the global object
 // (window.foo = ...) don't have that problem: they're always live for every later eval() in
 // the same window. So we splice a one-line alias, `window.store = store; window.render =
-// render;`, right before fbInit()'s closing brace (where store/render are still in scope) —
+// render;`, right before fbInit()'s closing brace (where store/render are still in scope) -
 // giving later eval() calls a bare `store`/`render` that resolves via normal global-object
-// property lookup. Extend this list if a later test needs another internal — for a function
+// property lookup. Extend this list if a later test needs another internal - for a function
 // (like `persistDrafts`/`restoreDrafts` below) a plain alias is fine, since the test only ever
 // calls it, never expects reassignment to be visible back in the widget. For a plain value like
 // `uid` a getter/setter pair is needed instead of a straight alias, since aliasing only copies
@@ -41,7 +41,7 @@ const EXPOSE_HOOK =
 const FBINIT_CLOSE_ANCHOR = '\n  }\n  if (document.body) fbInit();';
 if (WIDGET_SRC_RAW.split(FBINIT_CLOSE_ANCHOR).length !== 2) {
   throw new Error(
-    'test/helpers/dom.js: fbInit() closing-brace anchor not found exactly once in extension/feedback-widget.js — ' +
+    'test/helpers/dom.js: fbInit() closing-brace anchor not found exactly once in extension/feedback-widget.js - ' +
       "build.js's generated template likely changed; update FBINIT_CLOSE_ANCHOR/EXPOSE_HOOK."
   );
 }
@@ -91,12 +91,12 @@ function stubGeometry(window) {
 const DEFAULT_BODY = '<p id="target">Hello world, this is a test paragraph for selection.</p>';
 
 // Loads the REAL generated widget into a fresh jsdom window and lets it run, exactly as a
-// browser would (the script auto-invokes on load — see build.js's fbInit() wrapper).
+// browser would (the script auto-invokes on load - see build.js's fbInit() wrapper).
 // ccfb: pass an object to simulate connected mode (the server's window.__CCFB injection);
-// omit for disconnected mode. fetchImpl lets a test observe/control POST responses —
+// omit for disconnected mode. fetchImpl lets a test observe/control POST responses -
 // the default resolves every POST with a fresh id and empty ticket list. sessionStorageSeed
 // (key -> string value) is written BEFORE the widget script is eval'd, so it's in place when
-// fbInit()'s own startup logic (restoreDrafts() etc.) runs — this is what lets a test prove
+// fbInit()'s own startup logic (restoreDrafts() etc.) runs - this is what lets a test prove
 // something happens automatically on load, as opposed to seeding sessionStorage afterward and
 // calling the function manually, which would pass even if the startup wiring were removed.
 function loadWidget({
@@ -123,7 +123,7 @@ function loadWidget({
   window.fetch =
     fetchImpl ||
     ((reqUrl, opts) => {
-      // id is captured now, before the push below, so the Nth POST gets 'srv-<N-1>' (0-indexed) —
+      // id is captured now, before the push below, so the Nth POST gets 'srv-<N-1>' (0-indexed) -
       // json() only reads this closed-over value, so computing it after the push would make every
       // response describe itself as one id ahead of its actual position in `posted`.
       const id = 'srv-' + posted.length;

@@ -68,6 +68,16 @@ moves).
   `readyState===2`. Add a server `: ping` heartbeat (~15s) + reconnect backoff. Low value on loopback.
 - **Version discipline unenforced** — `build.js --check` validates content drift, not
   `manifest.json` === `package.json` === `plugin.json` parity. Add a version-parity assertion.
+- **Clean can delete fix requests the agent never saw** (`server.js` `/__ccfb/clean`,
+  `feedback-widget.html` Clean handler). Clean unconditionally truncates the page's
+  `feedback_inbox.jsonl`, including lines appended-but-not-yet-merged into `feedback_tasks.json` (the
+  drain loop only merges inbox lines when it goes globally idle - see `SKILL.md` Step 1). Deferred
+  fix submission's Fix all raises the odds and blast radius of hitting this (several tickets land at
+  once, right when a user might Clean). Real fix needs a server-side change (e.g. merge-before-clean,
+  or an inbox the server itself drains) - out of scope for a widget-only PR. Related to the design
+  doc's already-accepted "Fix all outrunning inbox ingestion" and "POST-failure idempotency" risks
+  (`docs/design/2026-07-02-deferred-fix-submission.md` §5), but this is the sharper case: it's not a
+  retry/duplicate risk, it's silent deletion of already-sent work with no error surfaced.
 
 ### Open — LOW
 - `server.js` `decodeURIComponent` can throw on a malformed `%` → wrap and 400.

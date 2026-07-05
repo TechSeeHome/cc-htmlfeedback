@@ -50,7 +50,7 @@ test('sections: a draft entry renders under a Drafts section, counted as outstan
   const { window, document } = loadWidget({
     ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
   });
-  // Poke the store directly — this test is about rendering/bucketing, not creation.
+  // Poke the store directly - this test is about rendering/bucketing, not creation.
   window.eval(`
     store[1] = { id: 1, quote: 'x', context: '', section: '', note: '', type: 'comment',
       removed: false, draft: true, page: location.href, status: 'todo', result: '', files: [] };
@@ -298,7 +298,7 @@ test('reconcile: excludes drafts from content-adoption (the misadoption bug foun
   window.eval(`
     store[1] = { id:1, quote:'x', context:'', section:'', note:'n', type:'comment', removed:false,
       draft:true, page:location.href, status:'todo', result:'', files:[] };
-    uid = 1; // matches real usage, where uid always advances past any existing store id — avoids
+    uid = 1; // matches real usage, where uid always advances past any existing store id - avoids
              // reconcile()'s own ++uid colliding with the manually-created store[1] above
     reconcile([{ id:'other', quote:'x', note:'n', page:location.href, status:'todo' }]);
   `);
@@ -633,7 +633,7 @@ test('first-use toast: broken localStorage fails closed (never nags) instead of 
   // Simulate private-browsing/quota/policy storage failures: both getItem and setItem throw,
   // so a fail-open implementation would never successfully record "shown" and would re-show the
   // toast on every plain save. Overriding the Storage prototype (not window.localStorage.getItem
-  // directly) is required — jsdom's localStorage is Proxy-backed, so a plain property assignment
+  // directly) is required - jsdom's localStorage is Proxy-backed, so a plain property assignment
   // is silently absorbed as a storage write instead of shadowing the method.
   window.Storage.prototype.getItem = function () {
     throw new Error('storage broken');
@@ -706,12 +706,12 @@ test('restore: a draft survives a simulated reload (fresh widget instance, same 
   assert.equal(nextId, 2, 'a new annotation after restore cannot collide with the restored id');
 });
 
-test('restore: restoreDrafts() runs automatically on startup — regression guard for the wiring itself', () => {
+test('restore: restoreDrafts() runs automatically on startup - regression guard for the wiring itself', () => {
   // No manual restoreDrafts() call anywhere in this test. sessionStorage is seeded BEFORE
   // loadWidget() evaluates the widget script, so the ONLY way store[1] can exist afterward is
   // if the widget's own startup code called restoreDrafts() on its own. If the one-line wiring
-  // (`restoreDrafts();` on the startup line) were ever removed, this test — unlike the
-  // "simulated reload" test above, which calls restoreDrafts() itself — would catch it.
+  // (`restoreDrafts();` on the startup line) were ever removed, this test - unlike the
+  // "simulated reload" test above, which calls restoreDrafts() itself - would catch it.
   const seeded = JSON.stringify([
     {
       id: 1,
@@ -780,7 +780,7 @@ test('discard/undo: a discarded draft is excluded from the next persist; undo re
 
 test('discard: the debounced auto-persist actually fires on its own, with no manual persistDrafts() call', async () => {
   // Unlike the discard/undo test above (which forces persistDrafts() itself, so it would pass
-  // even if setRemoved() never scheduled anything), this test never calls persistDrafts() —
+  // even if setRemoved() never scheduled anything), this test never calls persistDrafts() -
   // it only relies on the schedulePersist() call wired into setRemoved() and lets the real
   // 300ms debounce timer fire on its own, via tick(). fetchImpl rejects so the widget's own
   // startup loadTickets() -> reconcile([]) call (which also schedules a persist, ~300ms after
@@ -793,7 +793,7 @@ test('discard: the debounced auto-persist actually fires on its own, with no man
     store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
     discard(1);
   `);
-  // Sanity check: nothing has been persisted yet — proves the eventual write below comes from
+  // Sanity check: nothing has been persisted yet - proves the eventual write below comes from
   // the debounce timer firing, not from some synchronous persist hiding in discard()/setRemoved().
   assert.equal(
     window.sessionStorage.getItem('ccfb-drafts:/test.html'),
@@ -806,7 +806,7 @@ test('discard: the debounced auto-persist actually fires on its own, with no man
   const saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html') || 'null');
   assert.ok(
     saved,
-    'the debounced auto-persist wrote a snapshot on its own — no persistDrafts() call anywhere in this test'
+    'the debounced auto-persist wrote a snapshot on its own - no persistDrafts() call anywhere in this test'
   );
   assert.deepEqual(
     saved.map((s) => s.id),
@@ -832,7 +832,7 @@ test("morph survival: a completed fix does not strip other drafts' highlights", 
   });
   const p = document.getElementById('target');
 
-  // draft #1 (never submitted) — must survive
+  // draft #1 (never submitted) - must survive
   select(window, p.firstChild, 0, 11); // "Hello world"
   await tick();
   document
@@ -843,13 +843,13 @@ test("morph survival: a completed fix does not strip other drafts' highlights", 
   await tick();
 
   // a SEPARATE ticket, unrelated to the draft. First sighting at a non-done status, so the
-  // store records a real prior status (`was`) — reconcile() only flags enteredDone on an actual
+  // store records a real prior status (`was`) - reconcile() only flags enteredDone on an actual
   // todo -> done TRANSITION (`was && was !== 'done'`), not on a ticket seen as already-done.
   window.eval(
     `reconcile([{ id:'other-ticket', quote:'this', note:'x', page:location.href, status:'todo', result:'', files:[] }]);`
   );
   await tick();
-  // Now transition it to 'done' — this is what actually triggers scheduleApply() -> applyMorph().
+  // Now transition it to 'done' - this is what actually triggers scheduleApply() -> applyMorph().
   window.eval(
     `reconcile([{ id:'other-ticket', quote:'this', note:'x', page:location.href, status:'done', result:'ok', files:[] }]);`
   );

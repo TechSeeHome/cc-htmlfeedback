@@ -143,14 +143,14 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   <textarea id="fb-text" rows="3" placeholder="Write your feedback…"></textarea>
   <div class="fb-pop-row">
     <button id="fb-comment" type="button" title="Highlight + comment (Enter)">💬 Comment</button>
-    <button id="fb-strike" type="button" title="Strike out — suggest removing (Backspace)">⌫ Strike</button>
+    <button id="fb-strike" type="button" title="Strike out - suggest removing (Backspace)">⌫ Strike</button>
   </div>
   <div id="fb-hint">Enter to comment · Backspace to strike · Shift+Enter for newline · Esc to cancel</div>
 </div>
 
 <script>
 (function(){
-  /* vendored: Idiomorph v0.7.3 (https://github.com/bigskysoftware/idiomorph) — DOM morphing for the on-done apply. Local var (not window). Do not reformat. */
+  /* vendored: Idiomorph v0.7.3 (https://github.com/bigskysoftware/idiomorph) - DOM morphing for the on-done apply. Local var (not window). Do not reformat. */
   // eslint-disable-next-line no-unused-vars, no-cond-assign, unicorn/no-useless-spread
   var Idiomorph=function(){"use strict";const e=()=>{};const n={morphStyle:"outerHTML",callbacks:{beforeNodeAdded:e,afterNodeAdded:e,beforeNodeMorphed:e,afterNodeMorphed:e,beforeNodeRemoved:e,afterNodeRemoved:e,beforeAttributeUpdated:e},head:{style:"merge",shouldPreserve:e=>e.getAttribute("im-preserve")==="true",shouldReAppend:e=>e.getAttribute("im-re-append")==="true",shouldRemove:e,afterHeadMorphed:e},restoreFocus:true};function t(t,e,n={}){t=d(t);const r=f(e);const o=u(t,r,n);const i=a(o,()=>{return c(o,t,r,e=>{if(e.morphStyle==="innerHTML"){s(e,t,r);return Array.from(t.childNodes)}else{return l(e,t,r)}})});o.pantry.remove();return i}function l(e,t,n){const r=f(t);s(e,r,n,t,t.nextSibling);return Array.from(r.childNodes)}function a(e,t){if(!e.config.restoreFocus)return t();let n=document.activeElement;if(!(n instanceof HTMLInputElement||n instanceof HTMLTextAreaElement)){return t()}const{id:r,selectionStart:o,selectionEnd:i}=n;const l=t();if(r&&r!==document.activeElement?.id){n=e.target.querySelector(`[id="${r}"]`);n?.focus()}if(n&&!n.selectionEnd&&i){n.setSelectionRange(o,i)}return l}const s=function(){function e(e,t,n,r=null,o=null){if(t instanceof HTMLTemplateElement&&n instanceof HTMLTemplateElement){t=t.content;n=n.content}r||=t.firstChild;for(const i of n.childNodes){if(r&&r!=o){const a=d(e,i,r,o);if(a){if(a!==r){m(e,r,a)}p(a,i,e);r=a.nextSibling;continue}}if(i instanceof Element&&e.persistentIds.has(i.id)){const s=h(t,i.id,r,e);p(s,i,e);r=s.nextSibling;continue}const l=u(t,i,r,e);if(l){r=l.nextSibling}}while(r&&r!=o){const c=r;r=r.nextSibling;f(e,c)}}function u(e,t,n,r){if(r.callbacks.beforeNodeAdded(t)===false)return null;if(r.idMap.has(t)){const o=document.createElement(t.tagName);e.insertBefore(o,n);p(o,t,r);r.callbacks.afterNodeAdded(o);return o}else{const i=document.importNode(t,true);e.insertBefore(i,n);r.callbacks.afterNodeAdded(i);return i}}const d=function(){function e(e,t,n,r){let o=null;let i=t.nextSibling;let l=0;let a=n;while(a&&a!=r){if(c(a,t)){if(s(e,a,t)){return a}if(o===null){if(!e.idMap.has(a)){o=a}}}if(o===null&&i&&c(a,i)){l++;i=i.nextSibling;if(l>=2){o=undefined}}if(a.contains(document.activeElement))break;a=a.nextSibling}return o||null}function s(e,t,n){let r=e.idMap.get(t);let o=e.idMap.get(n);if(!o||!r)return false;for(const i of r){if(o.has(i)){return true}}return false}function c(e,t){const n=e;const r=t;return n.nodeType===r.nodeType&&n.tagName===r.tagName&&(!n.id||n.id===r.id)}return e}();function f(e,t){if(e.idMap.has(t)){l(e.pantry,t,null)}else{if(e.callbacks.beforeNodeRemoved(t)===false)return;t.parentNode?.removeChild(t);e.callbacks.afterNodeRemoved(t)}}function m(t,e,n){let r=e;while(r&&r!==n){let e=r;r=r.nextSibling;f(t,e)}return r}function h(e,t,n,r){const o=r.target.id===t&&r.target||r.target.querySelector(`[id="${t}"]`)||r.pantry.querySelector(`[id="${t}"]`);i(o,r);l(e,o,n);return o}function i(t,n){const r=t.id;while(t=t.parentNode){let e=n.idMap.get(t);if(e){e.delete(r);if(!e.size){n.idMap.delete(t)}}}}function l(t,n,r){if(t.moveBefore){try{t.moveBefore(n,r)}catch(e){t.insertBefore(n,r)}}else{t.insertBefore(n,r)}}return e}();const p=function(){function e(e,t,n){if(n.ignoreActive&&e===document.activeElement){return null}if(n.callbacks.beforeNodeMorphed(e,t)===false){return e}if(e instanceof HTMLHeadElement&&n.head.ignore){}else if(e instanceof HTMLHeadElement&&n.head.style!=="morph"){m(e,t,n)}else{r(e,t,n);if(!f(e,n)){s(n,e,t)}}n.callbacks.afterNodeMorphed(e,t);return e}function r(e,t,n){let r=t.nodeType;if(r===1){const o=e;const i=t;const l=o.attributes;const a=i.attributes;for(const s of a){if(d(s.name,o,"update",n)){continue}if(o.getAttribute(s.name)!==s.value){o.setAttribute(s.name,s.value)}}for(let e=l.length-1;0<=e;e--){const c=l[e];if(!c)continue;if(!i.hasAttribute(c.name)){if(d(c.name,o,"remove",n)){continue}o.removeAttribute(c.name)}}if(!f(o,n)){u(o,i,n)}}if(r===8||r===3){if(e.nodeValue!==t.nodeValue){e.nodeValue=t.nodeValue}}}function u(n,r,o){if(n instanceof HTMLInputElement&&r instanceof HTMLInputElement&&r.type!=="file"){let e=r.value;let t=n.value;i(n,r,"checked",o);i(n,r,"disabled",o);if(!r.hasAttribute("value")){if(!d("value",n,"remove",o)){n.value="";n.removeAttribute("value")}}else if(t!==e){if(!d("value",n,"update",o)){n.setAttribute("value",e);n.value=e}}}else if(n instanceof HTMLOptionElement&&r instanceof HTMLOptionElement){i(n,r,"selected",o)}else if(n instanceof HTMLTextAreaElement&&r instanceof HTMLTextAreaElement){let e=r.value;let t=n.value;if(d("value",n,"update",o)){return}if(e!==t){n.value=e}if(n.firstChild&&n.firstChild.nodeValue!==e){n.firstChild.nodeValue=e}}}function i(e,t,n,r){const o=t[n],i=e[n];if(o!==i){const l=d(n,e,"update",r);if(!l){e[n]=t[n]}if(o){if(!l){e.setAttribute(n,"")}}else{if(!d(n,e,"remove",r)){e.removeAttribute(n)}}}}function d(e,t,n,r){if(e==="value"&&r.ignoreActiveValue&&t===document.activeElement){return true}return r.callbacks.beforeAttributeUpdated(e,t,n)===false}function f(e,t){return!!t.ignoreActiveValue&&e===document.activeElement&&e!==document.body}return e}();function c(t,e,n,r){if(t.head.block){const o=e.querySelector("head");const i=n.querySelector("head");if(o&&i){const l=m(o,i,t);return Promise.all(l).then(()=>{const e=Object.assign(t,{head:{block:false,ignore:true}});return r(e)})}}return r(t)}function m(e,t,r){let o=[];let i=[];let l=[];let a=[];let s=new Map;for(const n of t.children){s.set(n.outerHTML,n)}for(const u of e.children){let e=s.has(u.outerHTML);let t=r.head.shouldReAppend(u);let n=r.head.shouldPreserve(u);if(e||n){if(t){i.push(u)}else{s.delete(u.outerHTML);l.push(u)}}else{if(r.head.style==="append"){if(t){i.push(u);a.push(u)}}else{if(r.head.shouldRemove(u)!==false){i.push(u)}}}}a.push(...s.values());let c=[];for(const d of a){let n=document.createRange().createContextualFragment(d.outerHTML).firstChild;if(r.callbacks.beforeNodeAdded(n)!==false){if("href"in n&&n.href||"src"in n&&n.src){let t;let e=new Promise(function(e){t=e});n.addEventListener("load",function(){t()});c.push(e)}e.appendChild(n);r.callbacks.afterNodeAdded(n);o.push(n)}}for(const f of i){if(r.callbacks.beforeNodeRemoved(f)!==false){e.removeChild(f);r.callbacks.afterNodeRemoved(f)}}r.head.afterHeadMorphed(e,{added:o,kept:l,removed:i});return c}const u=function(){function e(e,t,n){const{persistentIds:r,idMap:o}=d(e,t);const i=a(n);const l=i.morphStyle||"outerHTML";if(!["innerHTML","outerHTML"].includes(l)){throw`Do not understand how to morph style ${l}`}return{target:e,newContent:t,config:i,morphStyle:l,ignoreActive:i.ignoreActive,ignoreActiveValue:i.ignoreActiveValue,restoreFocus:i.restoreFocus,idMap:o,persistentIds:r,pantry:s(),callbacks:i.callbacks,head:i.head}}function a(e){let t=Object.assign({},n);Object.assign(t,e);t.callbacks=Object.assign({},n.callbacks,e.callbacks);t.head=Object.assign({},n.head,e.head);return t}function s(){const e=document.createElement("div");e.hidden=true;document.body.insertAdjacentElement("afterend",e);return e}function c(e){let t=Array.from(e.querySelectorAll("[id]"));if(e.id){t.push(e)}return t}function u(n,e,r,t){for(const o of t){if(e.has(o.id)){let t=o;while(t){let e=n.get(t);if(e==null){e=new Set;n.set(t,e)}e.add(o.id);if(t===r)break;t=t.parentElement}}}}function d(e,t){const n=c(e);const r=c(t);const o=f(n,r);let i=new Map;u(i,o,e,n);const l=t.__idiomorphRoot||t;u(i,o,l,r);return{persistentIds:o,idMap:i}}function f(e,t){let n=new Set;let r=new Map;for(const{id:i,tagName:l}of e){if(r.has(i)){n.add(i)}else{r.set(i,l)}}let o=new Set;for(const{id:i,tagName:l}of t){if(o.has(i)){n.add(i)}else if(r.get(i)===l){o.add(i)}}for(const i of n){o.delete(i)}return o}return e}();const{normalizeElement:d,normalizeParent:f}=function(){const o=new WeakSet;function e(e){if(e instanceof Document){return e.documentElement}else{return e}}function r(e){if(e==null){return document.createElement("div")}else if(typeof e==="string"){return r(l(e))}else if(o.has(e)){return e}else if(e instanceof Node){if(e.parentNode){return new i(e)}else{const t=document.createElement("div");t.append(e);return t}}else{const t=document.createElement("div");for(const n of[...e]){t.append(n)}return t}}class i{constructor(e){this.originalNode=e;this.realParentNode=e.parentNode;this.previousSibling=e.previousSibling;this.nextSibling=e.nextSibling}get childNodes(){const e=[];let t=this.previousSibling?this.previousSibling.nextSibling:this.realParentNode.firstChild;while(t&&t!=this.nextSibling){e.push(t);t=t.nextSibling}return e}querySelectorAll(r){return this.childNodes.reduce((t,e)=>{if(e instanceof Element){if(e.matches(r))t.push(e);const n=e.querySelectorAll(r);for(let e=0;e<n.length;e++){t.push(n[e])}}return t},[])}insertBefore(e,t){return this.realParentNode.insertBefore(e,t)}moveBefore(e,t){return this.realParentNode.moveBefore(e,t)}get __idiomorphRoot(){return this.originalNode}}function l(n){let r=new DOMParser;let e=n.replace(/<svg(\s[^>]*>|>)([\s\S]*?)<\/svg>/gim,"");if(e.match(/<\/html>/)||e.match(/<\/head>/)||e.match(/<\/body>/)){let t=r.parseFromString(n,"text/html");if(e.match(/<\/html>/)){o.add(t);return t}else{let e=t.firstChild;if(e){o.add(e)}return e}}else{let e=r.parseFromString("<body><template>"+n+"</template></body>","text/html");let t=e.body.querySelector("template").content;o.add(t);return t}}return{normalizeElement:e,normalizeParent:r}}();return{morph:t,defaults:n}}();
   const CONTENT = document.body;
@@ -165,7 +165,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   const connEl = document.getElementById('fb-conn');
   // Connection indicator: two layers. `connState` is the SSE socket (offline / connecting / live).
   // On top of `live` we derive a "working" sub-state from whether THIS page has any in-progress
-  // ticket — so the dot reads not-connected (red) → connected-idle (steady green) →
+  // ticket - so the dot reads not-connected (red) → connected-idle (steady green) →
   // connected-working (pulsing blue). SSE is page-scoped, so "working" correctly means the agent
   // is fixing a comment that belongs to this page. paintConn() is re-run from render() on every
   // ticket update, so the idle↔working flip is live.
@@ -189,7 +189,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   const quickCopy = document.getElementById('fb-quickcopy');
   const FILE   = (function(){ try { return decodeURIComponent(location.href); } catch{ return location.href; } })();
   let pending = null, uid = 0, side = 'right', sideManual = false, history = [], hpos = -1;
-  const store = {};  // id -> { id, quote, context, section, note, type, removed } — single source of truth
+  const store = {};  // id -> { id, quote, context, section, note, type, removed } - single source of truth
   function visibleItems(){ return Object.values(store).filter(f => !f.removed).sort((a, b) => statusRank(a) - statusRank(b) || a.id - b.id); }
 
   /* ---- draft persistence: sessionStorage, key derived from the normalized path (matches
@@ -201,7 +201,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   // Persists any entry that is a draft OR not yet board-seen (reconcile() sets boardSeen once
   // it actually observes the ticket in board data). A recorded sid alone is NOT enough to stop
   // persisting: the POST response returns the sid seconds before the skill merges the inbox
-  // into the board, and GET /__ccfb/tickets reads only the board — dropping the entry at
+  // into the board, and GET /__ccfb/tickets reads only the board - dropping the entry at
   // sid-time would make it vanish on a reload in that gap.
   function persistDrafts(){
     if(!CCFB) return;
@@ -209,7 +209,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       .filter(f => !f.removed && (f.draft || !f.boardSeen))
       .map(f => ({ id: f.id, quote: f.quote, context: f.context, section: f.section, note: f.note,
         type: f.type, draft: f.draft, sid: f.sid, page: f.page }));
-    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot)); } catch{ /* sessionStorage unavailable (private mode/quota) — draft stays in-memory only */ }
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot)); } catch{ /* sessionStorage unavailable (private mode/quota) - draft stays in-memory only */ }
   }
   // Runs once at startup, before subscribeSSE()/loadTickets(), so reconcile() can match
   // restored entries by sid or content instead of creating fresh duplicates.
@@ -218,7 +218,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     let saved; try { saved = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '[]'); } catch{ saved = []; }
     saved.forEach(s => {
       uid = Math.max(uid, s.id);
-      // draft:false with no sid means a reload interrupted a POST whose outcome is unknown —
+      // draft:false with no sid means a reload interrupted a POST whose outcome is unknown -
       // revert to draft (a visible Fix button beats a card stranded in To do forever; if the
       // POST did land, the ticket surfaces as a separate board card the user can ✕).
       const f = store[s.id] = { id: s.id, quote: s.quote, context: s.context, section: s.section,
@@ -241,7 +241,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   const esc = s => (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   function openPanel(v){ panel.classList.toggle('open', v); }
-  // Publish the control API early — before any throw-prone setup below — so it can never
+  // Publish the control API early - before any throw-prone setup below - so it can never
   // be missing while the inject guard (__fbWidgetLoaded / #fb-launch) reports the widget present.
   window.__fbWidget = {
     open: function(){ openPanel(true); },
@@ -256,7 +256,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   document.getElementById('fb-open').addEventListener('click', () => openPanel(!panel.classList.contains('open')));
   document.getElementById('fb-close').addEventListener('click', () => openPanel(false));
   document.getElementById('fb-dock').addEventListener('click', () => document.body.classList.toggle('fb-dock-left'));
-  // Clean: wipe THIS page's tasks (inline two-step confirm — no native dialog, which would block the extension).
+  // Clean: wipe THIS page's tasks (inline two-step confirm - no native dialog, which would block the extension).
   document.getElementById('fb-clean').addEventListener('click', function(){
     if(this.dataset.armed !== '1'){ this.dataset.armed = '1'; this.textContent = 'Sure?'; const b = this; setTimeout(() => { if(b.dataset.armed === '1'){ b.dataset.armed = ''; b.textContent = 'Clean'; } }, 3000); return; }
     this.dataset.armed = ''; this.textContent = 'Clean';
@@ -348,15 +348,11 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   document.getElementById('fb-comment').addEventListener('click', e => add('comment', e.metaKey || e.ctrlKey));
   document.getElementById('fb-strike').addEventListener('click',  e => add('strike', e.metaKey || e.ctrlKey));
   ta.addEventListener('keydown', e => {
-    // Modifier branches MUST come before their plain counterparts: 'Enter' matches
-    // Cmd/Ctrl+Enter too (only Shift is excluded), and empty-box 'Backspace' matches
-    // Cmd/Ctrl+Backspace too — checking plain first would make the fast paths unreachable.
-    if(e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)){ e.preventDefault(); add('comment', true); }
-    else if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); add('comment', false); }
-    else if(e.key === 'Backspace' && ta.value === '' && (e.metaKey || e.ctrlKey) && !e.repeat){ e.preventDefault(); add('strike', true); }
-    // Modifier held but this is a key-repeat: stays a no-op rather than falling through to the
-    // plain branch below — a held Cmd/Ctrl+Backspace must not spam plain (non-fix-now) strikes.
-    else if(e.key === 'Backspace' && ta.value === '' && !(e.metaKey || e.ctrlKey)){ e.preventDefault(); add('strike', false); }
+    if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); add('comment', e.metaKey || e.ctrlKey); }
+    // Held Cmd/Ctrl+Backspace must not spam plain (non-fix-now) strikes once the fast path's own
+    // !e.repeat check blocks it - excluding that combination here (rather than a separate branch)
+    // keeps the repeat guard and the fixNow forwarding in one condition instead of two.
+    else if(e.key === 'Backspace' && ta.value === '' && !((e.metaKey || e.ctrlKey) && e.repeat)){ e.preventDefault(); add('strike', e.metaKey || e.ctrlKey); }
     else if(e.key === 'Escape'){ e.preventDefault(); hidePop(); }
     // When the box is empty, cmd/ctrl+C copies the originally-selected page text
     // (the popover stole focus + cleared the selection, so the native copy has nothing).
@@ -387,7 +383,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     record(() => setRemoved(id, false), () => setRemoved(id, true)); // apply = restore, revert = remove
   }
   // Removes an existing card's DOM node so the next ensureCard() rebuilds it fresh from
-  // cardHTML — ensureCard() reuses card DOM and never re-runs cardHTML, so without this the
+  // cardHTML - ensureCard() reuses card DOM and never re-runs cardHTML, so without this the
   // card's chrome (editable vs read-only note, Fix button, status pill) would not follow a
   // draft<->submitted transition.
   function rebuildCard(id){
@@ -395,7 +391,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     if(card) card.remove();
   }
   // Flips draft=false at SEND time (not success) so an in-flight submission is immediately
-  // adoptable by reconcile()'s content matcher if SSE beats the response — closing the
+  // adoptable by reconcile()'s content matcher if SSE beats the response - closing the
   // original race without exposing unsent drafts to that same matcher (see reconcile below).
   function submitDraft(f){
     rebuildCard(f.id);
@@ -424,17 +420,18 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     const drafts = visibleItems().filter(f => f.draft);
     if(!drafts.length) return;
     fixAllRunning = true;
-    let sent = 0, skipped = 0;
+    let sent = 0;
     try {
       for(const f of drafts){
         // f may have been discarded (.removed) or cleared (deleted from store by "Clean") by the
         // user while an earlier item in this same loop was still awaiting its POST - the array
         // above is a snapshot taken once, up front, so it still holds a reference to f. Skip it
-        // rather than silently submitting something the user already tried to cancel. Excluded
-        // from both sent/kept-as-drafts counts below: it's neither sent nor a draft anymore.
-        if(store[f.id] !== f || f.removed || !f.draft){ skipped++; continue; }
+        // rather than silently submitting something the user already tried to cancel.
+        if(store[f.id] !== f || f.removed || !f.draft) continue;
         const ok = await submitDraft(f);
-        if(!ok){ showToast('Fix all stopped - ' + sent + ' sent, ' + (drafts.length - sent - skipped) + ' kept as drafts', true); return; }
+        // Kept-as-drafts is a live count, not drafts.length - sent - skipped: a snapshot arithmetic
+        // count would still count an item discarded/cleared after this failure as "kept as a draft".
+        if(!ok){ showToast('Fix all stopped - ' + sent + ' sent, ' + visibleItems().filter(x => x.draft).length + ' kept as drafts', true); return; }
         sent++;
       }
       showToast(sent + ' drafts sent');
@@ -487,7 +484,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   function noteHTML(s){ return esc(s).replace(/\n/g, '<br>'); }
   function stClass(st){ return 'fb-st-' + st.replace(/[^a-z]/g, ''); }
   function cardHTML(f){
-    const q = f.quote.trim() ? esc(f.quote) : '⎵ (insertion point — empty selection)';
+    const q = f.quote.trim() ? esc(f.quote) : '⎵ (insertion point - empty selection)';
     const st = statusOf(f);
     const isDraft = CCFB && f.draft;
     const pill = (st && st !== 'draft') ? '<span class="fb-status ' + stClass(st) + '">' + esc(st).replace(/-/g, ' ') + '</span>' : '';
@@ -497,7 +494,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       ? '<button class="fb-fixbtn" type="button" title="Send to the agent to fix" aria-label="Send to the agent to fix' + (quoteSnippet ? ': ' + esc(quoteSnippet) : '') + '">⚡ Fix</button>'
       : '';
     // Draft notes are editable (disconnected-style contenteditable), always rendered even when
-    // empty — an empty-note draft (e.g. a strike) needs somewhere to type. A submitted note in
+    // empty - an empty-note draft (e.g. a strike) needs somewhere to type. A submitted note in
     // connected mode is the read-only instruction already sent (refine via a new comment).
     const note = (CCFB && !isDraft)
       ? (f.note ? '<div class="fb-note fb-note-ro">' + noteHTML(f.note) + '</div>' : '')
@@ -585,7 +582,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     paintConn();                                           // refresh idle↔working on every ticket change
   }
 
-  // One delegated listener per event type — no per-card binding, so incremental updates never churn handlers.
+  // One delegated listener per event type - no per-card binding, so incremental updates never churn handlers.
   list.addEventListener('click', e => {
     const fixBtn = e.target.closest('.fb-fixbtn');
     if(fixBtn){ e.stopPropagation(); const f = store[+fixBtn.closest('.fb-card').dataset.fbId]; if(f) submitDraft(f); return; }
@@ -599,9 +596,10 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     const note = e.target.closest('.fb-note'); if(!note) return;
     const f = store[+note.closest('.fb-card').dataset.fbId];
     if(f) f.note = note.innerText.trim();          // innerText preserves the user's line breaks
+    schedulePersist();
   });
   list.addEventListener('focusout', e => {         // flush a deferred morph once a note edit ends
-    if(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.fb-note')) return;  // focus moved to another note — still composing
+    if(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.fb-note')) return;  // focus moved to another note - still composing
     if(e.target.closest && e.target.closest('.fb-note') && pendingApply && !isComposing()){ pendingApply = false; applyMorph(); }
   });
   list.addEventListener('keydown', e => {
@@ -615,7 +613,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
 
   function discard(id){ setRemoved(id, true); record(() => setRemoved(id, true), () => setRemoved(id, false)); } // apply = remove, revert = restore
 
-  /* ---- undo / redo: one command contract — apply() performs the action, revert() reverses it ---- */
+  /* ---- undo / redo: one command contract - apply() performs the action, revert() reverses it ---- */
   function setRemoved(id, removed){
     if(store[id]) store[id].removed = removed;
     document.querySelectorAll('[data-fb-id="' + id + '"]').forEach(sp => sp.classList.toggle('fb-removed', removed));
@@ -655,7 +653,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       try { ok = document.execCommand('copy'); } catch{ ok = false; }
       t.remove();
     }
-    if(!ok){ showToast('Copy failed — select the notes and copy manually', true); return; }
+    if(!ok){ showToast('Copy failed - select the notes and copy manually', true); return; }
     showToast('Feedback copied');
     btn.classList.add('copied');
     if(btn === copyBtn){ const o = btn.innerHTML; btn.innerHTML = '✓ Copied!'; setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = o; }, 1400); }
@@ -664,10 +662,10 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   copyBtn.addEventListener('click', () => doCopy(copyBtn));
   quickCopy.addEventListener('click', e => { e.stopPropagation(); doCopy(quickCopy); });
   function build(){
-    const out = ['Feedback — ' + document.title, 'File: ' + FILE, '='.repeat(48), ''];
+    const out = ['Feedback - ' + document.title, 'File: ' + FILE, '='.repeat(48), ''];
     visibleItems().forEach((f, i) => {
-      out.push((i+1) + '. [' + (f.type === 'strike' ? 'STRIKE / suggest removing' : 'COMMENT') + ']' + (f.section ? ' — ' + f.section : ''));
-      out.push('   Selected: ' + (f.quote.trim() ? '"' + f.quote.trim() + '"' : '(insertion point — empty selection)'));
+      out.push((i+1) + '. [' + (f.type === 'strike' ? 'STRIKE / suggest removing' : 'COMMENT') + ']' + (f.section ? ' - ' + f.section : ''));
+      out.push('   Selected: ' + (f.quote.trim() ? '"' + f.quote.trim() + '"' : '(insertion point - empty selection)'));
       if(f.context) out.push('   In: "' + f.context + '"');
       if(f.note) out.push('   Note: ' + f.note);
       out.push('');
@@ -702,7 +700,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
         wrap(r, f.id, 'fb-mark' + (f.type === 'strike' ? ' strike' : ''));
         f.anchorLost = false;
         return true;
-      } catch{ /* overlaps markup — try the next match */ }
+      } catch{ /* overlaps markup - try the next match */ }
     }
     f.anchorLost = true;
     return false;
@@ -714,12 +712,14 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     tickets.forEach(t => {
       let f = Object.values(store).find(x => x.sid === t.id);
       if(!f){
-        // Adopt a just-submitted local entry whose POST response hasn't set sid yet — avoids
+        // Adopt a just-submitted local entry whose POST response hasn't set sid yet - avoids
         // creating a duplicate card + duplicate on-page mark if SSE arrives before the POST
         // resolves. !x.draft is required: without it, an UNSENT draft that merely shares text
         // with a ticket submitted elsewhere (another tab, a duplicate note) would be wrongly
-        // adopted and marked as sent — found in review, this guard is not optional.
-        f = Object.values(store).find(x => !x.draft && !x.sid && x.quote === (t.quote || '') && x.note === (t.note || '') && x.page === (t.page || ''));
+        // adopted and marked as sent - found in review, this guard is not optional. type is
+        // compared too: a comment and a strike on the same quote with a matching (often empty)
+        // note are otherwise indistinguishable, and cross-matching them swaps their outcomes.
+        f = Object.values(store).find(x => !x.draft && !x.sid && x.quote === (t.quote || '') && x.note === (t.note || '') && x.page === (t.page || '') && x.type === (t.type || 'comment'));
         if(f) f.sid = f.sid || t.id;
       }
       if(!f){
@@ -753,7 +753,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     });
   }
   function applyMorph(){
-    if(morphInFlight){ pendingApply = true; return; }   // coalesce — re-run once the current morph finishes
+    if(morphInFlight){ pendingApply = true; return; }   // coalesce - re-run once the current morph finishes
     morphInFlight = true;
     fetch(location.href, { cache:'no-store' }).then(r => r.text()).then(html => {
       const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -774,7 +774,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       const es = new EventSource(ccfbBase() + '/__ccfb/events?' + pageParam());
       es.onopen = () => setConn('live');
       es.onerror = () => {
-        if(es.readyState === 2){ setConn('offline'); try { es.close(); } catch{}; setTimeout(subscribeSSE, 5000); }  // CLOSED: browser won't retry — reconnect ourselves
+        if(es.readyState === 2){ setConn('offline'); try { es.close(); } catch{}; setTimeout(subscribeSSE, 5000); }  // CLOSED: browser won't retry - reconnect ourselves
         else setConn('connecting');                                                                                     // 0 = (re)connecting
       };
       es.addEventListener('tickets', e => { try { reconcile(JSON.parse(e.data).tickets || []); } catch{} });

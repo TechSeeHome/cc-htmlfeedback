@@ -294,3 +294,68 @@ test('reconcile: marks matched entries board-seen and re-schedules a persist', (
   `);
   assert.equal(window.eval('store[1].boardSeen'), true);
 });
+
+test('Fix all: submits drafts in creation order, hides when there are none', async () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  const fixAllBtn = document.getElementById('fb-fixall');
+  assert.equal(fixAllBtn.hidden, true, 'hidden with zero drafts');
+
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    store[2] = { id:2, quote:'b', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  assert.equal(fixAllBtn.hidden, false);
+  assert.equal(fixAllBtn.textContent, '⚡ Fix all (2)');
+  assert.equal(fixAllBtn.getAttribute('aria-label'), 'Fix all 2 drafts');
+
+  fixAllBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await tick(30);
+  assert.equal(window.eval('store[1].draft'), false);
+  assert.equal(window.eval('store[2].draft'), false);
+  assert.equal(document.getElementById('fb-toast').textContent, '✓ 2 drafts sent');
+  assert.equal(fixAllBtn.hidden, true, 'hidden again once all drafts are gone');
+});
+
+test('Fix all: stops at the first failure, reports the batch outcome, resumes on retry', async () => {
+  let call = 0;
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+    // Only count POSTs (the actual draft submissions) — connected mode also fires an untagged
+    // GET from loadTickets() on init, which isn't part of the "2nd submission fails" scenario.
+    fetchImpl: (reqUrl, opts) => {
+      if (!(opts && opts.method === 'POST'))
+        return Promise.resolve({ ok: true, json: async () => ({ tickets: [] }) });
+      call++;
+      if (call === 2) return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+      return Promise.resolve({ ok: true, json: async () => ({ id: 'srv-' + call }) });
+    },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    store[2] = { id:2, quote:'b', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    store[3] = { id:3, quote:'c', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  document.getElementById('fb-fixall').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await tick(30);
+  assert.equal(window.eval('store[1].draft'), false, 'first succeeded');
+  assert.equal(window.eval('store[2].draft'), true, 'second failed, reverted');
+  assert.equal(window.eval('store[3].draft'), true, 'third never attempted');
+  assert.equal(
+    document.getElementById('fb-toast').textContent,
+    '⚠️ Fix all stopped - 1 sent, 2 kept as drafts'
+  );
+
+  document.getElementById('fb-fixall').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await tick(30);
+  assert.equal(window.eval('store[2].draft'), false, 'retry resumed from the failed item');
+  assert.equal(window.eval('store[3].draft'), false);
+  assert.equal(
+    document.getElementById('fb-toast').textContent,
+    '✓ 2 drafts sent',
+    'retry only resubmitted the 2 remaining drafts, not the already-sent one'
+  );
+});

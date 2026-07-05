@@ -43,6 +43,10 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
 #fb-copy:hover{background:#0c2f74}
 #fb-copy.copied{background:#1f9d6b}
 #fb-copy svg{width:16px;height:16px;flex:0 0 auto}
+#fb-fixall{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:none;border-radius:10px;background:#f0a020;color:#231f04;font:700 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;margin-bottom:8px}
+#fb-fixall:hover{background:#d98d12}
+.fb-fixbtn{margin-top:9px;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;border-radius:8px;background:#f0a020;color:#231f04;font:700 12px/1 -apple-system,sans-serif;cursor:pointer}
+.fb-fixbtn:hover{background:#d98d12}
 .fb-count{margin-top:10px;font:600 12px/1 -apple-system,sans-serif;color:#5b6072;text-align:center}
 #fb-list{flex:1;overflow-y:auto;padding:14px}
 #fb-empty{padding:26px 18px;color:#8a90a2;font:14px/1.5 -apple-system,sans-serif;text-align:center}
@@ -128,6 +132,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
 <aside id="fb-panel" aria-label="Feedback panel">
   <div class="fb-head">
     <div class="fb-headtop"><span class="fb-title">Feedback</span><div class="fb-headbtns"><button id="fb-clean" type="button" title="Clear all tasks for this page" aria-label="Clear all tasks for this page">Clean</button><button id="fb-dock" type="button" title="Move panel to the other side" aria-label="Move panel to the other side">⇆</button><button id="fb-close" type="button" title="Close" aria-label="Close feedback panel">✕</button></div></div>
+    <button id="fb-fixall" type="button" hidden></button>
     <button id="fb-copy" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       Copy feedback
@@ -186,6 +191,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   }
   function setConn(state){ connState = state; paintConn(); }
   const copyBtn= document.getElementById('fb-copy');
+  const fixAllBtn = document.getElementById('fb-fixall');
   const quickCopy = document.getElementById('fb-quickcopy');
   const FILE   = (function(){ try { return decodeURIComponent(location.href); } catch{ return location.href; } })();
   let pending = null, uid = 0, side = 'right', sideManual = false, history = [], hpos = -1;
@@ -405,6 +411,18 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
         return false;
       });
   }
+  fixAllBtn.addEventListener('click', fixAll);
+  async function fixAll(){
+    const drafts = visibleItems().filter(f => f.draft);
+    if(!drafts.length) return;
+    let sent = 0;
+    for(const f of drafts){
+      const ok = await submitDraft(f);
+      if(!ok){ showToast('Fix all stopped - ' + sent + ' sent, ' + (drafts.length - sent) + ' kept as drafts', true); return; }
+      sent++;
+    }
+    showToast(sent + ' drafts sent');
+  }
   function maybeFirstDraftToast(){ /* replaced in a later task */ }
 
   /* ---- range wrapping (handles selections spanning multiple nodes) ---- */
@@ -528,6 +546,10 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
         sec.querySelector(':scope > summary .fb-sec-count').textContent = items.length;
         items.forEach((f, i) => { const card = ensureCard(f); const ref = sec.children[i + 1] || null; if(ref !== card) sec.insertBefore(card, ref); }); // +1 skips <summary>
       });
+      const draftCount = byKey.draft.length;
+      fixAllBtn.hidden = draftCount === 0;
+      fixAllBtn.textContent = '⚡ Fix all (' + draftCount + ')';
+      fixAllBtn.setAttribute('aria-label', 'Fix all ' + draftCount + ' draft' + (draftCount === 1 ? '' : 's'));
     }
     vis.forEach(syncMarkState);                       // in-progress "working" animation
     const outstanding = CCFB ? vis.filter(f => statusOf(f) !== 'done').length : vis.length;

@@ -27,7 +27,9 @@
 ## Fixed configuration (from P5 / POC deployments)
 
 Org-specific values (`<DH_*>` placeholders throughout this plan) are recorded in
-`docs/designhub/plans/environment.local.md` - gitignored, local-only.
+`docs/designhub/plans/environment.local.md` - gitignored, local-only. The committed
+`environment.example.md` documents every placeholder; copy it to `environment.local.md`
+and fill in your org's values.
 
 | constant | value |
 |---|---|

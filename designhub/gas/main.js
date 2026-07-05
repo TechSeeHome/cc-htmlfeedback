@@ -19,10 +19,20 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.asset) return dhAsset_(p.asset);
   if (!p.doc) {
-    return HtmlService.createHtmlOutput(DH_RENDER.treeHtml(dhPortalRows_(), dhExecUrl_()))
+    return HtmlService.createHtmlOutput(DH_RENDER.treeHtml(dhPortalRows_()))
       .setTitle('DesignHub').addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
-  var r = dhResolveDoc_(p.doc);
+  // A stale bookmark, typo, or deleted/renamed doc would otherwise surface as
+  // GAS's generic, unbranded uncaught-exception page - render DesignHub's own
+  // not-found page instead. The thrown message only echoes the caller's own
+  // ?doc= input, so there's nothing sensitive to leak into it.
+  var r;
+  try {
+    r = dhResolveDoc_(p.doc);
+  } catch (err) {
+    return HtmlService.createHtmlOutput(DH_RENDER.notFoundHtml(p.doc))
+      .setTitle('DesignHub - not found').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   var out;
   if (/\.md$/i.test(r.parsed.fileName)) {
     var md = r.file.getBlob().getDataAsString('UTF-8');

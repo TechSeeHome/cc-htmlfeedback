@@ -579,7 +579,7 @@ test('treeHtml groups rows repo -> feature and links via the url column', () => 
     { repo: 'r1', feature: 'f2', title: 'Doc B', url: EXEC + '?doc=r1/f2/b.html', status: 'active' },
     { repo: 'r1', feature: 'f1', title: 'gone', url: '#', status: 'archived' },
   ];
-  const out = R.treeHtml(rows, EXEC);
+  const out = R.treeHtml(rows);
   assert.match(out, /r1/);
   assert.match(out, />Doc A</);
   assert.doesNotMatch(out, />gone</);          // archived rows hidden
@@ -587,13 +587,13 @@ test('treeHtml groups rows repo -> feature and links via the url column', () => 
 });
 
 test('treeHtml escapes titles', () => {
-  const out = R.treeHtml([{ repo: 'r', feature: 'f', title: '<img src=x>', url: '#', status: 'active' }], EXEC);
+  const out = R.treeHtml([{ repo: 'r', feature: 'f', title: '<img src=x>', url: '#', status: 'active' }]);
   assert.doesNotMatch(out, /<img src=x>/);
   assert.match(out, /&lt;img/);
 });
 
 test('treeHtml renders an empty state', () => {
-  assert.match(R.treeHtml([], EXEC), /No docs published yet/);
+  assert.match(R.treeHtml([]), /No docs published yet/);
 });
 
 test('treeHtml blocks javascript: URLs planted in the url column (D18 Contributor Sheet access)', () => {
@@ -602,7 +602,7 @@ test('treeHtml blocks javascript: URLs planted in the url column (D18 Contributo
   // can edit that Sheet's cells directly - esc() alone would not stop a
   // scheme-based attack since a javascript: URI needs no HTML-special chars.
   const rows = [{ repo: 'r', feature: 'f', title: 'Evil', url: 'javascript:alert(1)', status: 'active' }];
-  const out = R.treeHtml(rows, EXEC);
+  const out = R.treeHtml(rows);
   assert.doesNotMatch(out, /javascript:/i);
   assert.match(out, /href="#"/);
 });
@@ -618,6 +618,14 @@ test('safeHref allowlists http(s) and scheme-less refs, rejects other schemes', 
   assert.equal(R.safeHref('  javascript:alert(1)'), '#');
   assert.equal(R.safeHref('java\tscript:alert(1)'), '#');
   assert.equal(R.safeHref('\n\tjavascript:alert(1)'), '#');
+});
+
+test('notFoundHtml renders a branded fallback and escapes the untrusted docPath', () => {
+  const out = R.notFoundHtml('repo/feat/<img src=x>.html');
+  assert.match(out, /Doc not found/);
+  assert.doesNotMatch(out, /<img src=x>/);
+  assert.match(out, /&lt;img/);
+  assert.match(out, /<a href="\?">Back to DesignHub<\/a>/);
 });
 ```
 
@@ -725,7 +733,7 @@ var DH_RENDER = (function () {
       '}\n' +
       '</scr' + 'ipt></body></html>';
   }
-  function treeHtml(rows, execUrl) {
+  function treeHtml(rows) {
     var active = rows.filter(function (r) { return r.status === 'active'; });
     var body;
     if (!active.length) {
@@ -751,8 +759,21 @@ var DH_RENDER = (function () {
       'h2{border-bottom:1px solid #ddd;padding-bottom:4px}small{color:#888}</style>' +
       '</head><body><h1>DesignHub</h1>' + body + '</body></html>';
   }
+  // Branded fallback for a ?doc= that doesn't resolve (deleted/renamed/typo'd
+  // path) - without this, doGet's uncaught Error produces GAS's generic,
+  // unbranded error screen instead of a page consistent with the rest of the
+  // app. docPath is untrusted (the raw query value) so it goes through esc().
+  function notFoundHtml(docPath) {
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top">' +
+      '<title>DesignHub - not found</title><style>body{max-width:640px;margin:4rem auto;' +
+      'font:16px/1.6 -apple-system,Segoe UI,sans-serif;color:#1a1a1a;padding:0 1rem}' +
+      'code{background:#f2f2f2;padding:1px 4px}</style></head><body>' +
+      '<h1>Doc not found</h1><p>No published doc matches <code>' + esc(docPath) + '</code>. ' +
+      'It may have been renamed, moved, or never published.</p>' +
+      '<p><a href="?">Back to DesignHub</a></p></body></html>';
+  }
   return { esc: esc, safeHref: safeHref, injectBase: injectBase, widgetTags: widgetTags,
-    serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml };
+    serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml, notFoundHtml: notFoundHtml };
 })();
 if (typeof module !== 'undefined') module.exports = DH_RENDER;
 ```

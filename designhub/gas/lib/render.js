@@ -97,7 +97,20 @@ var DH_RENDER = (function () {
       '}\n' +
       '</scr' + 'ipt></body></html>';
   }
-  function treeHtml(rows, execUrl) {
+  // Branded fallback for a ?doc= that doesn't resolve (deleted/renamed/typo'd
+  // path) - without this, doGet's uncaught Error produces GAS's generic,
+  // unbranded error screen instead of a page consistent with the rest of the
+  // app. docPath is untrusted (the raw query value) so it goes through esc().
+  function notFoundHtml(docPath) {
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top">' +
+      '<title>DesignHub - not found</title><style>body{max-width:640px;margin:4rem auto;' +
+      'font:16px/1.6 -apple-system,Segoe UI,sans-serif;color:#1a1a1a;padding:0 1rem}' +
+      'code{background:#f2f2f2;padding:1px 4px}</style></head><body>' +
+      '<h1>Doc not found</h1><p>No published doc matches <code>' + esc(docPath) + '</code>. ' +
+      'It may have been renamed, moved, or never published.</p>' +
+      '<p><a href="?">Back to DesignHub</a></p></body></html>';
+  }
+  function treeHtml(rows) {
     var active = rows.filter(function (r) { return r.status === 'active'; });
     var body;
     if (!active.length) {
@@ -124,6 +137,6 @@ var DH_RENDER = (function () {
       '</head><body><h1>DesignHub</h1>' + body + '</body></html>';
   }
   return { esc: esc, safeHref: safeHref, injectBase: injectBase, widgetTags: widgetTags,
-    serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml };
+    serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml, notFoundHtml: notFoundHtml };
 })();
 if (typeof module !== 'undefined') module.exports = DH_RENDER;

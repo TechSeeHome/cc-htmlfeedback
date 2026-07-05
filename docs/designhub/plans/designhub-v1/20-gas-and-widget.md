@@ -73,21 +73,39 @@ function dhPortalRows_() {
 }
 
 // D19 reconciler: rebuild _portal-index from every feature _index shard.
+//
+// Shard-ordering decision (see the "Two items for whoever executes Task 6
+// and Task 10" note above): rollup.js's buildRollup breaks an exact
+// updatedAt tie by first-row-wins, which is only deterministic for a FIXED
+// `shards` order - it has no way to impose one itself (see its own
+// comment). Drive's getFolders()/getFilesByName() iteration order is NOT
+// guaranteed, so if we pushed shards in raw traversal order, the tie-break
+// winner on an exact-timestamp collision (and therefore what the portal
+// index shows) could flap between reconciler runs with no underlying data
+// change. We already compute each folder's path while walking the tree, so
+// recording it alongside its shard and sorting by path before calling
+// buildRollup is free and makes the result deterministic run-to-run
+// regardless of Drive's listing order.
 function dhReconcile() {
   var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
   var shards = [];
-  var queue = [root];
+  var queue = [{ folder: root, path: '' }];
   while (queue.length) {
-    var folder = queue.shift();
+    var entry = queue.shift();
+    var folder = entry.folder;
     var subs = folder.getFolders();
-    while (subs.hasNext()) queue.push(subs.next());
+    while (subs.hasNext()) {
+      var sub = subs.next();
+      queue.push({ folder: sub, path: entry.path + '/' + sub.getName() });
+    }
     var files = folder.getFilesByName('_index');
     while (files.hasNext()) {
       var ss = SpreadsheetApp.openById(files.next().getId()).getSheetByName('index');
-      if (ss) shards.push(ss.getDataRange().getValues().slice(1));
+      if (ss) shards.push({ path: entry.path, rows: ss.getDataRange().getValues().slice(1) });
     }
   }
-  var rows = DH_ROLLUP.buildRollup(shards);
+  shards.sort(function (a, b) { return a.path.localeCompare(b.path); });
+  var rows = DH_ROLLUP.buildRollup(shards.map(function (s) { return s.rows; }));
   var it = root.getFilesByName('_portal-index');
   if (!it.hasNext()) throw new Error('DesignHub: _portal-index missing - first publish creates it');
   var sheet = SpreadsheetApp.openById(it.next().getId()).getSheets()[0];
@@ -217,10 +235,20 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.asset) return dhAsset_(p.asset);
   if (!p.doc) {
-    return HtmlService.createHtmlOutput(DH_RENDER.treeHtml(dhPortalRows_(), dhExecUrl_()))
+    return HtmlService.createHtmlOutput(DH_RENDER.treeHtml(dhPortalRows_()))
       .setTitle('DesignHub').addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
-  var r = dhResolveDoc_(p.doc);
+  // A stale bookmark, typo, or deleted/renamed doc would otherwise surface as
+  // GAS's generic, unbranded uncaught-exception page - render DesignHub's own
+  // not-found page instead. The thrown message only echoes the caller's own
+  // ?doc= input, so there's nothing sensitive to leak into it.
+  var r;
+  try {
+    r = dhResolveDoc_(p.doc);
+  } catch (err) {
+    return HtmlService.createHtmlOutput(DH_RENDER.notFoundHtml(p.doc))
+      .setTitle('DesignHub - not found').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   var out;
   if (/\.md$/i.test(r.parsed.fileName)) {
     var md = r.file.getBlob().getDataAsString('UTF-8');

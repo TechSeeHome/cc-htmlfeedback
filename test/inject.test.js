@@ -25,3 +25,8 @@ test('injects the serving mode into __CCFB (defaults to static)', () => {
   assert.ok(injectWidget('<body></body>', 'SID').includes('mode:"static"'));
   assert.ok(injectWidget('<body></body>', 'SID', 'proxy').includes('mode:"proxy"'));
 });
+
+test('injects the project namespace into __CCFB (empty string when omitted)', () => {
+  assert.ok(injectWidget('<body></body>', 'SID', 'static', 'abc123').includes('ns:"abc123"'));
+  assert.ok(injectWidget('<body></body>', 'SID').includes('ns:""'));
+});

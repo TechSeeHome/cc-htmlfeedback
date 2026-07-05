@@ -22,8 +22,11 @@ TOOLING = ${CLAUDE_PLUGIN_ROOT}/skills/publish-design/scripts
    - feature: current branch (`git branch --show-current`)
    - jira: first `ABC-123`-shaped token in the branch name, else `unassigned`
    Present the resolved values in one short block and ask the user to confirm
-   or correct. Anything unknown stays the literal string `unassigned`.
-3. **Publish:**
+   or correct. Anything unknown stays the literal string `unassigned`. **Stop
+   and wait for the user's reply here - do not run step 3 in the same turn.**
+   Showing the inferred values is not the same as the user approving them;
+   only an explicit go-ahead counts, even if the values look obviously right.
+3. **Publish (only after the user approved step 2):**
 
    ```bash
    node $TOOLING/publish.mjs --file <path> --repo <repo> --feature <branch> \

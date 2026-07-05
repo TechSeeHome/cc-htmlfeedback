@@ -32,4 +32,6 @@ Agents get Contributor - it cannot move or delete anything.
 - Use `values:append` for new rows (atomic) and row-addressed
   `values:update` for edits; every Drive call takes `supportsAllDrives=true`.
 
-Reference implementation: `docs/designhub/pocs/poc4/agent-path.py`.
+Reference implementation: `docs/designhub/pocs/poc4/agent-path.py` (dev-machine
+only - `docs/designhub/pocs/` is gitignored and absent from fresh clones; the
+recipe above is self-contained without it).

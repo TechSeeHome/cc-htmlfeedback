@@ -26,3 +26,10 @@ docs/designhub/pocs/
 
 # DesignHub org-specific values referenced by the plan docs (local-only)
 docs/designhub/**/*.local.md
+
+# DesignHub local deployment values (org-specific - never committed; the committed
+# templates are designhub/config.example.js + plugins/designhub/designhub.config.json,
+# real values come from docs/designhub/plans/environment.local.md)
+designhub/gas/config.js
+designhub/gas/.clasp.json
+plugins/designhub/designhub.config.local.json

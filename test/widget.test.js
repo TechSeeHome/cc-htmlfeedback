@@ -814,3 +814,68 @@ test('discard: the debounced auto-persist actually fires on its own, with no man
     'the discarded entry is excluded from that automatically-written snapshot'
   );
 });
+
+test("morph survival: a completed fix does not strip other drafts' highlights", async () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+    bodyHTML: '<p id="target">Hello world, this is a test paragraph for selection.</p>',
+    fetchImpl: (url) => {
+      if (String(url).includes('/__ccfb/tickets'))
+        return Promise.resolve({ ok: true, json: async () => ({ id: 'srv-1' }) });
+      // applyMorph() re-fetches the page itself; return the same body unchanged.
+      return Promise.resolve({
+        ok: true,
+        text: async () =>
+          '<html><body><p id="target">Hello world, this is a test paragraph for selection.</p></body></html>',
+      });
+    },
+  });
+  const p = document.getElementById('target');
+
+  // draft #1 (never submitted) — must survive
+  select(window, p.firstChild, 0, 11); // "Hello world"
+  await tick();
+  document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+
+  // a SEPARATE ticket, unrelated to the draft. First sighting at a non-done status, so the
+  // store records a real prior status (`was`) — reconcile() only flags enteredDone on an actual
+  // todo -> done TRANSITION (`was && was !== 'done'`), not on a ticket seen as already-done.
+  window.eval(
+    `reconcile([{ id:'other-ticket', quote:'this', note:'x', page:location.href, status:'todo', result:'', files:[] }]);`
+  );
+  await tick();
+  // Now transition it to 'done' — this is what actually triggers scheduleApply() -> applyMorph().
+  window.eval(
+    `reconcile([{ id:'other-ticket', quote:'this', note:'x', page:location.href, status:'done', result:'ok', files:[] }]);`
+  );
+  await tick(30);
+
+  assert.equal(window.eval('store[1].draft'), true, 'the untouched draft is still a draft');
+  assert.ok(
+    document.querySelector('.fb-mark[data-fb-id="1"]'),
+    'its on-page highlight survived the morph'
+  );
+});
+
+test('disconnected mode: fast-path chords degrade to a plain save (nothing to submit to)', async () => {
+  const { window, document, posted } = loadWidget(); // no ccfb
+  const p = document.getElementById('target');
+  select(window, p.firstChild, 0, 11);
+  await tick();
+  document.getElementById('fb-text').dispatchEvent(
+    new window.KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+      metaKey: true,
+    })
+  );
+  await tick();
+  assert.equal(posted.length, 0, 'no fetch happens at all in disconnected mode');
+  assert.ok(document.querySelector('.fb-card'), 'the note was still saved locally');
+});

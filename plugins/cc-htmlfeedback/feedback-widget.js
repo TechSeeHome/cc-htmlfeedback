@@ -412,16 +412,34 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       });
   }
   fixAllBtn.addEventListener('click', fixAll);
+  // Re-entrancy guard: without this, a second click mid-batch starts an overlapping fixAll() loop
+  // over its own snapshot, so both loops reach the same not-yet-processed entries - duplicate
+  // POSTs, and submitDraft()'s unconditional status/result/files reset clobbers items the first
+  // loop already resolved. fixAllBtn stays visible/clickable for the whole batch (it only hides
+  // once draftCount hits 0 via render()), so nothing else stops a second click from landing.
+  let fixAllRunning = false;
   async function fixAll(){
+    if(fixAllRunning) return;
     const drafts = visibleItems().filter(f => f.draft);
     if(!drafts.length) return;
-    let sent = 0;
-    for(const f of drafts){
-      const ok = await submitDraft(f);
-      if(!ok){ showToast('Fix all stopped - ' + sent + ' sent, ' + (drafts.length - sent) + ' kept as drafts', true); return; }
-      sent++;
+    fixAllRunning = true;
+    let sent = 0, skipped = 0;
+    try {
+      for(const f of drafts){
+        // f may have been discarded (.removed) or cleared (deleted from store by "Clean") by the
+        // user while an earlier item in this same loop was still awaiting its POST - the array
+        // above is a snapshot taken once, up front, so it still holds a reference to f. Skip it
+        // rather than silently submitting something the user already tried to cancel. Excluded
+        // from both sent/kept-as-drafts counts below: it's neither sent nor a draft anymore.
+        if(store[f.id] !== f || f.removed || !f.draft){ skipped++; continue; }
+        const ok = await submitDraft(f);
+        if(!ok){ showToast('Fix all stopped - ' + sent + ' sent, ' + (drafts.length - sent - skipped) + ' kept as drafts', true); return; }
+        sent++;
+      }
+      showToast(sent + ' drafts sent');
+    } finally {
+      fixAllRunning = false;
     }
-    showToast(sent + ' drafts sent');
   }
   function maybeFirstDraftToast(){ /* replaced in a later task */ }
 

@@ -323,7 +323,7 @@ test('Fix all: stops at the first failure, reports the batch outcome, resumes on
   let call = 0;
   const { window, document } = loadWidget({
     ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
-    // Only count POSTs (the actual draft submissions) — connected mode also fires an untagged
+    // Only count POSTs (the actual draft submissions) - connected mode also fires an untagged
     // GET from loadTickets() on init, which isn't part of the "2nd submission fails" scenario.
     fetchImpl: (reqUrl, opts) => {
       if (!(opts && opts.method === 'POST'))
@@ -358,4 +358,111 @@ test('Fix all: stops at the first failure, reports the batch outcome, resumes on
     '✓ 2 drafts sent',
     'retry only resubmitted the 2 remaining drafts, not the already-sent one'
   );
+});
+
+test('Fix all: discarding a later item mid-batch skips it instead of silently submitting it', async () => {
+  let resolveFirst;
+  // call counts real POSTs only (see the guard below) - it's the source of truth for "how many
+  // submissions actually went out"; the harness's own `posted` array is populated by dom.js's
+  // DEFAULT fetchImpl only, which this test overrides, so it would stay empty regardless.
+  let call = 0;
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+    fetchImpl: (reqUrl, opts) => {
+      if (!(opts && opts.method === 'POST'))
+        return Promise.resolve({ ok: true, json: async () => ({ tickets: [] }) });
+      call++;
+      // Hold the FIRST submission open so the test can discard the second item while it's in
+      // flight - reproducing the race: an earlier await still pending, a later snapshot entry
+      // getting discarded before the loop reaches it.
+      if (call === 1) {
+        return new Promise((resolve) => {
+          resolveFirst = () => resolve({ ok: true, json: async () => ({ id: 'srv-1' }) });
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ id: 'srv-' + call }) });
+    },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    store[2] = { id:2, quote:'b', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  document.getElementById('fb-fixall').dispatchEvent(new window.Event('click', { bubbles: true }));
+  // fixAll() has run synchronously up to its await on submitDraft(store[1]) - the first POST is
+  // already in flight (pending on resolveFirst). Discard store[2] before the loop ever reaches it.
+  window.eval(`store[2].removed = true; render();`);
+  resolveFirst();
+  await tick(30);
+  assert.equal(window.eval('store[1].draft'), false, 'first item still submitted normally');
+  assert.equal(call, 1, 'the discarded second item was never POSTed');
+  assert.equal(
+    window.eval('store[2].draft'),
+    true,
+    'discarded item is untouched by submitDraft (still draft:true, just removed)'
+  );
+  assert.equal(document.getElementById('fb-toast').textContent, '✓ 1 drafts sent');
+  assert.equal(
+    document.getElementById('fb-fixall').hidden,
+    true,
+    'no live drafts left once the discarded one is excluded'
+  );
+});
+
+test('Fix all: a page "Clean" mid-batch (store entry deleted) is skipped too, not resubmitted', async () => {
+  let resolveFirst;
+  let call = 0; // real POST count only - see the sibling "discard" test above for why not `posted`
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+    fetchImpl: (reqUrl, opts) => {
+      if (!(opts && opts.method === 'POST'))
+        return Promise.resolve({ ok: true, json: async () => ({ tickets: [] }) });
+      call++;
+      if (call === 1) {
+        return new Promise((resolve) => {
+          resolveFirst = () => resolve({ ok: true, json: async () => ({ id: 'srv-1' }) });
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ id: 'srv-' + call }) });
+    },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    store[2] = { id:2, quote:'b', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  document.getElementById('fb-fixall').dispatchEvent(new window.Event('click', { bubbles: true }));
+  // fixAll()'s snapshot already holds a reference to store[2]; now simulate "Clean" wiping it
+  // out of the live store entirely while store[1]'s POST is still in flight.
+  window.eval('delete store[2];');
+  resolveFirst();
+  await tick(30);
+  assert.equal(call, 1, 'only the still-live draft was POSTed; the cleared one was skipped');
+  assert.equal(window.eval('store[2]'), undefined, 'store[2] stays deleted - Clean is not undone');
+});
+
+test('Fix all: a second rapid click mid-batch is a no-op (no duplicate POSTs, no clobbered status)', async () => {
+  const { window, document, posted } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    store[2] = { id:2, quote:'b', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  const btn = document.getElementById('fb-fixall');
+  // fixAll() sets its re-entrancy flag synchronously before its first await, so this second
+  // dispatch - fired before any microtask has had a chance to run - lands while the flag is
+  // already set and must be a no-op.
+  btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+  btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await tick(30);
+  assert.equal(
+    posted.length,
+    2,
+    'each draft was POSTed exactly once, not duplicated by the second click'
+  );
+  assert.equal(window.eval('store[1].draft'), false);
+  assert.equal(window.eval('store[2].draft'), false);
+  assert.equal(document.getElementById('fb-toast').textContent, '✓ 2 drafts sent');
 });

@@ -94,6 +94,15 @@ moves).
   (it's a documented demo fixture, not stray). `feedback-widget.html` is the build SOURCE despite the
   `.html` name — leave it, the `build.js` docstrings disambiguate.
 
+## Browser automation - use dev-browser
+
+Browser-driving in this repo (widget E2E, DesignHub POC verification, screenshots) uses
+the **`dev-browser`** skill/CLI - persistent daemon, full Playwright API in scripts - not
+a browser MCP (Playwright MCP was removed from this machine on purpose). Keep
+verification flows as committed scripts (e.g. under `docs/designhub/pocs/pocN/`) so they
+graduate into E2E tests. Logged-in Google profile setup:
+`docs/designhub/pocs/PREREQUISITES.md` P2.
+
 ## Releasing — bump the extension version when needed
 
 When you ship a user-facing change to the widget or the extension (new behavior, fixes,

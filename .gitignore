@@ -20,3 +20,6 @@ npm-debug.log*
 # Internal design docs / planning (kept locally, not published)
 docs/superpowers/
 .playwright-mcp
+
+# DesignHub POC local credentials (see docs/designhub/pocs/)
+docs/designhub/pocs/**/.secrets/

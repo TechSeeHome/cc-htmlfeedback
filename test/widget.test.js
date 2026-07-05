@@ -154,3 +154,57 @@ test('add(): disconnected mode is unchanged (no draft field, no persistence)', a
     'disconnected mode never writes the snapshot'
   );
 });
+
+test('cardHTML: a draft card is editable, has a Fix button, no status pill', () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'x', context:'', section:'', note:'', type:'strike', removed:false,
+      draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  const card = document.querySelector('.fb-card[data-fb-id="1"]');
+  assert.ok(
+    card.querySelector('.fb-note[contenteditable="true"]'),
+    'note is editable even though empty'
+  );
+  assert.equal(card.querySelector('.fb-status'), null, 'no status pill on a draft');
+  const fixBtn = card.querySelector('.fb-fixbtn');
+  assert.ok(fixBtn, 'Fix button present');
+  assert.equal(fixBtn.getAttribute('aria-label'), 'Send to the agent to fix: x');
+});
+
+test('cardHTML: a submitted card is read-only, no Fix button', () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'x', context:'', section:'', note:'do it', type:'comment', removed:false,
+      draft:false, sid:'s1', page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  const card = document.querySelector('.fb-card[data-fb-id="1"]');
+  assert.ok(card.querySelector('.fb-note-ro'), 'submitted note is read-only');
+  assert.equal(card.querySelector('.fb-fixbtn'), null);
+  assert.ok(card.querySelector('.fb-status'), 'submitted card has a status pill');
+});
+
+test('cardHTML: a draft with a whitespace-only quote gets a Fix button with no bare trailing colon', () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'   ', context:'', section:'', note:'', type:'strike', removed:false,
+      draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  const card = document.querySelector('.fb-card[data-fb-id="1"]');
+  const fixBtn = card.querySelector('.fb-fixbtn');
+  assert.ok(fixBtn, 'Fix button present even for a whitespace-only quote');
+  assert.equal(
+    fixBtn.getAttribute('aria-label'),
+    'Send to the agent to fix',
+    'no bare trailing ": " when the quote is empty/whitespace-only'
+  );
+});

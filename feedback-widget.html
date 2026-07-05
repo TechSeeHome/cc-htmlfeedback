@@ -417,10 +417,17 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   function cardHTML(f){
     const q = f.quote.trim() ? esc(f.quote) : '⎵ (insertion point — empty selection)';
     const st = statusOf(f);
-    const pill = st ? '<span class="fb-status ' + stClass(st) + '">' + esc(st).replace(/-/g, ' ') + '</span>' : '';
-    const pageLbl = (CCFB && f.page) ? '<div class="fb-page" title="' + esc(f.page) + '">' + esc(shortPage(f.page)) + '</div>' : '';
-    // In connected mode the note is the submitted instruction (read-only — refine via a new comment, not by editing).
-    const note = CCFB
+    const isDraft = CCFB && f.draft;
+    const pill = (st && st !== 'draft') ? '<span class="fb-status ' + stClass(st) + '">' + esc(st).replace(/-/g, ' ') + '</span>' : '';
+    const pageLbl = (CCFB && f.page && !isDraft) ? '<div class="fb-page" title="' + esc(f.page) + '">' + esc(shortPage(f.page)) + '</div>' : '';
+    const quoteSnippet = clip(f.quote, 40);
+    const fixBtn = isDraft
+      ? '<button class="fb-fixbtn" type="button" title="Send to the agent to fix" aria-label="Send to the agent to fix' + (quoteSnippet ? ': ' + esc(quoteSnippet) : '') + '">⚡ Fix</button>'
+      : '';
+    // Draft notes are editable (disconnected-style contenteditable), always rendered even when
+    // empty — an empty-note draft (e.g. a strike) needs somewhere to type. A submitted note in
+    // connected mode is the read-only instruction already sent (refine via a new comment).
+    const note = (CCFB && !isDraft)
       ? (f.note ? '<div class="fb-note fb-note-ro">' + noteHTML(f.note) + '</div>' : '')
       : '<div class="fb-note" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Note" data-ph="Add a note…">' + noteHTML(f.note) + '</div>';
     return '<button class="fb-x" type="button" title="Discard" aria-label="Discard note">✕</button>' +
@@ -429,7 +436,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       '<span class="fb-type ' + f.type + '">' + (f.type === 'strike' ? 'Strikethrough' : 'Comment') + '</span>' +
       '<div class="fb-quote">' + q + '</div>' +
       (f.context ? '<div class="fb-ctx"><b>In:</b> ' + esc(f.context) + '</div>' : '') +
-      note +
+      note + fixBtn +
       '<div class="fb-result"></div>';
   }
   // Update the mutable bits (status pill, result) on an existing card without rebuilding it.

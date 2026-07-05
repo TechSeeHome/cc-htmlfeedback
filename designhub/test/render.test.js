@@ -31,6 +31,23 @@ test('serveHtml injects __CCFB config + widget asset tag before </body>', () => 
   assert.match(out, /d\.id="dh-identity"/);   // the Task 13 E2E finds the chip by this id
 });
 
+test('widgetTags defuses </script> inside docPath (D14 does not character-restrict segments)', () => {
+  // parseDocPath rejects empty/./.. segments but not HTML-special characters -
+  // a docPath whose real Drive path components straddle a "/" can carry a
+  // literal </script> substring into the inline __CCFB config.
+  const evil = 'repo/feat/foo</script><script>alert(1)</script>x.html';
+  const out = R.widgetTags(evil, EXEC);
+  assert.doesNotMatch(out, /alert\(1\)<\/script>x/);
+  assert.match(out, /<\\\/script/);
+});
+
+test('serveHtml defuses </script> inside docPath the same way', () => {
+  const evil = 'repo/feat/foo</script><script>alert(1)</script>x.html';
+  const out = R.serveHtml('<html><head></head><body></body></html>', evil, EXEC);
+  assert.doesNotMatch(out, /alert\(1\)<\/script>x/);
+  assert.match(out, /<\\\/script/);
+});
+
 test('mdShell embeds MD as JSON, inlines marked, loads mermaid as asset', () => {
   const out = R.mdShell('# Hi\n```mermaid\ngraph TD;A-->B;\n```', 'var marked={parse:function(){}};',
     EXEC + '?asset=mermaid', 'design.md');
@@ -70,4 +87,28 @@ test('treeHtml escapes titles', () => {
 
 test('treeHtml renders an empty state', () => {
   assert.match(R.treeHtml([], EXEC), /No docs published yet/);
+});
+
+test('treeHtml blocks javascript: URLs planted in the url column (D18 Contributor Sheet access)', () => {
+  // r.url is normally a code-generated execUrl, but it is read back from the
+  // _portal-index Sheet at render time and Contributor Shared Drive access
+  // can edit that Sheet's cells directly - esc() alone would not stop a
+  // scheme-based attack since a javascript: URI needs no HTML-special chars.
+  const rows = [{ repo: 'r', feature: 'f', title: 'Evil', url: 'javascript:alert(1)', status: 'active' }];
+  const out = R.treeHtml(rows, EXEC);
+  assert.doesNotMatch(out, /javascript:/i);
+  assert.match(out, /href="#"/);
+});
+
+test('safeHref allowlists http(s) and scheme-less refs, rejects other schemes', () => {
+  assert.equal(R.safeHref('https://example.com/x'), 'https://example.com/x');
+  assert.equal(R.safeHref('http://example.com/x'), 'http://example.com/x');
+  assert.equal(R.safeHref('#'), '#');
+  assert.equal(R.safeHref('javascript:alert(1)'), '#');
+  assert.equal(R.safeHref('data:text/html,<script>alert(1)</script>'), '#');
+  // classic filter-bypass forms: browsers strip leading whitespace/control
+  // chars and embedded tabs/newlines before parsing the scheme
+  assert.equal(R.safeHref('  javascript:alert(1)'), '#');
+  assert.equal(R.safeHref('java\tscript:alert(1)'), '#');
+  assert.equal(R.safeHref('\n\tjavascript:alert(1)'), '#');
 });

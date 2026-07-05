@@ -538,6 +538,23 @@ test('serveHtml injects __CCFB config + widget asset tag before </body>', () => 
   assert.match(out, /d\.id="dh-identity"/);   // the Task 13 E2E finds the chip by this id
 });
 
+test('widgetTags defuses </script> inside docPath (D14 does not character-restrict segments)', () => {
+  // parseDocPath rejects empty/./.. segments but not HTML-special characters -
+  // a docPath whose real Drive path components straddle a "/" can carry a
+  // literal </script> substring into the inline __CCFB config.
+  const evil = 'repo/feat/foo</script><script>alert(1)</script>x.html';
+  const out = R.widgetTags(evil, EXEC);
+  assert.doesNotMatch(out, /alert\(1\)<\/script>x/);
+  assert.match(out, /<\\\/script/);
+});
+
+test('serveHtml defuses </script> inside docPath the same way', () => {
+  const evil = 'repo/feat/foo</script><script>alert(1)</script>x.html';
+  const out = R.serveHtml('<html><head></head><body></body></html>', evil, EXEC);
+  assert.doesNotMatch(out, /alert\(1\)<\/script>x/);
+  assert.match(out, /<\\\/script/);
+});
+
 test('mdShell embeds MD as JSON, inlines marked, loads mermaid as asset', () => {
   const out = R.mdShell('# Hi\n```mermaid\ngraph TD;A-->B;\n```', 'var marked={parse:function(){}};',
     EXEC + '?asset=mermaid', 'design.md');
@@ -578,6 +595,30 @@ test('treeHtml escapes titles', () => {
 test('treeHtml renders an empty state', () => {
   assert.match(R.treeHtml([], EXEC), /No docs published yet/);
 });
+
+test('treeHtml blocks javascript: URLs planted in the url column (D18 Contributor Sheet access)', () => {
+  // r.url is normally a code-generated execUrl, but it is read back from the
+  // _portal-index Sheet at render time and Contributor Shared Drive access
+  // can edit that Sheet's cells directly - esc() alone would not stop a
+  // scheme-based attack since a javascript: URI needs no HTML-special chars.
+  const rows = [{ repo: 'r', feature: 'f', title: 'Evil', url: 'javascript:alert(1)', status: 'active' }];
+  const out = R.treeHtml(rows, EXEC);
+  assert.doesNotMatch(out, /javascript:/i);
+  assert.match(out, /href="#"/);
+});
+
+test('safeHref allowlists http(s) and scheme-less refs, rejects other schemes', () => {
+  assert.equal(R.safeHref('https://example.com/x'), 'https://example.com/x');
+  assert.equal(R.safeHref('http://example.com/x'), 'http://example.com/x');
+  assert.equal(R.safeHref('#'), '#');
+  assert.equal(R.safeHref('javascript:alert(1)'), '#');
+  assert.equal(R.safeHref('data:text/html,<script>alert(1)</script>'), '#');
+  // classic filter-bypass forms: browsers strip leading whitespace/control
+  // chars and embedded tabs/newlines before parsing the scheme
+  assert.equal(R.safeHref('  javascript:alert(1)'), '#');
+  assert.equal(R.safeHref('java\tscript:alert(1)'), '#');
+  assert.equal(R.safeHref('\n\tjavascript:alert(1)'), '#');
+});
 ```
 
 - [ ] **Step 2: Run to verify FAIL:** `node --test designhub/test/render.test.js`
@@ -594,6 +635,21 @@ var DH_RENDER = (function () {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  // Scheme allowlist for hrefs built from stored data (treeHtml's r.url comes
+  // from the _portal-index Sheet, editable directly by anyone with Contributor
+  // Shared Drive access (D18) - not just via the publish flow that normally
+  // writes it). esc() alone stops attribute breakout but not a javascript:/data:
+  // URI, which needs no HTML-special characters to run on click. Only http(s)
+  // and scheme-less refs (e.g. "#") pass; anything else is replaced with "#".
+  function safeHref(u) {
+    u = String(u == null ? '' : u);
+    // Match how browsers parse a URL's scheme: they strip leading/trailing C0
+    // control chars + space and remove ALL tab/CR/LF from anywhere in the
+    // string before ever looking at the scheme - so "  java\tscript:alert(1)"
+    // still runs as javascript: unless checked against the same normalization.
+    var normalized = u.replace(/[\t\r\n]/g, '').replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '');
+    return /^https?:\/\//i.test(normalized) || !/^[a-z][a-z0-9+.-]*:/i.test(normalized) ? u : '#';
+  }
   // <base target="_top"> is required or in-doc navigation silently fails in the
   // HtmlService iframe - but bare #anchors must NOT inherit it (they would
   // navigate the top window into the raw googleusercontent sandbox URL, losing
@@ -608,9 +664,17 @@ var DH_RENDER = (function () {
   function widgetTags(docPath, execUrl) {
     var cfg = { endpoint: '', sessionId: 'designhub', mode: 'proxy',
       ns: 'dh:' + docPath, docPath: docPath };
+    // docPath traces back to the raw ?doc= query value - parseDocPath (D14) only
+    // rejects empty/./.. segments, not HTML-special characters, so a doc whose
+    // real repo/folder/file names straddle a "/" (e.g. adjacent path components
+    // "foo<" and "script>x.html") can carry a literal </script> substring
+    // through untouched. JSON.stringify does not escape "<" or "/", so without
+    // defusing it here the same class of bug mdShell already guards against for
+    // MD_SOURCE would let that docPath break out of this inline script.
+    var cfgJson = JSON.stringify(cfg).replace(/<\/script/gi, '<\\/script');
     // mode:'proxy' makes the upstream widget's scheduleApply() a no-op (no DOM
     // morphing - re-fetching the exec URL from inside the sandbox is meaningless).
-    return '<scr' + 'ipt>window.__CCFB=' + JSON.stringify(cfg) + ';</scr' + 'ipt>' +
+    return '<scr' + 'ipt>window.__CCFB=' + cfgJson + ';</scr' + 'ipt>' +
       '<scr' + 'ipt src="' + esc(execUrl) + '?asset=widget"></scr' + 'ipt>' +
       // identity chip: shows the Google identity the bridge will stamp (D13/D17)
       '<scr' + 'ipt>(function(){var n=0,t=setInterval(function(){' +
@@ -675,7 +739,7 @@ var DH_RENDER = (function () {
       body = Object.keys(byRepo).sort().map(function (repo) {
         return '<h2>' + esc(repo) + '</h2>' + Object.keys(byRepo[repo]).sort().map(function (feat) {
           return '<h3>' + esc(feat) + '</h3><ul>' + byRepo[repo][feat].map(function (r) {
-            return '<li><a href="' + esc(r.url) + '">' + esc(r.title) + '</a>' +
+            return '<li><a href="' + esc(safeHref(r.url)) + '">' + esc(r.title) + '</a>' +
               (r.updatedAt ? ' <small>' + esc(String(r.updatedAt).slice(0, 10)) + '</small>' : '') + '</li>';
           }).join('') + '</ul>';
         }).join('');
@@ -687,7 +751,7 @@ var DH_RENDER = (function () {
       'h2{border-bottom:1px solid #ddd;padding-bottom:4px}small{color:#888}</style>' +
       '</head><body><h1>DesignHub</h1>' + body + '</body></html>';
   }
-  return { esc: esc, injectBase: injectBase, widgetTags: widgetTags,
+  return { esc: esc, safeHref: safeHref, injectBase: injectBase, widgetTags: widgetTags,
     serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml };
 })();
 if (typeof module !== 'undefined') module.exports = DH_RENDER;

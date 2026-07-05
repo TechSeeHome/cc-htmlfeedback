@@ -201,7 +201,7 @@ git add -A && git commit -m "designhub: v1 - README + design doc status"
 git push
 gh pr create --repo <DH_FORK_REPO> --base main \
   --title "DesignHub v1: publish skill + GAS serving layer + agent access" \
-  --body "Implements docs/designhub/design.md (D1-D19) per docs/designhub/plans/2026-07-05-designhub-v1-implementation.md. All mechanisms POC-validated (docs/designhub/pocs/). Upstream files untouched except the marketplace.json entry (D16)."
+  --body "Implements docs/designhub/design.md (D1-D19) per docs/designhub/plans/designhub-v1/ (00-overview.md + parts 1-4). All mechanisms POC-validated (docs/designhub/pocs/, dev-machine-local). Upstream files untouched except the marketplace.json entry (D16)."
 ```
 
 ---

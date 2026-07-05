@@ -79,7 +79,7 @@ test('persistence: persistDrafts saves drafts and not-yet-board-seen entries, ex
     store[3] = { id:3, quote:'c', context:'', section:'', note:'', type:'comment', removed:true,  draft:true, page:location.href };
     persistDrafts();
   `);
-  const saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html'));
+  const saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:test:/test.html'));
   const ids = saved.map((s) => s.id);
   assert.deepEqual(
     ids,
@@ -91,7 +91,7 @@ test('persistence: persistDrafts saves drafts and not-yet-board-seen entries, ex
 test('persistence: restoreDrafts brings entries back and advances uid past the highest restored id', () => {
   const { window } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
   window.sessionStorage.setItem(
-    'ccfb-drafts:/test.html',
+    'ccfb-drafts:test:/test.html',
     JSON.stringify([
       {
         id: 7,
@@ -116,7 +116,7 @@ test('persistence: restoreDrafts brings entries back and advances uid past the h
 test('persistence: a restored draft:false entry with no sid reverts to a draft', () => {
   const { window } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
   window.sessionStorage.setItem(
-    'ccfb-drafts:/test.html',
+    'ccfb-drafts:test:/test.html',
     JSON.stringify([
       {
         id: 3,
@@ -178,7 +178,7 @@ test('add(): disconnected mode is unchanged (no draft field, no persistence)', a
   const f = window.eval('store[1]');
   assert.equal(f.draft, undefined, 'draft is a connected-mode-only concept');
   assert.equal(
-    window.sessionStorage.getItem('ccfb-drafts:/test.html'),
+    window.sessionStorage.getItem('ccfb-drafts:test:/test.html'),
     null,
     'disconnected mode never writes the snapshot'
   );
@@ -690,12 +690,12 @@ test('restore: a draft survives a simulated reload (fresh widget instance, same 
   await tick();
   first.window.eval('persistDrafts()'); // normally debounced 300ms; force it for the test
 
-  const snapshot = first.window.sessionStorage.getItem('ccfb-drafts:/test.html');
+  const snapshot = first.window.sessionStorage.getItem('ccfb-drafts:test:/test.html');
   assert.ok(snapshot, 'something was persisted');
 
   // "Reload": a brand new window/widget instance, seeded with the same sessionStorage content.
   const second = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
-  second.window.sessionStorage.setItem('ccfb-drafts:/test.html', snapshot);
+  second.window.sessionStorage.setItem('ccfb-drafts:test:/test.html', snapshot);
   second.window.eval('restoreDrafts(); render();');
 
   const f = second.window.eval('store[1]');
@@ -726,7 +726,7 @@ test('restore: restoreDrafts() runs automatically on startup - regression guard 
   ]);
   const { window, document } = loadWidget({
     ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
-    sessionStorageSeed: { 'ccfb-drafts:/test.html': seeded },
+    sessionStorageSeed: { 'ccfb-drafts:test:/test.html': seeded },
   });
 
   const f = window.eval('store[1]');
@@ -747,12 +747,12 @@ test('Clean: purges the persisted snapshot, not just the in-memory store', () =>
     store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
     persistDrafts();
   `);
-  assert.ok(window.sessionStorage.getItem('ccfb-drafts:/test.html'));
+  assert.ok(window.sessionStorage.getItem('ccfb-drafts:test:/test.html'));
 
   const cleanBtn = document.getElementById('fb-clean');
   cleanBtn.dispatchEvent(new window.Event('click', { bubbles: true })); // arm
   cleanBtn.dispatchEvent(new window.Event('click', { bubbles: true })); // confirm
-  assert.equal(window.sessionStorage.getItem('ccfb-drafts:/test.html'), null);
+  assert.equal(window.sessionStorage.getItem('ccfb-drafts:test:/test.html'), null);
 });
 
 test('discard/undo: a discarded draft is excluded from the next persist; undo re-includes it', () => {
@@ -762,7 +762,7 @@ test('discard/undo: a discarded draft is excluded from the next persist; undo re
     discard(1);
     persistDrafts();
   `);
-  let saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html'));
+  let saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:test:/test.html'));
   assert.deepEqual(
     saved.map((s) => s.id),
     [],
@@ -770,7 +770,7 @@ test('discard/undo: a discarded draft is excluded from the next persist; undo re
   );
 
   window.eval('undo(); persistDrafts();');
-  saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html'));
+  saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:test:/test.html'));
   assert.deepEqual(
     saved.map((s) => s.id),
     [1],
@@ -796,14 +796,14 @@ test('discard: the debounced auto-persist actually fires on its own, with no man
   // Sanity check: nothing has been persisted yet - proves the eventual write below comes from
   // the debounce timer firing, not from some synchronous persist hiding in discard()/setRemoved().
   assert.equal(
-    window.sessionStorage.getItem('ccfb-drafts:/test.html'),
+    window.sessionStorage.getItem('ccfb-drafts:test:/test.html'),
     null,
     'sanity: schedulePersist() debounces 300ms, so nothing is written synchronously'
   );
 
   await tick(350); // past the 300ms debounce with margin
 
-  const saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html') || 'null');
+  const saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:test:/test.html') || 'null');
   assert.ok(
     saved,
     'the debounced auto-persist wrote a snapshot on its own - no persistDrafts() call anywhere in this test'

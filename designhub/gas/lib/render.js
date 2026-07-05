@@ -1,0 +1,106 @@
+// Pure HTML builders for the serving layer. Everything here is verified POC
+// behavior: base+anchor handling (poc1), the MD shell (poc3), widget injection
+// (same pattern as upstream lib/inject.js, adapted for GAS transport).
+var DH_RENDER = (function () {
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  // <base target="_top"> is required or in-doc navigation silently fails in the
+  // HtmlService iframe - but bare #anchors must NOT inherit it (they would
+  // navigate the top window into the raw googleusercontent sandbox URL, losing
+  // the page). Both verified in poc1.
+  function injectBase(html) {
+    var base = '<base target="_top">';
+    html = /<head[^>]*>/i.test(html)
+      ? html.replace(/<head[^>]*>/i, function (m) { return m + base; })
+      : base + html;
+    return html.replace(/<a\s([^>]*href=["']#)/gi, '<a target="_self" $1');
+  }
+  function widgetTags(docPath, execUrl) {
+    var cfg = { endpoint: '', sessionId: 'designhub', mode: 'proxy',
+      ns: 'dh:' + docPath, docPath: docPath };
+    // mode:'proxy' makes the upstream widget's scheduleApply() a no-op (no DOM
+    // morphing - re-fetching the exec URL from inside the sandbox is meaningless).
+    return '<scr' + 'ipt>window.__CCFB=' + JSON.stringify(cfg) + ';</scr' + 'ipt>' +
+      '<scr' + 'ipt src="' + esc(execUrl) + '?asset=widget"></scr' + 'ipt>' +
+      // identity chip: shows the Google identity the bridge will stamp (D13/D17)
+      '<scr' + 'ipt>(function(){var n=0,t=setInterval(function(){' +
+      'var h=document.querySelector("#fb-panel .fb-head");' +
+      'if((!h||!window.google)&&++n<40)return;clearInterval(t);if(!h||!window.google)return;' +
+      'google.script.run.withSuccessHandler(function(r){var d=document.createElement("div");' +
+      'd.id="dh-identity";d.style.cssText="font:11px monospace;color:#5b6072;padding:2px 0";' +
+      'd.textContent="signed in as "+(r.server||"unknown");h.appendChild(d);}).getIdentity();' +
+      '},500);})();</scr' + 'ipt>';
+  }
+  function serveHtml(html, docPath, execUrl) {
+    html = injectBase(html);
+    var tags = widgetTags(docPath, execUrl);
+    return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, tags + '</body>') : html + tags;
+  }
+  // MD shell (poc3): marked inline (39 KB, proven safe), mermaid via asset URL
+  // (3.5 MB - inlining it gets truncated by HtmlService). Progressive: text
+  // renders in ~50 ms, diagrams pop in when the mermaid asset lands.
+  function mdShell(md, markedJs, mermaidSrc, title) {
+    var mdJson = JSON.stringify(md).replace(/<\/script/gi, '<\\/script');
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top">' +
+      '<title>' + esc(title) + '</title>' +
+      '<style>body{max-width:920px;margin:2rem auto;padding:0 1rem 4rem;' +
+      'font:16px/1.6 -apple-system,Segoe UI,sans-serif;color:#1a1a1a}' +
+      'table{border-collapse:collapse;font-size:14px}td,th{border:1px solid #ccc;' +
+      'padding:4px 8px;vertical-align:top;text-align:left}' +
+      'pre{background:#f6f6f6;padding:10px;overflow:auto}code{background:#f2f2f2;padding:1px 4px}' +
+      'pre.mermaid{background:none;text-align:center}</style></head><body>' +
+      '<div id="md-root">rendering markdown…</div>' +
+      '<scr' + 'ipt>' + markedJs + '</scr' + 'ipt>' +
+      '<scr' + 'ipt>var MD_SOURCE=' + mdJson + ';\n' +
+      'var root=document.getElementById("md-root");\n' +
+      'root.innerHTML=marked.parse(MD_SOURCE);\n' +
+      // poc1 MANDATORY rewrite, MD flavor: marked renders <a href="#..."> at
+      // runtime, after injectBase-style source rewrites could ever see them -
+      // without target="_self" a TOC click navigates the TOP window into the
+      // raw googleusercontent sandbox URL (page + widget lost). marked emits no
+      // heading ids in v1 (poc3), so these clicks are safe no-ops until
+      // marked-gfm-heading-id lands (backlog).
+      'document.querySelectorAll("a").forEach(function(a){var h=a.getAttribute("href");if(h&&h.charAt(0)==="#")a.target="_self";});\n' +
+      'document.querySelectorAll("pre code.language-mermaid").forEach(function(c){\n' +
+      '  var d=document.createElement("pre");d.className="mermaid";d.textContent=c.textContent;\n' +
+      '  c.parentElement.replaceWith(d);});\n' +
+      'if(document.querySelector("pre.mermaid")){\n' +
+      '  var m=document.createElement("script");m.src=' + JSON.stringify(mermaidSrc) + ';\n' +
+      '  m.onload=function(){mermaid.initialize({startOnLoad:false,securityLevel:"strict"});mermaid.run();};\n' +
+      '  document.body.appendChild(m);\n' +
+      '}\n' +
+      '</scr' + 'ipt></body></html>';
+  }
+  function treeHtml(rows, execUrl) {
+    var active = rows.filter(function (r) { return r.status === 'active'; });
+    var body;
+    if (!active.length) {
+      body = '<p>No docs published yet. Publish one with <code>/publish-design</code>.</p>';
+    } else {
+      var byRepo = {};
+      active.forEach(function (r) {
+        byRepo[r.repo] = byRepo[r.repo] || {};
+        (byRepo[r.repo][r.feature] = byRepo[r.repo][r.feature] || []).push(r);
+      });
+      body = Object.keys(byRepo).sort().map(function (repo) {
+        return '<h2>' + esc(repo) + '</h2>' + Object.keys(byRepo[repo]).sort().map(function (feat) {
+          return '<h3>' + esc(feat) + '</h3><ul>' + byRepo[repo][feat].map(function (r) {
+            return '<li><a href="' + esc(r.url) + '">' + esc(r.title) + '</a>' +
+              (r.updatedAt ? ' <small>' + esc(String(r.updatedAt).slice(0, 10)) + '</small>' : '') + '</li>';
+          }).join('') + '</ul>';
+        }).join('');
+      }).join('');
+    }
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top">' +
+      '<title>DesignHub</title><style>body{max-width:760px;margin:3rem auto;' +
+      'font:16px/1.6 -apple-system,Segoe UI,sans-serif;color:#1a1a1a}' +
+      'h2{border-bottom:1px solid #ddd;padding-bottom:4px}small{color:#888}</style>' +
+      '</head><body><h1>DesignHub</h1>' + body + '</body></html>';
+  }
+  return { esc: esc, injectBase: injectBase, widgetTags: widgetTags,
+    serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml };
+})();
+if (typeof module !== 'undefined') module.exports = DH_RENDER;

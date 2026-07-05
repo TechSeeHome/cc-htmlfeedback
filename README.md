@@ -1,7 +1,7 @@
 # cc-htmlfeedback
 
 <p align="center">
-  <img src="docs/media/cc-htmlfeedback-demo.webp" alt="cc-htmlfeedback demo: highlight text on the page to leave a comment, then Claude Code turns each note into a ticket and fixes it live" width="800">
+  <img src="docs/media/cc-htmlfeedback-demo.webp" alt="cc-htmlfeedback demo: highlight text on the page to leave a comment, saved as a draft; clicking Fix turns it into a ticket Claude Code applies and verifies live" width="800">
 </p>
 
 A zero-dependency, in-page feedback tool. **Highlight text on the page to leave a comment** - that's how every note is made - then either copy the structured feedback or let Claude Code fix it live.
@@ -9,7 +9,7 @@ A zero-dependency, in-page feedback tool. **Highlight text on the page to leave 
 ## Two modes
 
 1. **Simple (start here).** Chrome extension only. Highlight text, write notes, **copy** the structured feedback and paste it wherever you want. No server, no setup beyond loading the extension.
-2. **Advanced (live fixes).** A Claude Code plugin serves your HTML page and turns each comment into a ticket Claude applies and verifies on the fly - the page updates in place, no reload.
+2. **Advanced (live fixes).** A Claude Code plugin serves your HTML page; comments start as local drafts, and clicking **Fix** (or **Fix all**) turns them into a ticket Claude applies and verifies on the fly - the page updates in place, no reload.
 
 Get the simple mode working first, then add the plugin when you want live fixes.
 
@@ -18,7 +18,7 @@ Get the simple mode working first, then add the plugin when you want live fixes.
 - **Highlight to comment.** Select text -> popover. `Enter` = comment, `Backspace` on an empty box = strikethrough. Select blank space to mark "something's missing here".
 - **Structured side panel.** Every note captures its section heading, the quoted text, surrounding context, and your note. Dock it left/right; undo/redo with `cmd/ctrl+Z`.
 - **One-click export.** Copy clean, structured feedback (with the page URL) to paste anywhere.
-- **Live fixes with Claude Code.** Connect to a Claude Code session and your comments become a work queue: comment -> Claude edits the source -> the page updates in place, no reload.
+- **Live fixes with Claude Code.** Connect to a Claude Code session: comments save as drafts, and clicking **Fix** (or **Fix all**) sends them to the work queue - Claude edits the source and the page updates in place, no reload.
 
 ## Simple mode: Chrome extension
 
@@ -54,7 +54,7 @@ Then, in your project's Claude Code session:
 /cc-htmlfeedback stop                     # stop the loop + server
 ```
 
-Highlight anything, write what you want changed, submit - then watch the ticket go `todo -> in-progress -> done` as Claude fixes it and verifies in a separate tab. Open several pages at once and they're fixed concurrently. Git is your undo.
+Highlight anything, write what you want changed - it's saved as a draft, not sent. When you're ready, click **Fix** on a card (or **Fix all**) and watch the ticket go `todo -> in-progress -> done` as Claude fixes it and verifies in a separate tab. Open several pages at once and they're fixed concurrently. Git is your undo.
 
 ## Build
 

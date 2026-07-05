@@ -1,7 +1,7 @@
 # Design: deferred fix submission (drafts + explicit "Fix")
 
 - **Date:** 2026-07-02
-- **Status:** proposed - awaiting review
+- **Status:** implemented
 - **Scope:** `feedback-widget.html` (widget only; no server / queue / skill protocol changes)
 - **Companion:** [2026-07-02-deferred-fix-submission.html](./2026-07-02-deferred-fix-submission.html) - visual mockups of the new panel/popover states (`To do`, `Error`, and disconnected mode are unchanged from today and not re-mocked here).
 

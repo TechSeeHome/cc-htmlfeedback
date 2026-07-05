@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "cc-htmlfeedback",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Highlight text on any page to leave comments and strikethrough suggestions, then copy structured feedback (with the page URL) to share.",
   "permissions": ["activeTab", "scripting"],
   "background": { "service_worker": "background.js" },

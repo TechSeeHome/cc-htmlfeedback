@@ -339,7 +339,7 @@
 
     <div class="readout">
       <div>
-        <div class="t"><span class="stepno" id="stepno">STEP 1/9</span><span id="steptitle"></span></div>
+        <div class="t"><span class="stepno" id="stepno">STEP 1/10</span><span id="steptitle"></span></div>
         <div class="d" id="stepdesc"></div>
       </div>
       <div class="ctl">
@@ -461,9 +461,12 @@
     { from:0, to:1, tag:'GET /page.html', c:C.user,
       title:'You open the page',
       desc:'The server reads your HTML from disk and injects one &lt;script&gt; tag - the widget. Nothing about your file changes on disk.' },
-    { from:0, to:1, tag:'POST /__ccfb/tickets', c:C.user,
+    { from:0, to:0, tag:'save draft (local only)', c:C.user,
       title:'You highlight text and comment',
-      desc:'Select text → popover → 💬 Comment or ⌫ Strike. The widget bundles a ticket: your note plus quote (exact selection), context (surrounding block), section (nearest heading), page URL.' },
+      desc:'Select text → popover → 💬 Comment or ⌫ Strike → Enter. The note is saved as a local draft - quote (exact selection), context (surrounding block), section (nearest heading), and page URL are captured, but nothing is sent to the server yet.' },
+    { from:0, to:1, tag:'POST /__ccfb/tickets', c:C.user,
+      title:'You click Fix (or Fix all)',
+      desc:'Clicking Fix on a draft - or Fix all to send every pending draft, one after another - is what actually POSTs it. Only now does the draft become a ticket. (Cmd/Ctrl+Enter, +Backspace, or +click on Comment/Strike skips the draft stage for a quick single fix.)' },
     { from:1, to:2, tag:'append 1 line · inbox.jsonl', c:C.srv,
       title:'The server persists it',
       desc:'One JSON line appended to that page’s feedback_inbox.jsonl. The server’s only write - the inbox is append-only, forever.' },

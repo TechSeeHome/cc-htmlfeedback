@@ -8,7 +8,9 @@
  * a silently wrong widget. Fix by updating the anchors after reviewing the change.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const root = path.join(__dirname, '..');
 const OUT = path.join(__dirname, 'gas', 'widget.html');
 
@@ -17,23 +19,32 @@ function fail(msg) { console.error('build-designhub.js: ' + msg); process.exit(1
 function replaceOnce(body, anchor, replacement, label) {
   const i = body.indexOf(anchor);
   if (i === -1) throw new Error('anchor not found (' + label + '): upstream feedback-widget.html changed - review and update build-designhub.js');
-  if (body.indexOf(anchor, i + 1) !== -1) throw new Error('anchor not unique (' + label + ')');
+  if (body.indexOf(anchor, i + 1) !== -1) throw new Error('anchor not unique (' + label + '): the exact text "' + anchor + '" occurs more than once - upstream duplicated or restructured this code; narrow the anchor and update build-designhub.js');
   return body.slice(0, i) + replacement + body.slice(i + anchor.length);
 }
 
 function transform(src) {
   // -- extraction: same structural contract as upstream build.js --
+  // Structural invariants the positional extraction below silently relies on: grab() takes
+  // the FIRST <style>/<script> block non-greedily, so a second one added upstream would be
+  // silently dropped rather than erroring. Assert the count up front instead (mirrors build.js).
+  const countOf = re => (src.match(re) || []).length;
+  if (countOf(/<style>/g) !== 1) throw new Error('expected exactly one <style> block in feedback-widget.html, found ' + countOf(/<style>/g) + ' - upstream added/removed a block; review the new structure before updating the extraction regexes');
+  if (countOf(/<script>/g) !== 1) throw new Error('expected exactly one <script> block in feedback-widget.html, found ' + countOf(/<script>/g) + ' - upstream added/removed a block; review the new structure before updating the extraction regexes');
   const grab = (re, label) => {
     const m = src.match(re);
-    if (!m) throw new Error('could not find ' + label);
+    if (!m) throw new Error('could not find ' + label + ' in feedback-widget.html (expected ' + re + '): upstream structure changed - review and update build-designhub.js');
     return m[1];
   };
   const css = grab(/<style>([\s\S]*?)<\/style>/, '<style> block').trim();
-  const markup = grab(/<\/style>([\s\S]*?)<script>/, 'markup').trim().replace(/^<!--[\s\S]*?-->\s*/, '');
+  const markup = grab(/<\/style>([\s\S]*?)<script>/, 'markup between </style> and <script>').trim().replace(/^<!--[\s\S]*?-->\s*/, '');
   const scriptFull = grab(/<script>([\s\S]*?)<\/script>/, '<script> block').trim();
   const iife = scriptFull.match(/^\(function\(\)\{([\s\S]*)\}\)\(\);?$/);
-  if (!iife) throw new Error('source <script> must be a single bare IIFE');
+  if (!iife) throw new Error('source <script> must be a single bare IIFE: (function(){ ... })() - wrapper not found, upstream changed');
   let body = iife[1];
+  if (css.length < 100 || markup.length < 100 || body.length < 100) {
+    throw new Error('extraction produced suspiciously small output (css ' + css.length + ', markup ' + markup.length + ', body ' + body.length + ') - check the source structure');
+  }
 
   // -- R1: submit goes through the bridge; shim keeps the fetch-Response shape
   //    submitDraft() relies on: r.ok, r.json() -> {id} --
@@ -81,7 +92,7 @@ function transform(src) {
   if (/\/__ccfb\//.test(codeOnly)) throw new Error('a /__ccfb/ endpoint survived the transform');
 
   const esc = s => s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
-  return `/*! widget-designhub.js - the cc-htmlfeedback widget with google.script.run transport.
+  const out = `/*! widget-designhub.js - the cc-htmlfeedback widget with google.script.run transport.
  * GENERATED from upstream feedback-widget.html by designhub/build-designhub.js - NEVER EDIT.
  * Served by the DesignHub web app as ?asset=widget (never inlined - HtmlService
  * truncates giant inline scripts, see docs/designhub/pocs/poc3). */
@@ -100,6 +111,26 @@ ${body}
   else document.addEventListener('DOMContentLoaded', fbInit);
 })();
 `;
+
+  // Final backstop: the regex-based extraction/replacement above can - in principle - produce
+  // a truncated or malformed body (e.g. a non-greedy anchor regex stopping at an unrelated brace
+  // introduced by an upstream reformat) without any single check above catching it. Parsing the
+  // FULL generated output catches that class of bug regardless of which step caused it.
+  // Uses `node --check` on a temp file (parse-only, no execution) rather than new Function()/eval,
+  // which would construct a live, invocable function from generated text - unnecessary here and an
+  // avoidable code-smell even though nothing untrusted flows through this build-time-only script.
+  const syntaxCheckFile = path.join(os.tmpdir(), 'ccfb-designhub-widget-' + process.pid + '-' + Date.now() + '.js');
+  try {
+    fs.writeFileSync(syntaxCheckFile, out);
+    execFileSync(process.execPath, ['--check', syntaxCheckFile], { stdio: 'pipe' });
+  } catch (e) {
+    const detail = (e.stderr ? e.stderr.toString() : e.message).trim();
+    throw new Error('generated widget.html is not valid JavaScript:\n' + detail + '\nThe transform likely produced a truncated/malformed body - re-check the R1-R5 anchors and the subscribeSSE regex against the current upstream structure');
+  } finally {
+    try { fs.unlinkSync(syntaxCheckFile); } catch { /* best-effort cleanup */ }
+  }
+
+  return out;
 }
 
 function main() {

@@ -28,3 +28,36 @@ test('transform fails loudly when an anchor string is missing (upstream drift)',
   assert.throws(() => transform(src.replace('function ccfbPost', 'function ccfbPostX')),
     /ccfbPost/);
 });
+
+test('transform fails loudly when a second anchor string is missing (loadTickets renamed)', () => {
+  assert.throws(() => transform(src.replace('function loadTickets', 'function loadTicketsX')),
+    /loadTickets/);
+});
+
+test('transform fails loudly when subscribeSSE cannot be located (renamed/restructured upstream)', () => {
+  assert.throws(() => transform(src.replace('function subscribeSSE(){', 'function subscribeSSEX(){')),
+    /subscribeSSE/);
+});
+
+test('transform fails loudly on a second <style> block (would otherwise be silently dropped)', () => {
+  const injected = src.replace('</script>', '</script>\n<style>.extra{color:red}</style>');
+  assert.throws(() => transform(injected), /exactly one <style> block/);
+});
+
+test('transform fails loudly on a second <script> block (would otherwise be silently dropped, even one carrying a new /__ccfb/ endpoint)', () => {
+  const injected = src.replace('</script>', '</script>\n<script>fetch("/__ccfb/newthing");</script>');
+  assert.throws(() => transform(injected), /exactly one <script> block/);
+});
+
+test('transform fails loudly when the output would be malformed JS (syntax backstop catches what no single anchor check does)', () => {
+  // Plausible upstream reformat: a nested object literal inside subscribeSSE whose closing brace
+  // lands at the same indentation the non-greedy subscribeSSE regex stops at. The match still
+  // contains "EventSource" (so that guard passes) but truncates before the function's real end,
+  // leaving the original tail (the reload listener, the catch, the real closing brace) dangling as
+  // orphaned statements - invalid JS that no earlier check in transform() catches on its own.
+  const injected = src.replace(
+    "es.addEventListener('tickets', e => { try { reconcile(JSON.parse(e.data).tickets || []); } catch{} });",
+    "es.addEventListener('tickets', e => { try { reconcile(JSON.parse(e.data).tickets || []); } catch{} });\n      var X = {\n    a: 1\n  };"
+  );
+  assert.throws(() => transform(injected), /not valid JavaScript/);
+});

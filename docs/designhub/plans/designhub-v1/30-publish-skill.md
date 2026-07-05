@@ -404,6 +404,29 @@ async function refresh(refreshToken) {
   return (await r.json()).access_token;
 }
 
+// Local OAuth callback listener. Bound to 127.0.0.1 ONLY: plain `.listen(port)`
+// defaults to ALL interfaces (0.0.0.0/::), needlessly exposing an
+// unauthenticated endpoint - reachable from the whole LAN while it's up - that
+// acts on the first `code`/`error` param any requester sends it. Also settles
+// (and closes) on an `error` param, not just `code`: an OAuth denial redirects
+// with `error=access_denied` and no `code`, and an earlier version neither
+// resolved nor rejected on that path, hanging the CLI forever with the port
+// still open. Exported for direct testing; not part of gauth.mjs's consumed
+// surface (publish.mjs only imports accessToken/api).
+export function waitForCode(port, redirect, onListen) {
+  return new Promise((resolve, reject) => {
+    const srv = http.createServer((req, res) => {
+      const q = new URL(req.url, redirect).searchParams;
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<h2>Done - return to the terminal.</h2>');
+      if (q.get('code')) { srv.close(); resolve(q.get('code')); }
+      else if (q.get('error')) { srv.close(); reject(new Error('OAuth consent denied: ' + q.get('error'))); }
+    });
+    srv.on('error', reject);
+    srv.listen(port, '127.0.0.1', () => onListen?.(srv));
+  });
+}
+
 async function consent() {
   const { id, secret } = clientCreds();
   // dev-machine assumptions: fixed local port + macOS `open`; on other OSes
@@ -415,16 +438,7 @@ async function consent() {
     scope: SCOPE, access_type: 'offline', prompt: 'consent select_account' });
   console.log('\nAuthorize DesignHub publishing - open this URL and approve:\n\n' + url + '\n');
   try { spawn('open', [url], { stdio: 'ignore' }); } catch { /* print-only fallback */ }
-  const code = await new Promise((resolve, reject) => {
-    const srv = http.createServer((req, res) => {
-      const q = new URL(req.url, redirect).searchParams;
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end('<h2>Done - return to the terminal.</h2>');
-      if (q.get('code')) { srv.close(); resolve(q.get('code')); }
-    });
-    srv.on('error', reject);
-    srv.listen(port);
-  });
+  const code = await waitForCode(port, redirect);
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: id, client_secret: secret, code,

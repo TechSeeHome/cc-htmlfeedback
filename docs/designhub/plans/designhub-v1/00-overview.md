@@ -61,7 +61,7 @@ designhub/
       rollup.js                 buildRollup/upsertRow (port of poc5)             (Task 4)
       render.js                 injectBase/anchor rewrite/md shell/tree html     (Task 5)
   test/
-    schema.test.js  paths.test.js  rollup.test.js  render.test.js  transform.test.js  anchors.test.js  publish.test.js
+    schema.test.js  paths.test.js  rollup.test.js  render.test.js  transform.test.js  anchors.test.js  publish.test.js  gauth.test.js
   e2e/                           NOT under test/ - node's test runner would try to execute it
     serve-and-comment.mjs       dev-browser E2E (Task 13)
   README.md                     (Task 14)

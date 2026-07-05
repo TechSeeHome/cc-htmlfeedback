@@ -259,6 +259,19 @@ test('parseDocPath splits and rejects traversal', () => {
   assert.throws(() => P.parseDocPath(''), /invalid/);
 });
 
+test('parseDocPath rejects empty segments instead of silently collapsing them (D14 fail-loud)', () => {
+  assert.throws(() => P.parseDocPath('/repo/feat/x.html'), /invalid/);   // leading slash
+  assert.throws(() => P.parseDocPath('repo/feat/x.html/'), /invalid/);   // trailing slash
+  assert.throws(() => P.parseDocPath('repo//feat/x.html'), /invalid/);   // doubled slash (e.g. an empty feature)
+});
+
+test('docPath and parseDocPath round-trip', () => {
+  const built = P.docPath('cc-htmlfeedback', 'design/designhub-platform', 'docs/designhub/design.html');
+  const parsed = P.parseDocPath(built);
+  assert.deepEqual(parsed, { repo: 'cc-htmlfeedback', featureDir: 'design--designhub-platform',
+    segments: ['docs', 'designhub', 'design.html'], fileName: 'design.html' });
+});
+
 test('companionName is the FULL file name + .comments (design section 5)', () => {
   assert.equal(P.companionName('design.html'), 'design.html.comments');
   assert.equal(P.companionName('design.md'), 'design.md.comments');
@@ -280,8 +293,14 @@ var DH_PATHS = (function () {
   function docPath(repo, feature, pathInRepo) {
     return [repo, featureDir(feature)].concat(String(pathInRepo).split('/')).join('/');
   }
+  // Assumes the caller (GAS doGet's query-param decoding) has already
+  // URL-decoded `path` exactly once - it does no decoding of its own.
   function parseDocPath(path) {
-    var segs = String(path || '').split('/').filter(function (s) { return s.length; });
+    var segs = String(path || '').split('/');
+    // Fail loudly (D14) rather than silently collapsing: a leading/trailing/
+    // doubled slash means a malformed address (e.g. an empty feature), not a
+    // path to quietly renormalize.
+    if (segs.some(function (s) { return s.length === 0; })) throw new Error('invalid doc path: ' + path);
     if (segs.length < 3) throw new Error('invalid doc path: ' + path);
     for (var i = 0; i < segs.length; i++) {
       if (segs[i] === '.' || segs[i] === '..') throw new Error('invalid doc path: ' + path);

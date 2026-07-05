@@ -26,6 +26,19 @@ test('parseDocPath splits and rejects traversal', () => {
   assert.throws(() => P.parseDocPath(''), /invalid/);
 });
 
+test('parseDocPath rejects empty segments instead of silently collapsing them (D14 fail-loud)', () => {
+  assert.throws(() => P.parseDocPath('/repo/feat/x.html'), /invalid/);   // leading slash
+  assert.throws(() => P.parseDocPath('repo/feat/x.html/'), /invalid/);   // trailing slash
+  assert.throws(() => P.parseDocPath('repo//feat/x.html'), /invalid/);   // doubled slash (e.g. an empty feature)
+});
+
+test('docPath and parseDocPath round-trip', () => {
+  const built = P.docPath('cc-htmlfeedback', 'design/designhub-platform', 'docs/designhub/design.html');
+  const parsed = P.parseDocPath(built);
+  assert.deepEqual(parsed, { repo: 'cc-htmlfeedback', featureDir: 'design--designhub-platform',
+    segments: ['docs', 'designhub', 'design.html'], fileName: 'design.html' });
+});
+
 test('companionName is the FULL file name + .comments (design section 5)', () => {
   assert.equal(P.companionName('design.html'), 'design.html.comments');
   assert.equal(P.companionName('design.md'), 'design.md.comments');

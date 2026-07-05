@@ -8,8 +8,14 @@ var DH_PATHS = (function () {
   function docPath(repo, feature, pathInRepo) {
     return [repo, featureDir(feature)].concat(String(pathInRepo).split('/')).join('/');
   }
+  // Assumes the caller (GAS doGet's query-param decoding) has already
+  // URL-decoded `path` exactly once - it does no decoding of its own.
   function parseDocPath(path) {
-    var segs = String(path || '').split('/').filter(function (s) { return s.length; });
+    var segs = String(path || '').split('/');
+    // Fail loudly (D14) rather than silently collapsing: a leading/trailing/
+    // doubled slash means a malformed address (e.g. an empty feature), not a
+    // path to quietly renormalize.
+    if (segs.some(function (s) { return s.length === 0; })) throw new Error('invalid doc path: ' + path);
     if (segs.length < 3) throw new Error('invalid doc path: ' + path);
     for (var i = 0; i < segs.length; i++) {
       if (segs[i] === '.' || segs[i] === '..') throw new Error('invalid doc path: ' + path);

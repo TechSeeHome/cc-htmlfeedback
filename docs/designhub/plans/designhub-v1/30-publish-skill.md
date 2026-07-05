@@ -576,7 +576,12 @@ const repoF = await ensure(CONFIG.rootFolderId, REPO, FOLDER_MIME);
 const featF = await ensure(repoF, FEATURE_DIR, FOLDER_MIME);
 const indexId = await ensure(featF, '_index', SHEET_MIME);
 let indexRows = await valsOrNull(indexId, 'index!A2:N');
-if (indexRows === null) {   // brand-new sheet: name the tab + header
+// !indexRows.length (not just === null): a crash between the tab-rename and
+// the header write below would leave a real, non-null empty result on retry
+// (the range genuinely has zero rows) - re-running this idempotent setup is
+// the only way to heal that, and redoing it on an already-correct header is
+// a harmless no-op.
+if (indexRows === null || !indexRows.length) {   // brand-new (or partially-initialized) sheet: name the tab + header
   const meta = await api(at, `${SHEETS}/${indexId}?fields=sheets(properties(sheetId))`);
   await api(at, `${SHEETS}/${indexId}:batchUpdate`, { method: 'POST',
     headers: { 'Content-Type': 'application/json' },

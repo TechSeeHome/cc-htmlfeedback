@@ -80,6 +80,14 @@ moves).
   retry/duplicate risk, it's silent deletion of already-sent work with no error surfaced.
 
 ### Open — LOW
+- **Restored submitted-pending drafts re-anchor before board status is known**
+  (`feedback-widget.html` `restoreDrafts()`). It reanchors any restored entry with a matching
+  page+quote immediately, including sid-bearing ones that may have already reached `done`
+  server-side by the time of reload. Static mode self-heals (the next `done` morph unwraps
+  everything); proxy mode's `scheduleApply()` is a no-op, so a stale highlight can linger on an
+  already-fixed line until the next full navigation. Fix needs deferring reanchor for sid-bearing
+  restored entries until the first `reconcile()` confirms non-done status - skipped for now since
+  it's cosmetic-only and proxy-mode-only.
 - `server.js` `decodeURIComponent` can throw on a malformed `%` → wrap and 400.
 - `watchSource` reload-ignore uses path-fragment matching; compare resolved absolute paths instead.
 - Root layout: `playground_file.html` reads like scratch — rename to `demo.html`/`examples/demo.html`

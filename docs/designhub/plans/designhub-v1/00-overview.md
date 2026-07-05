@@ -133,6 +133,18 @@ extract-protect-reinsert change. Revisit if a real doc trips it (a literal `|` o
 line starting with `#`/`-`/`>` inside a fenced block, immediately followed by a
 comment whose quote/context spans that line).
 
+**Known accepted risk (execution-time code review, Task 10):** `publish.mjs`'s
+self-contained-doc asset scan (`scanAssets`) only runs for HTML docs
+(`if (!IS_MD)`); a Markdown doc with a relative `![img](./pic.png)` gets no
+warning even though the rendered page (Task 5's `mdShell`) would break exactly
+the same way HTML's scan exists to catch. This gate was already present verbatim
+in the original plan draft (not introduced by execution). Not a quick fix:
+`scanAssets`'s regex matches literal HTML tags, so pointing it at raw Markdown
+source wouldn't detect Markdown-syntax image/link references - closing this
+properly needs markdown-link-syntax detection, out of scope for what Task 10
+was asked to build. Left as a backlog item for whoever extends publishing
+beyond single-file HTML docs.
+
 ---
 
 

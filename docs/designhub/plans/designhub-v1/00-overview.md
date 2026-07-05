@@ -98,6 +98,28 @@ gives tickets/index doesn't extend to meta rows. Deferred rather than retrofitte
 mid-plan (would touch two already-reviewed tasks); if `META_COLS` ever changes, grep
 for its hand-rolled array literals in Tasks 6 and 10 and update them by hand.
 
+**Two items for whoever executes Task 6 and Task 10 (execution-time code review,
+Task 4):**
+1. `rollup.js`'s `buildRollup` breaks an exact `updatedAt` tie by first-row-wins,
+   which is deterministic for a given `shards` array but NOT run-to-run stable if the
+   caller assembles `shards` in a non-fixed order. Task 6's `dhReconcile` walks Drive
+   folders via `getFolders()`/`getFilesByName()`, whose iteration order Drive does not
+   guarantee - so when implementing Task 6, consider sorting the shard list into a
+   stable order (e.g. by folder path) before calling `buildRollup`, if reconciler
+   output flapping between runs on a same-timestamp tie would matter in practice.
+2. `rollup.js` exports `upsertRow` (insert-or-update-in-place over an in-memory rows
+   array, tested in Task 4), but Task 10's drafted `publish.mjs` direct-upsert step
+   reimplements the same find-or-append decision inline against live Sheets REST
+   calls rather than calling it - and CANNOT simply call it, since the installed
+   `plugins/designhub/` skill must stay self-contained and can't import
+   `designhub/gas/lib/rollup.js` at runtime (the same constraint that's why Task 10's
+   `publish-lib.mjs` mirrors `featureDir` instead of importing `paths.js`). When
+   implementing Task 10, decide deliberately: leave the inline REST-shaped logic as
+   is (it's functionally equivalent today), or extract a small local pure helper in
+   `publish-lib.mjs` mirroring `upsertRow`'s decision shape for symmetry/testability -
+   don't leave `upsertRow` as tested-but-unused GAS-side code without a conscious
+   choice either way.
+
 ---
 
 

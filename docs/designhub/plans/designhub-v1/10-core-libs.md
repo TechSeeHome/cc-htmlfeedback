@@ -385,6 +385,26 @@ test('buildRollup skips ghost rows (empty driveFileId)', () => {
   assert.equal(out[0][DFI], 'F1');
 });
 
+test('buildRollup skips multiple ghost rows in the same shard', () => {
+  const out = buildRollup([[row({ driveFileId: '' }), row({ driveFileId: '' }), row({ driveFileId: 'F1' })]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][DFI], 'F1');
+});
+
+test('buildRollup treats a fully empty shard as a no-op alongside a real one', () => {
+  const out = buildRollup([[], [row({ driveFileId: 'F1' })]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][DFI], 'F1');
+});
+
+test('buildRollup on an exact updatedAt tie: the first row seen for the key wins (documented, not arbitrary)', () => {
+  const first = row({ driveFileId: 'F1', title: 'first', updatedAt: '2026-01-01T00:00:00.000Z' });
+  const second = row({ driveFileId: 'F1', title: 'second', updatedAt: '2026-01-01T00:00:00.000Z' });
+  const out = buildRollup([[first], [second]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][TITLE], 'first');
+});
+
 test('buildRollup sorts by repo, then feature, then title', () => {
   const out = buildRollup([[
     row({ driveFileId: 'F1', repo: 'b', feature: 'x', title: 'z' }),
@@ -421,6 +441,9 @@ var DH_ROLLUP = (function () {
       : require('./schema.js').INDEX_COLS;
   }
 
+  // Unlike buildRollup, this does not special-case an empty/falsy key - a
+  // real caller always supplies an actual Drive file id, so two rows both
+  // keyed '' colliding is not a case worth guarding against here.
   function upsertRow(rows, row) {
     var KEY = cols_().indexOf('driveFileId');
     for (var i = 0; i < rows.length; i++) {
@@ -445,6 +468,12 @@ var DH_ROLLUP = (function () {
         var k = r[KEY];
         if (!k) return;
         var prev = byKey[k];
+        // Strict > : on an exact updatedAt tie, the FIRST row seen for this
+        // key wins, not the last. Deterministic for a given `shards` array,
+        // but callers that need run-to-run stability (e.g. a reconciler
+        // walking Drive folders, whose listing order isn't guaranteed) must
+        // pass shards in a stable order themselves - this function has no
+        // way to impose one.
         if (!prev || String(r[UPDATED] || '') > String(prev[UPDATED] || '')) byKey[k] = r;
       });
     });
@@ -459,7 +488,7 @@ var DH_ROLLUP = (function () {
 if (typeof module !== 'undefined') module.exports = DH_ROLLUP;
 ```
 
-- [ ] **Step 4: Run, expect 8 PASS:** `node --test designhub/test/rollup.test.js`
+- [ ] **Step 4: Run, expect 11 PASS:** `node --test designhub/test/rollup.test.js`
 
 - [ ] **Step 5: Commit:** `git add designhub/ && git commit -m "designhub: port poc5 rollup logic to dual-use module (D19)"`
 

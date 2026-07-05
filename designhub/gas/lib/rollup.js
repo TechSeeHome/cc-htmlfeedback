@@ -11,6 +11,9 @@ var DH_ROLLUP = (function () {
       : require('./schema.js').INDEX_COLS;
   }
 
+  // Unlike buildRollup, this does not special-case an empty/falsy key - a
+  // real caller always supplies an actual Drive file id, so two rows both
+  // keyed '' colliding is not a case worth guarding against here.
   function upsertRow(rows, row) {
     var KEY = cols_().indexOf('driveFileId');
     for (var i = 0; i < rows.length; i++) {
@@ -35,6 +38,12 @@ var DH_ROLLUP = (function () {
         var k = r[KEY];
         if (!k) return;
         var prev = byKey[k];
+        // Strict > : on an exact updatedAt tie, the FIRST row seen for this
+        // key wins, not the last. Deterministic for a given `shards` array,
+        // but callers that need run-to-run stability (e.g. a reconciler
+        // walking Drive folders, whose listing order isn't guaranteed) must
+        // pass shards in a stable order themselves - this function has no
+        // way to impose one.
         if (!prev || String(r[UPDATED] || '') > String(prev[UPDATED] || '')) byKey[k] = r;
       });
     });

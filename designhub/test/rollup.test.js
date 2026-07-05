@@ -51,6 +51,26 @@ test('buildRollup skips ghost rows (empty driveFileId)', () => {
   assert.equal(out[0][DFI], 'F1');
 });
 
+test('buildRollup skips multiple ghost rows in the same shard', () => {
+  const out = buildRollup([[row({ driveFileId: '' }), row({ driveFileId: '' }), row({ driveFileId: 'F1' })]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][DFI], 'F1');
+});
+
+test('buildRollup treats a fully empty shard as a no-op alongside a real one', () => {
+  const out = buildRollup([[], [row({ driveFileId: 'F1' })]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][DFI], 'F1');
+});
+
+test('buildRollup on an exact updatedAt tie: the first row seen for the key wins (documented, not arbitrary)', () => {
+  const first = row({ driveFileId: 'F1', title: 'first', updatedAt: '2026-01-01T00:00:00.000Z' });
+  const second = row({ driveFileId: 'F1', title: 'second', updatedAt: '2026-01-01T00:00:00.000Z' });
+  const out = buildRollup([[first], [second]]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0][TITLE], 'first');
+});
+
 test('buildRollup sorts by repo, then feature, then title', () => {
   const out = buildRollup([[
     row({ driveFileId: 'F1', repo: 'b', feature: 'x', title: 'z' }),

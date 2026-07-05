@@ -46,9 +46,10 @@ and fill in your org's values.
 ```text
 designhub/
   build-designhub.js            fail-loud transform: feedback-widget.html -> gas/widget.html (Task 7)
+  config.example.js             DH_CONFIG template (committed - placeholders only; lives
+                                OUTSIDE gas/ so clasp push can never upload it, see Task 1)
   gas/                          clasp project (rootDir), created Task 1, deployed Task 8
     appsscript.json
-    config.example.js           DH_CONFIG template (committed - placeholders only)
     config.js                   real DH_CONFIG - GITIGNORED (org ids stay out of the fork)
     main.js                     doGet router: tree | ?doc= | ?asset=
     drive.js                    DriveApp/SpreadsheetApp adapters (thin, no unit tests)
@@ -93,7 +94,7 @@ Nothing in this plan ever commits a real folder id, script id, deployment id, or
 
 **Files:**
 - Create: `designhub/gas/appsscript.json`
-- Create: `designhub/gas/config.example.js` (+ gitignored working copy `config.js`)
+- Create: `designhub/config.example.js` (+ gitignored working copy `designhub/gas/config.js`)
 - Create: `designhub/test/.gitkeep`
 - Modify: `.gitignore` (fork-local file - already carries fork-only sections; NOT in D16's upstream list)
 
@@ -121,16 +122,21 @@ Nothing in this plan ever commits a real folder id, script id, deployment id, or
 
 (`script.scriptapp` is new vs poc1: the rollup reconciler installs a time trigger, Task 6.)
 
-- [ ] **Step 2: Create `designhub/gas/config.example.js`** (committed TEMPLATE - the real
-`config.js` is gitignored in Step 2b so org-specific ids never land in the public fork,
-same policy as `environment.local.md`):
+- [ ] **Step 2: Create `designhub/config.example.js`** (committed TEMPLATE - the real
+`gas/config.js` is gitignored in Step 2b so org-specific ids never land in the public
+fork, same policy as `environment.local.md`. The template deliberately lives OUTSIDE
+`gas/`: `clasp push` uploads every `.js` under its rootDir, and a second file assigning
+`DH_CONFIG` would load after `config` in GAS's alphabetical order and clobber the real
+values with placeholders):
 
 ```js
-// DesignHub deployment configuration TEMPLATE (committed). Copy to config.js
-// in this directory and fill in the real ids from
-// docs/designhub/plans/environment.local.md. config.js is gitignored: the ids
-// are not secrets (access is enforced by Drive ACLs), but they are org-specific
-// and this fork stays generic. clasp pushes config.js from disk regardless of git.
+// DesignHub deployment configuration TEMPLATE (committed). Copy to
+// designhub/gas/config.js and fill in the real ids from
+// docs/designhub/plans/environment.local.md. gas/config.js is gitignored: the
+// ids are not secrets (access is enforced by Drive ACLs), but they are
+// org-specific and this fork stays generic. clasp pushes gas/config.js from
+// disk regardless of git. Keep this template OUT of gas/ (clasp would push it
+// and its load would overwrite the real DH_CONFIG).
 var DH_CONFIG = {
   rootFolderId: '<DH_ROOT_FOLDER_ID>',                  // DesignHub (prod root)
   assets: {
@@ -147,14 +153,14 @@ Append to `.gitignore`:
 
 ```text
 # DesignHub local deployment values (org-specific - never committed; the committed
-# templates are designhub/gas/config.example.js + plugins/designhub/designhub.config.json,
+# templates are designhub/config.example.js + plugins/designhub/designhub.config.json,
 # real values come from docs/designhub/plans/environment.local.md)
 designhub/gas/config.js
 designhub/gas/.clasp.json
 plugins/designhub/designhub.config.local.json
 ```
 
-Then `cp designhub/gas/config.example.js designhub/gas/config.js` and replace the three
+Then `cp designhub/config.example.js designhub/gas/config.js` and replace the three
 `<DH_*>` placeholders with the real values from `environment.local.md`. With the ignore
 rules in place, every later `git add designhub/` in this plan is safe - git never sees
 the filled file. (Node tests never require `config.js`; only `clasp push` reads it.)
@@ -1815,6 +1821,11 @@ TOOLING = ${CLAUDE_PLUGIN_ROOT}/skills/publish-design/scripts
 
 ## Notes
 
+- One-time machine setup: if publish.mjs exits complaining that
+  `designhub.config.local.json` is missing, copy the plugin's
+  `designhub.config.json` to `designhub.config.local.json` (same directory) and
+  fill the real `rootFolderId`/`execUrl` - the committed file is a placeholder
+  template, the real org values are never committed.
 - Re-publishing the same file updates it in place: same link, Drive revision
   history, catalog row updated - never duplicated.
 - A feature-folder collision error (exit 4) means the sanitized branch name
@@ -2032,10 +2043,11 @@ REST. Spec: `docs/designhub/design.md` (D1-D19). POC evidence:
 - `test/` - `node --test designhub/test/`; `test/e2e/` are manual dev-browser scripts.
 - Publishing: the `designhub` plugin's `/publish-design` skill
   (`plugins/designhub/`).
-- Org-specific config is never committed: copy `gas/config.example.js` to
+- Org-specific config is never committed: copy `config.example.js` to
   `gas/config.js` and `plugins/designhub/designhub.config.json` to
   `designhub.config.local.json`, then fill both from
-  `docs/designhub/plans/environment.local.md` (all three local files gitignored).
+  `docs/designhub/plans/environment.local.md` (all three local files gitignored;
+  the template stays outside `gas/` so clasp never pushes it).
 ```
 
 - [ ] **Step 2: Update the design doc status line** - in `docs/designhub/design.md`, change the `> **Status: draft v0.1 ...**` line to:
@@ -2083,4 +2095,4 @@ gh pr create --repo <DH_FORK_REPO> --base main \
 - [ ] `<DH_AGENT_ACCOUNT>` can reply via REST per `agent-access.md` (poc4 recipe) against a PRODUCTION companion Sheet
 - [ ] Re-publish of an edited doc: same URL, D15 statuses flip where expected
 - [ ] `git log upstream/main..HEAD -- feedback-widget.html build.js server.js lib/ plugins/cc-htmlfeedback/` is EMPTY (D16 honored; add the remote first if missing: `git remote add upstream https://github.com/leetwito/cc-htmlfeedback.git && git fetch upstream`)
-- [ ] Config policy held: the committed `designhub/gas/config.example.js` and `plugins/designhub/designhub.config.json` still contain `<DH_*>` placeholders (never real ids), and `git status --ignored designhub/gas plugins/designhub | grep -E 'config\.js|\.clasp\.json|config\.local\.json'` shows all three local files as ignored
+- [ ] Config policy held: the committed `designhub/config.example.js` and `plugins/designhub/designhub.config.json` still contain `<DH_*>` placeholders (never real ids), and `git status --ignored designhub/gas plugins/designhub | grep -E 'config\.js|\.clasp\.json|config\.local\.json'` shows all three local files as ignored

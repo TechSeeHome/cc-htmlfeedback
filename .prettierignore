@@ -1,0 +1,17 @@
+node_modules
+package-lock.json
+package.json
+feedback-widget.html
+playground_file.html
+extension/
+plugins/
+server.js
+build.js
+lib/
+test/queue.test.js
+test/server.test.js
+test/watch-inbox.test.js
+test/inject.test.js
+docs/
+README.md
+CLAUDE.md

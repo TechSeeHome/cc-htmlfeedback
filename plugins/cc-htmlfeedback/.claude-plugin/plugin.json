@@ -1,6 +1,6 @@
 {
   "name": "cc-htmlfeedback",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Live in-browser feedback loop for local web pages: serve a page with a comment widget injected, then turn the comments you leave into fix-it tickets Claude Code applies and verifies in place.",
   "author": { "name": "leetwito" },
   "homepage": "https://github.com/leetwito/cc-htmlfeedback#readme",

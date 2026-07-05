@@ -14,8 +14,8 @@
     --hl:      #fbe96b;   /* selection highlight yellow      */
     --hl-hot:  #ffd43b;
     --work:    #4d8dff;   /* in-progress blue (pulse)        */
-    --done:    #2fbf83;   /* done green                      */
-    --err:     #e05c4b;   /* strike / error red              */
+    --done:    #1f9d6b;   /* done green                      */
+    --err:     #c0392b;   /* strike / error red              */
     --amber:   #f0a020;   /* connecting                      */
 
     --bg:      #0c1017;
@@ -339,7 +339,7 @@
 
     <div class="readout">
       <div>
-        <div class="t"><span class="stepno" id="stepno">STEP 1/9</span><span id="steptitle"></span></div>
+        <div class="t"><span class="stepno" id="stepno">STEP 1/10</span><span id="steptitle"></span></div>
         <div class="d" id="stepdesc"></div>
       </div>
       <div class="ctl">
@@ -456,14 +456,17 @@
 /* ---------------- the signal path stepper ---------------- */
 (function(){
   // lanes: 0 You+Widget · 1 Server · 2 Queue · 3 Claude
-  const C = { user:'#fbe96b', srv:'#f0a020', disk:'#8b96ad', work:'#4d8dff', done:'#2fbf83' };
+  const C = { user:'#fbe96b', srv:'#f0a020', disk:'#8b96ad', work:'#4d8dff', done:'#1f9d6b' };
   const STEPS = [
     { from:0, to:1, tag:'GET /page.html', c:C.user,
       title:'You open the page',
       desc:'The server reads your HTML from disk and injects one &lt;script&gt; tag - the widget. Nothing about your file changes on disk.' },
-    { from:0, to:1, tag:'POST /__ccfb/tickets', c:C.user,
+    { from:0, to:0, tag:'save draft (local only)', c:C.user,
       title:'You highlight text and comment',
-      desc:'Select text → popover → 💬 Comment or ⌫ Strike. The widget bundles a ticket: your note plus quote (exact selection), context (surrounding block), section (nearest heading), page URL.' },
+      desc:'Select text → popover → 💬 Comment or ⌫ Strike → Enter. The note is saved as a local draft - quote (exact selection), context (surrounding block), section (nearest heading), and page URL are captured, but nothing is sent to the server yet.' },
+    { from:0, to:1, tag:'POST /__ccfb/tickets', c:C.user,
+      title:'You click Fix (or Fix all)',
+      desc:'Clicking Fix on a draft - or Fix all to send every pending draft, one after another - is what actually POSTs it. Only now does the draft become a ticket. (Cmd/Ctrl+Enter, +Backspace, or +click on Comment/Strike skips the draft stage for a quick single fix.)' },
     { from:1, to:2, tag:'append 1 line · inbox.jsonl', c:C.srv,
       title:'The server persists it',
       desc:'One JSON line appended to that page’s feedback_inbox.jsonl. The server’s only write - the inbox is append-only, forever.' },

@@ -33,37 +33,41 @@ sequenceDiagram
     You->>S: open http://127.0.0.1:4317/page.html
     S-->>You: HTML + injected widget
 
-    Note over You,S: Step 2 - You highlight text and comment
+    Note over You,W: Step 2 - You highlight text and comment
     You->>W: select text, type note, click Comment / Strike
+    W->>W: save as a local draft - nothing sent yet
+
+    Note over You,S: Step 3 - You click Fix (or Fix all)
+    You->>W: click Fix on the draft (or Fix all)
     W->>S: POST /__ccfb/tickets {quote, context, section, note, page}
 
-    Note over S,Q: Step 3 - The server persists it
+    Note over S,Q: Step 4 - The server persists it
     S->>Q: append 1 line to feedback_inbox.jsonl
 
-    Note over Q,C: Step 4 - The session wakes, no polling
+    Note over Q,C: Step 5 - The session wakes, no polling
     Q-->>C: file watcher wakes the session
 
-    Note over C,Q: Step 5 - Ticket claimed on the board
+    Note over C,Q: Step 6 - Ticket claimed on the board
     C->>Q: copy ticket into feedback_tasks.json (todo -> in-progress)
 
-    Note over S,You: Step 6 - Your highlight starts pulsing
+    Note over S,You: Step 7 - Your highlight starts pulsing
     S-->>W: SSE push: board changed
     W-->>You: your highlight pulses "in progress"
 
-    Note over C: Step 7 - A fresh subagent fixes it
+    Note over C: Step 8 - A fresh subagent fixes it
     C->>C: subagent finds the quote in source, makes minimal edit
     C->>C: verifies in its OWN browser tab (judge rubric)
 
-    Note over C,Q: Step 8 - Result written back
+    Note over C,Q: Step 9 - Result written back
     C->>Q: status -> done (or error + reason)
 
-    Note over S,You: Step 9 - Your page updates in place
+    Note over S,You: Step 10 - Your page updates in place
     S-->>W: SSE push: board changed
     W->>S: re-fetch page HTML in background
     W-->>You: DOM morph in place - no reload, scroll/focus preserved
 ```
 
-The animated [`docs/how-it-works.html`](./how-it-works.html) groups these same messages into 9 interactive steps (matching the `Note` labels above) across 4 lanes, collapsing "you" and "the widget" into one lane for a simpler UI.
+The animated [`docs/how-it-works.html`](./how-it-works.html) groups these same messages into 10 interactive steps (matching the `Note` labels above) across 4 lanes, collapsing "you" and "the widget" into one lane for a simpler UI.
 
 ### 1. Commenting (what you do in the browser)
 
@@ -72,7 +76,9 @@ Highlight text, and a popover appears with two actions:
 - **💬 Comment** - "change/fix this" with your instruction
 - **⌫ Strike** - "remove this" (the text gets a red strikethrough)
 
-The widget automatically packages four pieces of location info with your note - together they form a **ticket**:
+Pressing **Enter** (or clicking the button) saves the note as a **local draft** - nothing is
+sent yet. The widget packages four pieces of location info with your note; together they
+form a **ticket** once the draft is sent:
 
 | Field | What it captures | Why |
 |---|---|---|
@@ -80,6 +86,12 @@ The widget automatically packages four pieces of location info with your note - 
 | `context` | The surrounding block (~160 chars) | Disambiguates repeated phrases |
 | `section` | Nearest heading above the selection | Human-readable locator |
 | `page` | The page URL | Maps to the source file |
+
+Drafts stay editable in the side panel and can be discarded. Clicking **Fix** on a draft (or
+**Fix all** to send every pending draft, one after another) is what actually POSTs it to the
+server - only then does it become a ticket the session can see. A fast path skips the draft
+stage for a quick single fix: **Cmd/Ctrl+Enter** (comment), **Cmd/Ctrl+Backspace** (strike, on
+an empty box), or **Cmd/Ctrl+click** on either button - all three save and send in one step.
 
 ### 2. Persistence: two files per page, one writer each
 

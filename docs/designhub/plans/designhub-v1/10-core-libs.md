@@ -140,6 +140,20 @@ test('rowToTicket tolerates short rows (Sheets trims trailing empties)', () => {
   assert.equal(t.updatedAt, '');
 });
 
+test('rowToIndex and indexToRow round-trip', () => {
+  const i = { id: 'u1', type: 'html', title: 'T', repo: 'r', feature: 'f',
+    jira: 'unassigned', tags: '', owner: 'me@example.com', driveFileId: 'F',
+    commentSheetId: 'C', url: 'U', status: 'active',
+    publishedAt: 't1', updatedAt: 't2' };
+  assert.deepEqual(S.rowToIndex(S.indexToRow(i)), i);
+});
+
+test('rowToIndex tolerates short rows (Sheets trims trailing empties)', () => {
+  const i = S.rowToIndex(['u1', 'html', 'T']);
+  assert.equal(i.driveFileId, '');
+  assert.equal(i.updatedAt, '');
+});
+
 test('widgetStatus maps DesignHub lifecycle to widget board states', () => {
   // widget knows: todo | in-progress | error | done (ORDER map in feedback-widget.html)
   assert.equal(S.widgetStatus('open'), 'todo');

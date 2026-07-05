@@ -89,6 +89,15 @@ Nothing in this plan ever commits a real folder id, script id, deployment id, or
 
 **Test command for everything:** `node --test designhub/test/` (root `package.json` is upstream - do NOT add scripts to it).
 
+**Known accepted risk (execution-time code review, Task 2):** unlike `TICKET_COLS`/
+`INDEX_COLS`, `META_COLS` has no `rowToMeta`/`metaToRow` helpers in `schema.js` - the
+meta-audit-row appends in Task 6's `setStatus` and Task 10's `publish.mjs` build meta
+rows as hand-rolled positional arrays instead. They are verified correctly positioned
+against `META_COLS` as drafted, but the column-order-drift protection `schema.js`
+gives tickets/index doesn't extend to meta rows. Deferred rather than retrofitted
+mid-plan (would touch two already-reviewed tasks); if `META_COLS` ever changes, grep
+for its hand-rolled array literals in Tasks 6 and 10 and update them by hand.
+
 ---
 
 

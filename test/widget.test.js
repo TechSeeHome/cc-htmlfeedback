@@ -208,3 +208,89 @@ test('cardHTML: a draft with a whitespace-only quote gets a Fix button with no b
     'no bare trailing ": " when the quote is empty/whitespace-only'
   );
 });
+
+test('submitDraft: flips draft false at send, sets sid on success, renders To do', async () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'x', context:'', section:'', note:'n', type:'comment', removed:false,
+      draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  await window.eval('submitDraft(store[1])');
+  const f = window.eval('store[1]');
+  assert.equal(f.draft, false);
+  assert.equal(f.sid, 'srv-0');
+  assert.equal(
+    document.querySelector('.fb-card[data-fb-id="1"] .fb-fixbtn'),
+    null,
+    'card was rebuilt into submitted form'
+  );
+});
+
+test('submitDraft: reverts to draft on POST failure, shows a toast', async () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+    fetchImpl: () => Promise.resolve({ ok: false, status: 500, json: async () => ({}) }),
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'x', context:'', section:'', note:'n', type:'comment', removed:false,
+      draft:true, page:location.href, status:'todo', result:'', files:[] };
+    render();
+  `);
+  await window.eval('submitDraft(store[1])');
+  assert.equal(window.eval('store[1].draft'), true, 'reverted to draft on failure');
+  assert.ok(document.querySelector('.fb-card[data-fb-id="1"] .fb-fixbtn'), 'Fix button is back');
+  assert.equal(
+    document.getElementById('fb-toast').textContent,
+    '⚠️ Submission failed - draft kept'
+  );
+});
+
+test('submitDraft: never overwrites a sid SSE already stamped (content-adoption race)', async () => {
+  const { window } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
+  window.eval(`
+    store[1] = { id:1, quote:'x', context:'', section:'', note:'n', type:'comment', removed:false,
+      draft:false, page:location.href, status:'todo', result:'', files:[], boardSeen:false };
+    reconcile([{ id:'ssid', quote:'x', note:'n', page:location.href, status:'todo' }]); // SSE beats the POST response
+  `);
+  assert.equal(window.eval('store[1].sid'), 'ssid', 'content-adoption stamped it first');
+  await window.eval('submitDraft(store[1])'); // the response arrives after
+  assert.equal(
+    window.eval('store[1].sid'),
+    'ssid',
+    'the POST response never overwrote the SSE-stamped sid'
+  );
+});
+
+test('reconcile: excludes drafts from content-adoption (the misadoption bug found in review)', () => {
+  const { window } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
+  window.eval(`
+    store[1] = { id:1, quote:'x', context:'', section:'', note:'n', type:'comment', removed:false,
+      draft:true, page:location.href, status:'todo', result:'', files:[] };
+    uid = 1; // matches real usage, where uid always advances past any existing store id — avoids
+             // reconcile()'s own ++uid colliding with the manually-created store[1] above
+    reconcile([{ id:'other', quote:'x', note:'n', page:location.href, status:'todo' }]);
+  `);
+  assert.equal(
+    window.eval('store[1].sid'),
+    undefined,
+    'the unsent draft must NOT be adopted by a same-text ticket from elsewhere'
+  );
+  assert.equal(
+    Object.keys(window.eval('store')).length,
+    2,
+    'the incoming ticket got its own new card instead'
+  );
+});
+
+test('reconcile: marks matched entries board-seen and re-schedules a persist', () => {
+  const { window } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
+  window.eval(`
+    store[1] = { id:1, quote:'x', context:'', section:'', note:'n', type:'comment', removed:false,
+      draft:false, sid:'s1', page:location.href, status:'todo', result:'', files:[], boardSeen:false };
+    reconcile([{ id:'s1', quote:'x', note:'n', page:location.href, status:'todo' }]);
+  `);
+  assert.equal(window.eval('store[1].boardSeen'), true);
+});

@@ -230,7 +230,6 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   function statusOf(f){ return CCFB ? (f.draft ? 'draft' : (f.status || 'todo')) : null; }
   function statusRank(f){ return CCFB ? (ORDER[statusOf(f)] ?? 0) : 0; }
   function ccfbBase(){ return (CCFB && CCFB.endpoint) || ''; }
-  // eslint-disable-next-line no-unused-vars -- wired into submitDraft() in a later task (add() no longer POSTs directly)
   function ccfbPost(t){ return fetch(ccfbBase() + '/__ccfb/tickets', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(t) }); }
   function shortPage(u){ try { const x = new URL(u); return x.pathname + x.search + x.hash; } catch{ return u || ''; } }
 
@@ -374,8 +373,32 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     closePop();
     record(() => setRemoved(id, false), () => setRemoved(id, true)); // apply = restore, revert = remove
   }
-  // eslint-disable-next-line no-unused-vars -- param used once this stub is replaced in a later task
-  function submitDraft(f){ /* replaced in a later task */ }
+  // Removes an existing card's DOM node so the next ensureCard() rebuilds it fresh from
+  // cardHTML — ensureCard() reuses card DOM and never re-runs cardHTML, so without this the
+  // card's chrome (editable vs read-only note, Fix button, status pill) would not follow a
+  // draft<->submitted transition.
+  function rebuildCard(id){
+    const card = list.querySelector('.fb-card[data-fb-id="' + id + '"]');
+    if(card) card.remove();
+  }
+  // Flips draft=false at SEND time (not success) so an in-flight submission is immediately
+  // adoptable by reconcile()'s content matcher if SSE beats the response — closing the
+  // original race without exposing unsent drafts to that same matcher (see reconcile below).
+  function submitDraft(f){
+    rebuildCard(f.id);
+    f.draft = false; f.status = 'todo'; f.result = ''; f.files = []; f.boardSeen = false;
+    render(); schedulePersist();
+    return ccfbPost({ type: f.type, quote: f.quote, context: f.context, section: f.section, note: f.note, page: f.page })
+      .then(r => { if(!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(t => { f.sid = f.sid || t.id; render(); schedulePersist(); return true; })
+      .catch(() => {
+        rebuildCard(f.id);
+        f.draft = true;
+        render(); schedulePersist();
+        showToast('Submission failed - draft kept', true);
+        return false;
+      });
+  }
   function maybeFirstDraftToast(){ /* replaced in a later task */ }
 
   /* ---- range wrapping (handles selections spanning multiple nodes) ---- */
@@ -511,6 +534,8 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
 
   // One delegated listener per event type — no per-card binding, so incremental updates never churn handlers.
   list.addEventListener('click', e => {
+    const fixBtn = e.target.closest('.fb-fixbtn');
+    if(fixBtn){ e.stopPropagation(); const f = store[+fixBtn.closest('.fb-card').dataset.fbId]; if(f) submitDraft(f); return; }
     const x = e.target.closest('.fb-x');
     if(x){ e.stopPropagation(); discard(+x.closest('.fb-card').dataset.fbId); return; }
     if(e.target.closest('.fb-note')) return;       // clicking the note should focus it, not activate
@@ -636,9 +661,12 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       let f = Object.values(store).find(x => x.sid === t.id);
       if(!f){
         // Adopt a just-submitted local entry whose POST response hasn't set sid yet — avoids
-        // creating a duplicate card + duplicate on-page mark if SSE arrives before the POST resolves.
-        f = Object.values(store).find(x => !x.sid && x.quote === (t.quote || '') && x.note === (t.note || '') && x.page === (t.page || ''));
-        if(f) f.sid = t.id;
+        // creating a duplicate card + duplicate on-page mark if SSE arrives before the POST
+        // resolves. !x.draft is required: without it, an UNSENT draft that merely shares text
+        // with a ticket submitted elsewhere (another tab, a duplicate note) would be wrongly
+        // adopted and marked as sent — found in review, this guard is not optional.
+        f = Object.values(store).find(x => !x.draft && !x.sid && x.quote === (t.quote || '') && x.note === (t.note || '') && x.page === (t.page || ''));
+        if(f) f.sid = f.sid || t.id;
       }
       if(!f){
         const id = ++uid;
@@ -646,11 +674,13 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
           note: t.note || '', type: t.type || 'comment', page: t.page || '', removed: false };
         if(t.page === location.href && f.quote && t.status !== 'done') reanchor(f);  // never highlight an already-done ticket on first sight
       }
+      f.boardSeen = true;
       const was = f.status;
       f.status = t.status; f.result = t.result || ''; f.files = t.files || [];
       if(t.status === 'done' && was && was !== 'done') enteredDone = true;   // a ticket just finished
     });
     render();
+    schedulePersist();
     if(enteredDone) scheduleApply();   // reflect the verified change (morph in static mode)
   }
 

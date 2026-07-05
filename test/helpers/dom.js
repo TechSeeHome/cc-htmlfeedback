@@ -35,6 +35,7 @@ const WIDGET_SRC_RAW = fs.readFileSync(
 const EXPOSE_HOOK =
   '\n  window.store = store; window.render = render;\n' +
   '  window.persistDrafts = persistDrafts; window.restoreDrafts = restoreDrafts;\n' +
+  '  window.submitDraft = submitDraft; window.reconcile = reconcile;\n' +
   "  Object.defineProperty(window, 'uid', { configurable: true, get(){ return uid; }, set(v){ uid = v; } });\n";
 const FBINIT_CLOSE_ANCHOR = '\n  }\n  if (document.body) fbInit();';
 if (WIDGET_SRC_RAW.split(FBINIT_CLOSE_ANCHOR).length !== 2) {
@@ -116,12 +117,16 @@ function loadWidget({
   window.fetch =
     fetchImpl ||
     ((reqUrl, opts) => {
+      // id is captured now, before the push below, so the Nth POST gets 'srv-<N-1>' (0-indexed) —
+      // json() only reads this closed-over value, so computing it after the push would make every
+      // response describe itself as one id ahead of its actual position in `posted`.
+      const id = 'srv-' + posted.length;
       if (opts && opts.method === 'POST' && String(reqUrl).includes('/__ccfb/tickets')) {
         posted.push(JSON.parse(opts.body));
       }
       return Promise.resolve({
         ok: true,
-        json: async () => ({ id: 'srv-' + posted.length, tickets: [] }),
+        json: async () => ({ id, tickets: [] }),
       });
     });
   window.eval(WIDGET_SRC);

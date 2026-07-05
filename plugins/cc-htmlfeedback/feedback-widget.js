@@ -354,8 +354,15 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   document.getElementById('fb-comment').addEventListener('click', e => add('comment', e.metaKey || e.ctrlKey));
   document.getElementById('fb-strike').addEventListener('click',  e => add('strike', e.metaKey || e.ctrlKey));
   ta.addEventListener('keydown', e => {
-    if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); add('comment'); }
-    else if(e.key === 'Backspace' && ta.value === ''){ e.preventDefault(); add('strike'); }
+    // Modifier branches MUST come before their plain counterparts: 'Enter' matches
+    // Cmd/Ctrl+Enter too (only Shift is excluded), and empty-box 'Backspace' matches
+    // Cmd/Ctrl+Backspace too — checking plain first would make the fast paths unreachable.
+    if(e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)){ e.preventDefault(); add('comment', true); }
+    else if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); add('comment', false); }
+    else if(e.key === 'Backspace' && ta.value === '' && (e.metaKey || e.ctrlKey) && !e.repeat){ e.preventDefault(); add('strike', true); }
+    // Modifier held but this is a key-repeat: stays a no-op rather than falling through to the
+    // plain branch below — a held Cmd/Ctrl+Backspace must not spam plain (non-fix-now) strikes.
+    else if(e.key === 'Backspace' && ta.value === '' && !(e.metaKey || e.ctrlKey)){ e.preventDefault(); add('strike', false); }
     else if(e.key === 'Escape'){ e.preventDefault(); hidePop(); }
     // When the box is empty, cmd/ctrl+C copies the originally-selected page text
     // (the popover stole focus + cleared the selection, so the native copy has nothing).

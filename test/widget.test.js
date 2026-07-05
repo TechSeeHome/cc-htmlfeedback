@@ -466,3 +466,92 @@ test('Fix all: a second rapid click mid-batch is a no-op (no duplicate POSTs, no
   assert.equal(window.eval('store[2].draft'), false);
   assert.equal(document.getElementById('fb-toast').textContent, '✓ 2 drafts sent');
 });
+
+test('keybindings: Cmd/Ctrl+Enter fixes now; plain Enter still just saves (branch-ordering regression guard)', async () => {
+  const { window, document, posted } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  const p = document.getElementById('target');
+  select(window, p.firstChild, 0, 11);
+  await tick();
+  const ta = document.getElementById('fb-text');
+  ta.value = 'fix now please';
+  ta.dispatchEvent(
+    new window.KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+      metaKey: true,
+    })
+  );
+  await tick();
+  assert.equal(window.eval('store[1].draft'), false, 'Cmd+Enter submitted immediately');
+  assert.equal(posted.length, 1);
+  assert.equal(document.getElementById('fb-toast').textContent, '✓ Sent to the agent');
+});
+
+test('keybindings: Cmd/Ctrl+Backspace fixes now only on an empty box, ignores key-repeat', async () => {
+  const { window, document, posted } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  const p = document.getElementById('target');
+  select(window, p.firstChild, 0, 11);
+  await tick();
+  const ta = document.getElementById('fb-text');
+
+  // non-empty box: the chord keeps its native word-delete behavior, never submits
+  ta.value = 'something';
+  ta.dispatchEvent(
+    new window.KeyboardEvent('keydown', {
+      key: 'Backspace',
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+    })
+  );
+  await tick();
+  assert.equal(posted.length, 0, 'non-empty box: no submission');
+
+  // key-repeat while empty: must not fire
+  ta.value = '';
+  ta.dispatchEvent(
+    new window.KeyboardEvent('keydown', {
+      key: 'Backspace',
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      repeat: true,
+    })
+  );
+  await tick();
+  assert.equal(posted.length, 0, 'key-repeat is ignored');
+
+  // empty box, real keypress: fires
+  ta.dispatchEvent(
+    new window.KeyboardEvent('keydown', {
+      key: 'Backspace',
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+    })
+  );
+  await tick();
+  assert.equal(posted.length, 1);
+  assert.equal(window.eval('store[1].type'), 'strike');
+  assert.equal(window.eval('store[1].draft'), false);
+});
+
+test('keybindings: Cmd/Ctrl+click on a popover button fixes now', async () => {
+  const { window, document, posted } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  const p = document.getElementById('target');
+  select(window, p.firstChild, 0, 11);
+  await tick();
+  document
+    .getElementById('fb-comment')
+    .dispatchEvent(new window.MouseEvent('click', { bubbles: true, metaKey: true }));
+  await tick();
+  assert.equal(posted.length, 1);
+  assert.equal(window.eval('store[1].draft'), false);
+});

@@ -221,11 +221,11 @@
     <div class="drow"><div class="did">D12</div><div class="dq">Comment lifecycle</div>
       <div class="da">V1 ships <b>open → in-progress → resolved/declined</b> as-is; richer states are out of scope for v1. V2 candidates: sort comments by creation / update date.<small>Don't overdesign the lifecycle before real usage; sorting emerged as a concrete v2 need.</small></div></div>
     <div class="drow"><div class="did">D13</div><div class="dq">Accounts</div>
-      <div class="da"><b>Developers publish as themselves</b> (own Google OAuth; owner = their email). The <b>web app script owner</b> starts as a personal admin account, migrates to a dedicated designhub@ service user later. The publish skill <b>grants editor access on the companion Sheet and feature _index</b> to two writers: the <b>serving account</b> (reviewer comments go through the bridge as that account) and the <b>designhub-agents@ Google group</b> - any agent identity (CI bot, another developer's session) joins the group once and writes via Sheets REST as itself.<small>Script owner only affects what account serves files and whose quota is used - never authorship. Whole-domain sharing (D11) is read-only: without the agents group, a non-publisher agent's writes would fail with Sheets permission errors.</small></div></div>
+      <div class="da"><b>Developers publish as themselves</b> (own Google OAuth; owner = their email). Publish <b>write</b> access is a one-time setup grant: the <b>designhub-publishers@ group</b> holds editor (content-manager) rights on the DesignHub root, so any developer or CI identity in the group creates folders, uploads docs, and upserts _index shards with its own credentials. The <b>web app script owner</b> starts as a personal admin account, migrates to a dedicated designhub@ service user later. The publish skill <b>grants editor access on the companion Sheet and feature _index</b> to two writers: the <b>serving account</b> (reviewer comments go through the bridge as that account) and the <b>designhub-agents@ Google group</b> - any agent identity (CI bot, another developer's session) joins the group once and writes via Sheets REST as itself.<small>Script owner only affects what account serves files and whose quota is used - never authorship. Whole-domain sharing (D11) is read-only: without the publishers group every non-owner's first Drive write would fail; without the agents group a non-publisher agent's writes would fail with Sheets permission errors.</small></div></div>
     <div class="drow"><div class="did">D14</div><div class="dq">Naming</div>
-      <div class="da"><b>Filenames stay original and the repo-relative subpath is preserved</b> under the feature folder (docs/api/design.md → &lt;feature&gt;/docs/api/design.md) - identical basenames never collide. No versions in filenames: version/date belong <b>inside the doc content</b> and in index metadata (updatedAt, Drive revisions).<small>Renaming on publish breaks the repo ↔ Drive mapping; subpath mirroring is collision-proof by construction; Drive revisions + the index already track versions.</small></div></div>
+      <div class="da"><b>Filenames stay original and the repo-relative subpath is preserved</b> under the feature folder (docs/api/design.md → &lt;feature&gt;/docs/api/design.md) - identical basenames never collide. The <b>&lt;feature&gt; folder is a single sanitized path component</b>: separators in branch names are encoded (feature/new-ui → feature--new-ui) so a slashed branch can't collide with a real subdirectory; the _index keeps the original string, and publishing into a folder whose _index records a different original feature <b>fails loudly</b>. No versions in filenames: version/date belong <b>inside the doc content</b> and in index metadata (updatedAt, Drive revisions).<small>Renaming on publish breaks the repo ↔ Drive mapping; subpath mirroring is collision-proof only if the feature segment can't itself contain separators; Drive revisions + the index already track versions.</small></div></div>
     <div class="drow"><div class="did">D15</div><div class="dq">Re-publish</div>
-      <div class="da">Open comments whose quoted text is gone in the new version are <b>auto-resolved with the distinct terminal status anchor-lost</b> - clearly marked as not fixed, never confused with resolved. The publish flow runs the re-anchor check using the <b>full anchor triple</b> (quote + context + section - a bare quote match at a different occurrence counts as lost) and writes the status.<small>No manual triage burden in v1; the separate status keeps auto-closed feedback honest, filterable, and recoverable. Collect feedback, refine later.</small></div></div>
+      <div class="da">The publish flow runs the re-anchor check on <b>every non-terminal ticket (open and in-progress)</b> using the <b>full anchor triple</b> (quote + context + section - a bare quote match at a different occurrence counts as lost). Quote gone → <b>anchor-lost</b>, a distinct terminal status clearly marked as not fixed, never confused with resolved - an in-progress ticket surfaces as lost instead of dangling anchorless forever. <b>Exception - strike tickets:</b> the quote disappearing IS the requested fix, so an accepted strike auto-closes as <b>resolved</b>, not anchor-lost.<small>No manual triage burden in v1; the separate status keeps auto-closed feedback honest, filterable, and recoverable; the strike branch keeps accepted deletions from being misfiled as losses.</small></div></div>
     <div class="drow"><div class="did">D16</div><div class="dq">Repo strategy</div>
       <div class="da"><b>Monorepo in the fork, sync-safe:</b> DesignHub lives in additive-only paths (designhub/, plugins/designhub/) and <b>never edits upstream files</b> (sole exception: a 5-line marketplace.json entry). The widget variant is generated by a <b>fail-loud build transform</b> from upstream's untouched feedback-widget.html. Sync = git merge upstream/main + rebuild + tests; fork-side CI checks every merge.<small>Single widget source keeps UX improvements flowing to both products; additive paths make upstream merges conflict-free indefinitely; the one brittle joint fails loudly at build time. Long-term: offer the transport-adapter refactor upstream.</small></div></div>
     <div class="drow"><div class="did">D17</div><div class="dq">Doc scripts vs the bridge</div>
@@ -271,7 +271,7 @@
       <p>The published assets and their conversations. Physical tree: DesignHub/&lt;repo&gt;/&lt;feature&gt;/doc + a companion Sheet per doc as its comment DB.</p>
       <div class="detail">
         <b>Comment ticket schema</b> (carried from cc-htmlfeedback, extended for multi-user): id · parentId (threading) ·
-        type comment|strike|reply · status open → in-progress → resolved|declined|anchor-lost (auto-set on re-publish when the quote is gone - D15) · the anchor triple quote/context/section ·
+        type comment|strike|reply · status open → in-progress → resolved|declined|anchor-lost (auto-set on re-publish when the quote is gone - D15; an accepted strike auto-closes resolved instead) · the anchor triple quote/context/section ·
         note · authorEmail/authorName · source web|agent · docVersion · result/files (agent outcomes) · timestamps.<br><br>
         <b>Meta tab per doc:</b> repo, path-in-repo, branch, commit SHA, PR#, jira, publisher, publish history.<br><br>
         <b>Anti-lock-in discipline:</b> no PropertiesService/CacheService as data stores, no Apps-Script-only formats.
@@ -283,7 +283,7 @@
       _portal-index rollup is derived from the shards as a disposable cache. Navigation reads indexes, never folders.</p>
       <div class="detail">
         <b>Row (same in shards and rollup):</b> id · type html|md (later + gdoc|gslides|gsheet|link) · title · repo · feature ·
-        jira · tags · owner · driveFileId · url · status active|archived · publishedAt · updatedAt.<br><br>
+        jira · tags · owner · driveFileId · commentSheetId · url · status active|archived · publishedAt · updatedAt.<br><br>
         <b>V1:</b> the publish skill writes only its feature's _index (+ pokes the rollup refresh); the tree UI reads the
         _portal-index rollup grouped by repo/feature. Rollup rebuilds on publish + a periodic Apps Script trigger.<br>
         <b>Portal phase:</b> existing Docs/Slides/Sheets register as index rows pointing at their current files, opened in native
@@ -316,7 +316,12 @@
     &lt;feature-or-JIRA&gt;/              <span class="d">e.g. PROJ-123-crm-evaluation</span>
       <span class="y">_index</span>                        <span class="d">(Sheet - this feature's docs, source of truth)</span>
       <span class="g">dashboard.html</span>                <span class="d">published doc, byte-exact source</span>
-      <span class="y">dashboard.comments</span>            <span class="d">(Sheet - this doc's comment DB)</span></pre>
+      <span class="y">dashboard.html.comments</span>       <span class="d">(Sheet - this doc's comment DB)</span></pre>
+
+  <p class="sec-sub" style="margin-top:10px">The companion Sheet is named after the <b>full published filename</b>
+  (dashboard.html.comments vs dashboard.md.comments - .html/.md twins get distinct comment DBs), but the name is a
+  human-browsing convention only: the _index row records the authoritative <b>commentSheetId</b> and all consumers
+  resolve the Sheet by id, never by name.</p>
 
   <div class="tbl-scroll" style="margin-top:16px">
   <table>
@@ -330,8 +335,8 @@
   </table>
   </div>
   <p class="sec-sub" style="margin-top:10px">Every mutating call carries the doc path - with one companion Sheet per doc,
-  the bridge resolves the target Sheet directly from the path instead of scanning every Sheet for a comment UUID
-  (ambiguous the moment two docs exist).</p>
+  the bridge resolves the target Sheet directly from the path (via the _index row's commentSheetId) instead of scanning
+  every Sheet for a comment UUID (ambiguous the moment two docs exist).</p>
 
   <div class="tbl-scroll" style="margin-top:16px">
   <table>
@@ -369,6 +374,7 @@
       <h3>Publish &amp; review</h3>
       <ul>
         <li>/publish-design skill: upload HTML/MD + metadata, upsert feature _index (+ rollup refresh), create comment Sheet, return link</li>
+        <li>Self-contained docs only: no asset route, so the skill scans for relative src/href refs and warns loudly (publish on explicit confirm); multi-file docs are phase 2</li>
         <li>Google-login-gated viewing; MD rendered, widget on everything</li>
         <li>Tree UI over the _portal-index rollup (repo/feature)</li>
         <li>Comments → Sheet: identity, threads, statuses</li>
@@ -384,6 +390,7 @@
         <li>Quote → source-line mapping for inline review comments; plain comment fallback</li>
         <li>Agent fix loop: read open tickets, apply fixes, re-publish</li>
         <li>Richer comment lifecycle + sorting by creation / update date (D12 candidates)</li>
+        <li>Multi-file docs: publish relative assets + rewrite URLs - lifts the v1 self-contained-only contract</li>
       </ul>
     </div>
     <div class="phase">

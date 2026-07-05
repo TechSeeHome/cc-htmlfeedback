@@ -36,6 +36,7 @@ const EXPOSE_HOOK =
   '\n  window.store = store; window.render = render;\n' +
   '  window.persistDrafts = persistDrafts; window.restoreDrafts = restoreDrafts;\n' +
   '  window.submitDraft = submitDraft; window.reconcile = reconcile;\n' +
+  '  window.discard = discard; window.undo = undo;\n' +
   "  Object.defineProperty(window, 'uid', { configurable: true, get(){ return uid; }, set(v){ uid = v; } });\n";
 const FBINIT_CLOSE_ANCHOR = '\n  }\n  if (document.body) fbInit();';
 if (WIDGET_SRC_RAW.split(FBINIT_CLOSE_ANCHOR).length !== 2) {

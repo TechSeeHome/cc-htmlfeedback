@@ -709,3 +709,79 @@ test('restore: restoreDrafts() runs automatically on startup — regression guar
     'the mark was re-anchored on the page during automatic startup'
   );
 });
+
+test('Clean: purges the persisted snapshot, not just the in-memory store', () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    persistDrafts();
+  `);
+  assert.ok(window.sessionStorage.getItem('ccfb-drafts:/test.html'));
+
+  const cleanBtn = document.getElementById('fb-clean');
+  cleanBtn.dispatchEvent(new window.Event('click', { bubbles: true })); // arm
+  cleanBtn.dispatchEvent(new window.Event('click', { bubbles: true })); // confirm
+  assert.equal(window.sessionStorage.getItem('ccfb-drafts:/test.html'), null);
+});
+
+test('discard/undo: a discarded draft is excluded from the next persist; undo re-includes it', () => {
+  const { window } = loadWidget({ ccfb: { endpoint: '', sessionId: 'test', mode: 'static' } });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    discard(1);
+    persistDrafts();
+  `);
+  let saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html'));
+  assert.deepEqual(
+    saved.map((s) => s.id),
+    [],
+    'removed entry excluded'
+  );
+
+  window.eval('undo(); persistDrafts();');
+  saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html'));
+  assert.deepEqual(
+    saved.map((s) => s.id),
+    [1],
+    'undo re-included it'
+  );
+});
+
+test('discard: the debounced auto-persist actually fires on its own, with no manual persistDrafts() call', async () => {
+  // Unlike the discard/undo test above (which forces persistDrafts() itself, so it would pass
+  // even if setRemoved() never scheduled anything), this test never calls persistDrafts() —
+  // it only relies on the schedulePersist() call wired into setRemoved() and lets the real
+  // 300ms debounce timer fire on its own, via tick(). fetchImpl rejects so the widget's own
+  // startup loadTickets() -> reconcile([]) call (which also schedules a persist, ~300ms after
+  // boot) never fires and can't be mistaken for the one this test is actually checking.
+  const { window } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+    fetchImpl: () => Promise.reject(new Error('no network in this test')),
+  });
+  window.eval(`
+    store[1] = { id:1, quote:'a', context:'', section:'', note:'', type:'comment', removed:false, draft:true, page:location.href, status:'todo', result:'', files:[] };
+    discard(1);
+  `);
+  // Sanity check: nothing has been persisted yet — proves the eventual write below comes from
+  // the debounce timer firing, not from some synchronous persist hiding in discard()/setRemoved().
+  assert.equal(
+    window.sessionStorage.getItem('ccfb-drafts:/test.html'),
+    null,
+    'sanity: schedulePersist() debounces 300ms, so nothing is written synchronously'
+  );
+
+  await tick(350); // past the 300ms debounce with margin
+
+  const saved = JSON.parse(window.sessionStorage.getItem('ccfb-drafts:/test.html') || 'null');
+  assert.ok(
+    saved,
+    'the debounced auto-persist wrote a snapshot on its own — no persistDrafts() call anywhere in this test'
+  );
+  assert.deepEqual(
+    saved.map((s) => s.id),
+    [],
+    'the discarded entry is excluded from that automatically-written snapshot'
+  );
+});

@@ -262,6 +262,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     this.dataset.armed = ''; this.textContent = 'Clean';
     if(CCFB) fetch(ccfbBase() + '/__ccfb/clean', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ page: location.href }) }).catch(() => {});
     Object.keys(store).forEach(id => delete store[id]);
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch{}
     unwrapAllMarks();                                // strip on-page marks (CONTENT only, never widget DOM)
     render();
     showToast('Cleared');
@@ -619,6 +620,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     if(store[id]) store[id].removed = removed;
     document.querySelectorAll('[data-fb-id="' + id + '"]').forEach(sp => sp.classList.toggle('fb-removed', removed));
     render();
+    schedulePersist();
   }
   function record(apply, revert){ history = history.slice(0, hpos + 1); history.push({ apply, revert }); hpos = history.length - 1; }
   function undo(){ if(hpos >= 0){ history[hpos].revert(); hpos--; } }

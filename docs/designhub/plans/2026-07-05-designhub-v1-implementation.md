@@ -26,15 +26,18 @@
 
 ## Fixed configuration (from P5 / POC deployments)
 
+Org-specific values (`<DH_*>` placeholders throughout this plan) are recorded in
+`docs/designhub/plans/environment.local.md` - gitignored, local-only.
+
 | constant | value |
 |---|---|
-| Production DesignHub root folder | `1ggj9Z0zc1ZJnSwAfVqsYD95W5uh5aBqh` (inside Shared Drive "HOME Drive" `0AIDe9QcffDv_Uk9PVA`, parent folder "Home - R&D" `1H7S4iRkH_V9OmcLpSa6hLEefobbIBid2`) |
-| POC fixtures (dev/test target, disposable) | folder `DesignHub-POC` `1TgoFYQddjDZXc8O0eVH-W3Rx9NVO5a0V` |
-| marked 15 bundle in Drive | `1vzm8lmAHB2txtYvB7eh7eqs7C4YgR1Yw` (39 KB) |
-| mermaid 11 bundle in Drive | `16GQ2nJpwFOsIkB6p8bRxjfRXCClOHIRG` (3.5 MB - asset route only) |
+| Production DesignHub root folder | `<DH_ROOT_FOLDER_ID>` (inside the org's Shared Drive - see `environment.local.md`) |
+| POC fixtures (dev/test target, disposable) | folder `DesignHub-POC` `<DH_POC_FOLDER_ID>` |
+| marked 15 bundle in Drive | `<DH_MARKED_BUNDLE_ID>` (39 KB) |
+| mermaid 11 bundle in Drive | `<DH_MERMAID_BUNDLE_ID>` (3.5 MB - asset route only) |
 | Publisher OAuth (dev machine) | refresh token at `~/.claude/skills/gdoc-md-sync/token.json`, scope `https://www.googleapis.com/auth/drive` (also valid for Sheets v4 - poc-verified) |
-| Agent test identity | `home-knowledge@techsee.me`, token at `docs/designhub/pocs/poc4/.secrets/token-agent.json` (gitignored) |
-| POC web app (reference, do not reuse for prod) | deployment `AKfycbxLCY8EBX8mnDdpP28oWxzP4rWHehC1RpSUY8Ab1XLhJjVKazm7oNgQ2SJHE4rP704FTQ`, source `docs/designhub/pocs/poc1/gas/` |
+| Agent test identity | `<DH_AGENT_ACCOUNT>`, token at `docs/designhub/pocs/poc4/.secrets/token-agent.json` (gitignored) |
+| POC web app (reference, do not reuse for prod) | deployment `<DH_POC_DEPLOYMENT_ID>`, source `docs/designhub/pocs/poc1/gas/` |
 
 ## File structure (what this plan creates)
 
@@ -109,10 +112,10 @@ docs/designhub/agent-access.md  "the Sheet is the API" how-to                   
 // DesignHub deployment configuration. IDs are not secrets (access is enforced
 // by Drive ACLs), so this is committed. POC fixtures live in DesignHub-POC.
 var DH_CONFIG = {
-  rootFolderId: '1ggj9Z0zc1ZJnSwAfVqsYD95W5uh5aBqh',   // DesignHub (prod root)
+  rootFolderId: '<DH_ROOT_FOLDER_ID>',                  // DesignHub (prod root)
   assets: {
-    marked: '1vzm8lmAHB2txtYvB7eh7eqs7C4YgR1Yw',        // marked 15 min bundle
-    mermaid: '16GQ2nJpwFOsIkB6p8bRxjfRXCClOHIRG'        // mermaid 11 min bundle
+    marked: '<DH_MARKED_BUNDLE_ID>',                    // marked 15 min bundle
+    mermaid: '<DH_MERMAID_BUNDLE_ID>'                   // mermaid 11 min bundle
   },
   reconcilerEveryHours: 1                                // D19 reconciler cadence
 };
@@ -163,7 +166,7 @@ test('index columns match design.md section 4 exactly', () => {
 test('rowToTicket and ticketToRow round-trip', () => {
   const t = { id: 'u1', parentId: '', type: 'comment', status: 'open',
     quote: 'q', context: 'c', section: 's', note: 'n',
-    authorEmail: 'a@techsee.me', authorName: '', source: 'web', docVersion: '',
+    authorEmail: 'a@example.com', authorName: '', source: 'web', docVersion: '',
     result: '', files: '', createdAt: 't1', updatedAt: 't2' };
   assert.deepEqual(S.rowToTicket(S.ticketToRow(t)), t);
 });
@@ -1011,12 +1014,13 @@ Manual-ish task (browser consent involved) - follow exactly; poc1's Results sect
 - [ ] **Step 1: Create the Apps Script project without clobbering local files.** `clasp create-script` clones the remote `appsscript.json` over local files, so create in a scratch dir and move the `.clasp.json`:
 
 ```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$(mktemp -d)" && npx -y @google/clasp create-script --title "DesignHub" --type standalone
-mv .clasp.json /Users/igor/home/cc-htmlfeedback/designhub/gas/.clasp.json
-cd /Users/igor/home/cc-htmlfeedback/designhub/gas
+mv .clasp.json "$REPO_ROOT/designhub/gas/.clasp.json"
+cd "$REPO_ROOT/designhub/gas"
 ```
 
-Expected: "Created new script: https://script.google.com/d/<SCRIPT_ID>/edit". clasp v3 is installed and logged in as `igora@techsee.me` (P1); verify with `clasp show-authorized-user` if unsure.
+Expected: "Created new script: https://script.google.com/d/<SCRIPT_ID>/edit". clasp v3 is installed and logged in as the publisher account `<DH_PUBLISHER_ACCOUNT>` (P1); verify with `clasp show-authorized-user` if unsure.
 
 - [ ] **Step 2: Push and deploy:**
 
@@ -1028,7 +1032,7 @@ Expected: `Deployed <DEPLOYMENT_ID> @1`. The exec URL is `https://script.google.
 
 - [ ] **Step 3: One-time owner authorization** (poc1 quirk: the consent screen has PER-SCOPE checkboxes; a partial grant serves pages but breaks the ungranted scope):
 
-Open the exec URL in the logged-in dev-browser (named browser `designhub`), click "REVIEW PERMISSIONS", pick `igora@techsee.me`, on the scope screen **tick ALL FOUR scopes** (email, Drive read, Sheets, script triggers), Continue. The click-through sequence (popup handling, Select all pitfall) is documented in docs/designhub/pocs/poc1/README.md, Operational learnings #1; a human doing it in that browser window is equally fine.
+Open the exec URL in the logged-in dev-browser (named browser `designhub`), click "REVIEW PERMISSIONS", pick `<DH_PUBLISHER_ACCOUNT>`, on the scope screen **tick ALL FOUR scopes** (email, Drive read, Sheets, script triggers), Continue. The click-through sequence (popup handling, Select all pitfall) is documented in docs/designhub/pocs/poc1/README.md, Operational learnings #1; a human doing it in that browser window is equally fine.
 
 - [ ] **Step 4: Install the D19 reconciler trigger:** open `https://script.google.com/d/<SCRIPT_ID>/edit`, select function `dhInstallReconcilerTrigger`, Run once (grants may re-prompt; approve).
 
@@ -1052,7 +1056,7 @@ Expected: tree page prints "No docs published yet...". (The `?asset=widget` rout
 
 ```json
 {
-  "rootFolderId": "1ggj9Z0zc1ZJnSwAfVqsYD95W5uh5aBqh",
+  "rootFolderId": "<DH_ROOT_FOLDER_ID>",
   "execUrl": "https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec",
   "scriptId": "<SCRIPT_ID>",
   "deploymentId": "<DEPLOYMENT_ID>"
@@ -1211,7 +1215,7 @@ test('scanAssets: asset loads vs navigation links (two severities)', async () =>
 test('inferMetadata: repo from remote, feature from branch, jira from branch', async () => {
   const { inferMetadata } = await mod();
   const m = inferMetadata({
-    remoteUrl: 'git@github.com:TechSeeHome/cc-htmlfeedback.git',
+    remoteUrl: 'git@github.com:example-org/cc-htmlfeedback.git',
     branch: 'design/PROJ-123-designhub' });
   assert.equal(m.repo, 'cc-htmlfeedback');
   assert.equal(m.feature, 'design/PROJ-123-designhub');
@@ -1228,7 +1232,7 @@ test('inferMetadata: unknowns become the explicit "unassigned" placeholder (D9)'
 test('newIndexRow shapes a section-4 row with stable uuid and active status', async () => {
   const { newIndexRow } = await mod();
   const row = newIndexRow({ type: 'html', title: 'T', repo: 'r', feature: 'f',
-    jira: 'unassigned', owner: 'me@techsee.me', driveFileId: 'F', commentSheetId: 'C',
+    jira: 'unassigned', owner: 'me@example.com', driveFileId: 'F', commentSheetId: 'C',
     url: 'U', now: '2026-07-05T00:00:00Z' });
   assert.equal(row.length, 14);
   assert.match(row[0], /^[0-9a-f-]{36}$/);
@@ -1555,7 +1559,7 @@ console.log('Comments Sheet: https://docs.google.com/spreadsheets/d/' + companio
 
 - [ ] **Step 7: Full suite green:** `node --test designhub/test/`
 
-- [ ] **Step 8: Integration dry-run against the POC area** (NOT prod): edit `plugins/designhub/designhub.config.json`, set `rootFolderId` to `1TgoFYQddjDZXc8O0eVH-W3Rx9NVO5a0V` (DesignHub-POC), run the two commands below, then restore with `git checkout -- plugins/designhub/designhub.config.json`:
+- [ ] **Step 8: Integration dry-run against the POC area** (NOT prod): edit `plugins/designhub/designhub.config.json`, set `rootFolderId` to `<DH_POC_FOLDER_ID>` (DesignHub-POC, see `environment.local.md`), run the two commands below, then restore with `git checkout -- plugins/designhub/designhub.config.json`:
 
 ```bash
 node plugins/designhub/skills/publish-design/scripts/publish.mjs \
@@ -1586,7 +1590,7 @@ Expected: run 1 prints the dry-run JSON; run 2 prints WARN for the two nav links
   "name": "designhub",
   "version": "0.1.0",
   "description": "Publish design docs to DesignHub (Google-login-gated hub with in-page comments) and work with their comment Sheets.",
-  "author": { "name": "TechSee Home" }
+  "author": { "name": "your-org" }
 }
 ```
 
@@ -1763,7 +1767,7 @@ sed -e 's|__DH_EXEC__|https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec|' 
 ```
 
 ```js
-// Verifies: page serves, widget boots, identity chip shows a @techsee.me user,
+// Verifies: page serves, widget boots, identity chip shows an org-domain user,
 // a programmatic selection submits through the bridge (fix-now path), and the
 // board reflects it.
 const EXEC = "__DH_EXEC__", DOC = "__DH_DOC__";
@@ -1814,7 +1818,7 @@ node plugins/designhub/skills/publish-design/scripts/publish.mjs \
 
 Expected: two `Published:` URLs under the production exec URL.
 
-- [ ] **Step 3: Run the E2E against both published docs** (html then md) with `DH_EXEC`/`DH_DOC` set accordingly. Expected: identity chip shows `signed in as igora@techsee.me`, a card appears after submit, screenshot looks right (check it - the human eye is part of this step). Verify the rows landed:  read the companion Sheet's `tickets` tab via REST and confirm the new row's `authorEmail`.
+- [ ] **Step 3: Run the E2E against both published docs** (html then md) with `DH_EXEC`/`DH_DOC` set accordingly. Expected: identity chip shows `signed in as <DH_PUBLISHER_ACCOUNT>`, a card appears after submit, screenshot looks right (check it - the human eye is part of this step). Verify the rows landed:  read the companion Sheet's `tickets` tab via REST and confirm the new row's `authorEmail`.
 
 - [ ] **Step 4: Check the tree page** (exec URL with no params) in dev-browser: both docs listed under `cc-htmlfeedback / design/designhub-platform`.
 
@@ -1861,12 +1865,12 @@ node build.js --check && npm test && node designhub/build-designhub.js --check &
 
 Then confirm against `docs/designhub/design.md` §7 "V1 (must-have)": publish skill ✓, self-contained scan ✓, login-gated viewing (html + md + widget) ✓, tree UI ✓, comments with identity/threading/statuses ✓, agent access docs ✓.
 
-- [ ] **Step 4: Commit remaining files, push, open the PR (fork only - PRs never target upstream without Igor's explicit approval):**
+- [ ] **Step 4: Commit remaining files, push, open the PR (fork only - PRs never target upstream without the repo owner's explicit approval):**
 
 ```bash
 git add -A && git commit -m "designhub: v1 - README + design doc status"
 git push
-gh pr create --repo TechSeeHome/cc-htmlfeedback --base main \
+gh pr create --repo <DH_FORK_REPO> --base main \
   --title "DesignHub v1: publish skill + GAS serving layer + agent access" \
   --body "Implements docs/designhub/design.md (D1-D19) per docs/designhub/plans/2026-07-05-designhub-v1-implementation.md. All mechanisms POC-validated (docs/designhub/pocs/). Upstream files untouched except the marketplace.json entry (D16)."
 ```

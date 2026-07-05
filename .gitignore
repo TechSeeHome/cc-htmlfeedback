@@ -21,5 +21,8 @@ npm-debug.log*
 docs/superpowers/
 .playwright-mcp
 
-# DesignHub POC local credentials (see docs/designhub/pocs/)
-docs/designhub/pocs/**/.secrets/
+# DesignHub POCs (local-only: org-specific fixtures, credentials, run logs)
+docs/designhub/pocs/
+
+# DesignHub org-specific values referenced by the plan docs (local-only)
+docs/designhub/**/*.local.md

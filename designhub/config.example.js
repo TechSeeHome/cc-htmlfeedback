@@ -3,8 +3,9 @@
 // docs/designhub/plans/environment.local.md. gas/config.js is gitignored: the
 // ids are not secrets (access is enforced by Drive ACLs), but they are
 // org-specific and this fork stays generic. clasp pushes gas/config.js from
-// disk regardless of git. Keep this template OUT of gas/ (clasp would push it
-// and its load would overwrite the real DH_CONFIG).
+// disk regardless of git. Keep this template OUT of gas/: two files assigning
+// DH_CONFIG in the same clasp-pushed directory is fragile and load-order
+// dependent (whichever loses would silently overwrite the other's values).
 var DH_CONFIG = {
   rootFolderId: '<DH_ROOT_FOLDER_ID>',                  // DesignHub (prod root)
   assets: {

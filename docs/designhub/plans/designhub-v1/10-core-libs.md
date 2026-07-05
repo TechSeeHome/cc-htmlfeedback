@@ -44,9 +44,9 @@
 - [ ] **Step 2: Create `designhub/config.example.js`** (committed TEMPLATE - the real
 `gas/config.js` is gitignored in Step 2b so org-specific ids never land in the public
 fork, same policy as `environment.local.md`. The template deliberately lives OUTSIDE
-`gas/`: `clasp push` uploads every `.js` under its rootDir, and a second file assigning
-`DH_CONFIG` would load after `config` in GAS's alphabetical order and clobber the real
-values with placeholders):
+`gas/`: `clasp push` uploads every `.js` under its rootDir, and having two files both
+assign `DH_CONFIG` there is fragile and load-order dependent - whichever file GAS
+loads second would silently overwrite the other's values):
 
 ```js
 // DesignHub deployment configuration TEMPLATE (committed). Copy to
@@ -54,8 +54,9 @@ values with placeholders):
 // docs/designhub/plans/environment.local.md. gas/config.js is gitignored: the
 // ids are not secrets (access is enforced by Drive ACLs), but they are
 // org-specific and this fork stays generic. clasp pushes gas/config.js from
-// disk regardless of git. Keep this template OUT of gas/ (clasp would push it
-// and its load would overwrite the real DH_CONFIG).
+// disk regardless of git. Keep this template OUT of gas/: two files assigning
+// DH_CONFIG in the same clasp-pushed directory is fragile and load-order
+// dependent (whichever loses would silently overwrite the other's values).
 var DH_CONFIG = {
   rootFolderId: '<DH_ROOT_FOLDER_ID>',                  // DesignHub (prod root)
   assets: {

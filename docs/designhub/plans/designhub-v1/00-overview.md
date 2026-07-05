@@ -120,6 +120,19 @@ Task 4):**
    don't leave `upsertRow` as tested-but-unused GAS-side code without a conscious
    choice either way.
 
+**Known accepted risk (execution-time code review, Task 9):** `anchors.mjs`'s `mdText`
+approximation strips code-fence DELIMITER lines but does not protect fenced code BODIES
+from the later heading/list/blockquote/pipe strips that follow - a code sample
+containing a line like `# comment`, `- flag`, or a literal `a|b` gets those characters
+altered the same as prose would. Three sharper bugs in the same function (nested
+emphasis, escaped table pipes, link text with nested brackets - each capable of a
+silent false `anchor-lost`/false strike auto-`resolved` on unchanged content) were
+found and fixed in Task 9's own review cycle; this fenced-code-body gap is lower
+likelihood and was deliberately left unfixed rather than rushing a more invasive
+extract-protect-reinsert change. Revisit if a real doc trips it (a literal `|` or a
+line starting with `#`/`-`/`>` inside a fenced block, immediately followed by a
+comment whose quote/context spans that line).
+
 ---
 
 

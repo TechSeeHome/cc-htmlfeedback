@@ -104,6 +104,38 @@ test('html entities are decoded before matching (source encodes what the browser
     context: 'Foo & Bar <3 the quick brown fox jumps over the lazy dog.' });
   assert.deepEqual(reanchorPass([ticket], doc, true), []);
 });
+
+test('nested emphasis fully unwraps (fixed-point strip) - a strike must NOT auto-resolve when the text is unchanged', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nThis is **bold _italic_ text** in a sentence.\n';
+  const out = reanchorPass([t({ type: 'strike', quote: 'is bold italic text in',
+    context: 'This is bold italic text in a sentence.' })], md, false);
+  assert.deepEqual(out, []);
+});
+
+test('an escaped table pipe is preserved as a literal | (not confused with table decoration)', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\n| type | note |\n|---|---|\n| string \\| number | primary key |\n';
+  const out = reanchorPass([t({ type: 'strike', quote: 'string | number',
+    context: 'string | number' })], md, false);
+  assert.deepEqual(out, []);
+});
+
+test('a link whose text contains nested brackets still matches end to end', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nSee the [quick [brown] fox](https://example.com) jumps over the lazy dog.\n';
+  const out = reanchorPass([t({ type: 'strike', quote: 'quick [brown] fox jumps over the lazy dog',
+    context: 'quick [brown] fox jumps over the lazy dog' })], md, false);
+  assert.deepEqual(out, []);
+});
+
+test('html entities are decoded on the markdown path too', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nFoo &amp; Bar &lt;3 the quick brown fox jumps over the lazy dog.\n';
+  const ticket = t({ quote: 'Foo & Bar <3 the quick brown fox',
+    context: 'Foo & Bar <3 the quick brown fox jumps over the lazy dog.' });
+  assert.deepEqual(reanchorPass([ticket], md, false), []);
+});
 ```
 
 - [ ] **Step 2: Run to verify FAIL:** `node --test designhub/test/anchors.test.js`
@@ -133,24 +165,50 @@ const decodeEntities = (s) => String(s)
 
 // Approximate md-to-text: conservative in the right direction - leftovers only
 // ADD characters to the haystack; the needle (quote/context) is rendered text.
-const mdText = (md) => String(md)
-  .replace(/^```[^\n]*$/gm, ' ')             // code-fence delimiter lines
-  .replace(/`([^`]*)`/g, '$1')               // inline code
-  .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')  // images -> alt text
-  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')   // links -> link text
-  .replace(/^#{1,6}\s+/gm, '')               // heading markers
-  .replace(/(\*\*|__)([^*_]+)\1/g, '$2')     // bold
-  .replace(/(\*|_)([^*_]+)\1/g, '$2')        // emphasis
-  .replace(/^\s*[-*+]\s+/gm, '')             // list bullets
-  .replace(/^\s*>\s?/gm, '')                 // blockquote markers
-  .replace(/\|/g, ' ');                      // table pipes
+// Placeholder for an ESCAPED pipe (\|), so the blanket table-pipe strip below
+// doesn't erase a literal '|' a doc means to display (e.g. a "string | number"
+// type union in a spec table) - restored to '|' as the final step.
+const PIPE_PLACEHOLDER = String.fromCharCode(0);
+const mdText = (md) => {
+  let text = String(md)
+    .replace(/^```[^\n]*$/gm, ' ')             // code-fence delimiter lines
+    .replace(/`([^`]*)`/g, '$1')               // inline code
+    .replace(/\\\|/g, PIPE_PLACEHOLDER)        // escaped pipe -> placeholder, restored below
+    // Lazy [\s\S]*? (not [^\]]*): a link/image whose text itself contains a
+    // "]" (e.g. "[quick [brown] fox](url)") must still match end-to-end -
+    // a match that fails outright leaves the raw "[...](url)" (URL and all)
+    // sitting in the haystack, breaking any quote that spans past it.
+    .replace(/!\[([\s\S]*?)\]\([^)]*\)/g, '$1') // images -> alt text
+    .replace(/\[([\s\S]*?)\]\([^)]*\)/g, '$1')  // links -> link text
+    .replace(/^#{1,6}\s+/gm, '')                // heading markers
+    .replace(/^\s*[-*+]\s+/gm, '')              // list bullets
+    .replace(/^\s*>\s?/gm, '')                  // blockquote markers
+    .replace(/\|/g, ' ');                       // remaining (unescaped/table) pipes
+  // Bold/emphasis run to a FIXED POINT: nested markers (e.g. "**bold _italic_
+  // text**") don't fully strip in one pass - the bold regex can't match
+  // through the inner "_..._" content, so a single pass leaves literal "**"
+  // characters injected mid-haystack, breaking any quote spanning them.
+  let prev;
+  do {
+    prev = text;
+    text = text
+      .replace(/(\*\*|__)([^*_]+)\1/g, '$2')    // bold
+      .replace(/(\*|_)([^*_]+)\1/g, '$2');       // emphasis
+  } while (text !== prev);
+  return text.replace(new RegExp(PIPE_PLACEHOLDER, 'g'), '|');
+};
 
-const textify = (source, isHtml) => norm(isHtml
-  ? decodeEntities(String(source).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' '))
-  : mdText(source));
+const textify = (source, isHtml) => norm(decodeEntities(isHtml
+  ? String(source).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' ')
+  : mdText(source)));
 
 // The widget clips context to 160 chars with a trailing ellipsis - strip it
 // and require a reasonable core before using context as a disambiguator.
+// 12 chars is a deliberately lenient floor, not a tuned constant: the widget
+// stops context capture at the enclosing TD/TH, so a comparison-table cell
+// ("Yes", "N/A") legitimately produces a very short context - below the floor
+// this falls back to quote+section only rather than treating "too short to
+// be meaningful" as a mismatch.
 const contextCore = (context) => norm(String(context || '').replace(/…\s*$/, ''));
 
 export function reanchorPass(tickets, docSource, isHtml) {

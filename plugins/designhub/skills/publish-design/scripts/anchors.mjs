@@ -20,24 +20,50 @@ const decodeEntities = (s) => String(s)
 
 // Approximate md-to-text: conservative in the right direction - leftovers only
 // ADD characters to the haystack; the needle (quote/context) is rendered text.
-const mdText = (md) => String(md)
-  .replace(/^```[^\n]*$/gm, ' ')             // code-fence delimiter lines
-  .replace(/`([^`]*)`/g, '$1')               // inline code
-  .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')  // images -> alt text
-  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')   // links -> link text
-  .replace(/^#{1,6}\s+/gm, '')               // heading markers
-  .replace(/(\*\*|__)([^*_]+)\1/g, '$2')     // bold
-  .replace(/(\*|_)([^*_]+)\1/g, '$2')        // emphasis
-  .replace(/^\s*[-*+]\s+/gm, '')             // list bullets
-  .replace(/^\s*>\s?/gm, '')                 // blockquote markers
-  .replace(/\|/g, ' ');                      // table pipes
+// Placeholder for an ESCAPED pipe (\|), so the blanket table-pipe strip below
+// doesn't erase a literal '|' a doc means to display (e.g. a "string | number"
+// type union in a spec table) - restored to '|' as the final step.
+const PIPE_PLACEHOLDER = String.fromCharCode(0);
+const mdText = (md) => {
+  let text = String(md)
+    .replace(/^```[^\n]*$/gm, ' ')             // code-fence delimiter lines
+    .replace(/`([^`]*)`/g, '$1')               // inline code
+    .replace(/\\\|/g, PIPE_PLACEHOLDER)        // escaped pipe -> placeholder, restored below
+    // Lazy [\s\S]*? (not [^\]]*): a link/image whose text itself contains a
+    // "]" (e.g. "[quick [brown] fox](url)") must still match end-to-end -
+    // a match that fails outright leaves the raw "[...](url)" (URL and all)
+    // sitting in the haystack, breaking any quote that spans past it.
+    .replace(/!\[([\s\S]*?)\]\([^)]*\)/g, '$1') // images -> alt text
+    .replace(/\[([\s\S]*?)\]\([^)]*\)/g, '$1')  // links -> link text
+    .replace(/^#{1,6}\s+/gm, '')                // heading markers
+    .replace(/^\s*[-*+]\s+/gm, '')              // list bullets
+    .replace(/^\s*>\s?/gm, '')                  // blockquote markers
+    .replace(/\|/g, ' ');                       // remaining (unescaped/table) pipes
+  // Bold/emphasis run to a FIXED POINT: nested markers (e.g. "**bold _italic_
+  // text**") don't fully strip in one pass - the bold regex can't match
+  // through the inner "_..._" content, so a single pass leaves literal "**"
+  // characters injected mid-haystack, breaking any quote spanning them.
+  let prev;
+  do {
+    prev = text;
+    text = text
+      .replace(/(\*\*|__)([^*_]+)\1/g, '$2')    // bold
+      .replace(/(\*|_)([^*_]+)\1/g, '$2');       // emphasis
+  } while (text !== prev);
+  return text.replace(new RegExp(PIPE_PLACEHOLDER, 'g'), '|');
+};
 
-const textify = (source, isHtml) => norm(isHtml
-  ? decodeEntities(String(source).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' '))
-  : mdText(source));
+const textify = (source, isHtml) => norm(decodeEntities(isHtml
+  ? String(source).replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]*>/g, ' ')
+  : mdText(source)));
 
 // The widget clips context to 160 chars with a trailing ellipsis - strip it
 // and require a reasonable core before using context as a disambiguator.
+// 12 chars is a deliberately lenient floor, not a tuned constant: the widget
+// stops context capture at the enclosing TD/TH, so a comparison-table cell
+// ("Yes", "N/A") legitimately produces a very short context - below the floor
+// this falls back to quote+section only rather than treating "too short to
+// be meaningful" as a mismatch.
 const contextCore = (context) => norm(String(context || '').replace(/…\s*$/, ''));
 
 export function reanchorPass(tickets, docSource, isHtml) {

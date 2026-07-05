@@ -82,3 +82,35 @@ test('html entities are decoded before matching (source encodes what the browser
     context: 'Foo & Bar <3 the quick brown fox jumps over the lazy dog.' });
   assert.deepEqual(reanchorPass([ticket], doc, true), []);
 });
+
+test('nested emphasis fully unwraps (fixed-point strip) - a strike must NOT auto-resolve when the text is unchanged', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nThis is **bold _italic_ text** in a sentence.\n';
+  const out = reanchorPass([t({ type: 'strike', quote: 'is bold italic text in',
+    context: 'This is bold italic text in a sentence.' })], md, false);
+  assert.deepEqual(out, []);
+});
+
+test('an escaped table pipe is preserved as a literal | (not confused with table decoration)', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\n| type | note |\n|---|---|\n| string \\| number | primary key |\n';
+  const out = reanchorPass([t({ type: 'strike', quote: 'string | number',
+    context: 'string | number' })], md, false);
+  assert.deepEqual(out, []);
+});
+
+test('a link whose text contains nested brackets still matches end to end', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nSee the [quick [brown] fox](https://example.com) jumps over the lazy dog.\n';
+  const out = reanchorPass([t({ type: 'strike', quote: 'quick [brown] fox jumps over the lazy dog',
+    context: 'quick [brown] fox jumps over the lazy dog' })], md, false);
+  assert.deepEqual(out, []);
+});
+
+test('html entities are decoded on the markdown path too', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nFoo &amp; Bar &lt;3 the quick brown fox jumps over the lazy dog.\n';
+  const ticket = t({ quote: 'Foo & Bar <3 the quick brown fox',
+    context: 'Foo & Bar <3 the quick brown fox jumps over the lazy dog.' });
+  assert.deepEqual(reanchorPass([ticket], md, false), []);
+});

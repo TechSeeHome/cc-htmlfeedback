@@ -555,3 +555,94 @@ test('keybindings: Cmd/Ctrl+click on a popover button fixes now', async () => {
   assert.equal(posted.length, 1);
   assert.equal(window.eval('store[1].draft'), false);
 });
+
+test('first-use toast: shown once on the first plain save, not on a fast-path save', async () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  const p = document.getElementById('target');
+  const toast = document.getElementById('fb-toast');
+
+  select(window, p.firstChild, 0, 11);
+  await tick();
+  document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+  assert.equal(toast.textContent, '✓ Saved as draft - nothing is sent until you click Fix');
+  assert.equal(window.localStorage.getItem('ccfb-draft-toast-shown'), '1');
+
+  // The first add() wrapped "Hello world" in a <span>, splitting the original text node, so
+  // p.firstChild is now a stale empty text node rather than the paragraph's visible text -
+  // select "this" from the surviving trailing text node instead. Clear the toast first so a
+  // second (incorrect) firing is visible in the assertion below rather than masked by the
+  // still-unchanged text left over from the first save.
+  toast.textContent = '';
+  const rest = p.lastChild;
+  const start = rest.textContent.indexOf('this');
+  select(window, rest, start, start + 4);
+  await tick();
+  document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+  assert.notEqual(
+    toast.textContent,
+    '✓ Saved as draft - nothing is sent until you click Fix',
+    'not shown a second time'
+  );
+});
+
+test('first-use toast: broken localStorage fails closed (never nags) instead of firing on every save', async () => {
+  const { window, document } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  // Simulate private-browsing/quota/policy storage failures: both getItem and setItem throw,
+  // so a fail-open implementation would never successfully record "shown" and would re-show the
+  // toast on every plain save. Overriding the Storage prototype (not window.localStorage.getItem
+  // directly) is required — jsdom's localStorage is Proxy-backed, so a plain property assignment
+  // is silently absorbed as a storage write instead of shadowing the method.
+  window.Storage.prototype.getItem = function () {
+    throw new Error('storage broken');
+  };
+  window.Storage.prototype.setItem = function () {
+    throw new Error('storage broken');
+  };
+  const p = document.getElementById('target');
+  const toast = document.getElementById('fb-toast');
+
+  select(window, p.firstChild, 0, 11);
+  await tick();
+  document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+  assert.notEqual(
+    toast.textContent,
+    '✓ Saved as draft - nothing is sent until you click Fix',
+    'not shown on the first save when storage throws'
+  );
+
+  toast.textContent = '';
+  const rest = p.lastChild;
+  const start = rest.textContent.indexOf('this');
+  select(window, rest, start, start + 4);
+  await tick();
+  document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+  assert.notEqual(
+    toast.textContent,
+    '✓ Saved as draft - nothing is sent until you click Fix',
+    'still not shown on a second save - fails closed, not open'
+  );
+});

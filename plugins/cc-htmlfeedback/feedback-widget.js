@@ -276,7 +276,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   // While composing feedback, don't let keystrokes trigger the host page's hotkeys (e.g. f=fullscreen, arrows=slides).
   ['keydown','keyup','keypress'].forEach(ev => { pop.addEventListener(ev, e => e.stopPropagation()); panel.addEventListener(ev, e => e.stopPropagation()); });
   let toastT;
-  function showToast(msg, isError){ const t = document.getElementById('fb-toast'); t.textContent = (isError ? '⚠️ ' : '✓ ') + msg; t.classList.toggle('err', !!isError); t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1600); }
+  function showToast(msg, isError, duration){ const t = document.getElementById('fb-toast'); t.textContent = (isError ? '⚠️ ' : '✓ ') + msg; t.classList.toggle('err', !!isError); t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), duration || 1600); }
 
   /* ---- context helpers ---- */
   function blockOf(node){
@@ -448,7 +448,13 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
       fixAllRunning = false;
     }
   }
-  function maybeFirstDraftToast(){ /* replaced in a later task */ }
+  function maybeFirstDraftToast(){
+    try {
+      if(localStorage.getItem('ccfb-draft-toast-shown')) return;
+      localStorage.setItem('ccfb-draft-toast-shown', '1');
+    } catch { return; }   // storage broken: never nag instead of nagging on every save
+    showToast('Saved as draft - nothing is sent until you click Fix', false, 4000);
+  }
 
   /* ---- range wrapping (handles selections spanning multiple nodes) ---- */
   function wrap(range, id, cls){

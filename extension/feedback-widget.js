@@ -197,7 +197,6 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
      though the widget never receives the server's hashed key directly) ---- */
   const DRAFT_KEY = 'ccfb-drafts:' + (function(){ let p = location.pathname; if (p.endsWith('/')) p += 'index.html'; return p; })();
   let persistTimer = null;
-  // eslint-disable-next-line no-unused-vars -- wired into add()/submitDraft()/reconcile()/setRemoved() in a later task
   function schedulePersist(){ if(!CCFB) return; clearTimeout(persistTimer); persistTimer = setTimeout(persistDrafts, 300); }
   // Persists any entry that is a draft OR not yet board-seen (reconcile() sets boardSeen once
   // it actually observes the ticket in board data). A recorded sid alone is NOT enough to stop
@@ -237,6 +236,7 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
   function statusOf(f){ return CCFB ? (f.draft ? 'draft' : (f.status || 'todo')) : null; }
   function statusRank(f){ return CCFB ? (ORDER[statusOf(f)] ?? 0) : 0; }
   function ccfbBase(){ return (CCFB && CCFB.endpoint) || ''; }
+  // eslint-disable-next-line no-unused-vars -- wired into submitDraft() in a later task (add() no longer POSTs directly)
   function ccfbPost(t){ return fetch(ccfbBase() + '/__ccfb/tickets', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(t) }); }
   function shortPage(u){ try { const x = new URL(u); return x.pathname + x.search + x.hash; } catch{ return u || ''; } }
 
@@ -346,8 +346,8 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     side = side === 'right' ? 'left' : 'right';
     if(pending && pending.rect) place(pending.rect);
   });
-  document.getElementById('fb-comment').addEventListener('click', () => add('comment'));
-  document.getElementById('fb-strike').addEventListener('click',  () => add('strike'));
+  document.getElementById('fb-comment').addEventListener('click', e => add('comment', e.metaKey || e.ctrlKey));
+  document.getElementById('fb-strike').addEventListener('click',  e => add('strike', e.metaKey || e.ctrlKey));
   ta.addEventListener('keydown', e => {
     if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); add('comment'); }
     else if(e.key === 'Backspace' && ta.value === ''){ e.preventDefault(); add('strike'); }
@@ -360,23 +360,29 @@ body.fb-dock-left #fb-launch{left:16px;right:auto}
     }
   });
 
-  function add(type){
+  function add(type, fixNow){
     const spans = document.querySelectorAll('[data-fb-id="pending"]');
     if(!spans.length || !pending){ hidePop(); return; }
     const id = ++uid;
     spans.forEach(sp => { sp.className = 'fb-mark' + (type === 'strike' ? ' strike' : ''); sp.dataset.fbId = id; });
-    store[id] = { id, quote: pending.quote, context: pending.context, section: pending.section, note: ta.value.trim(), type, removed: false };
-    if (CCFB) {                                  // connected mode: enqueue the ticket for Claude to fix
-      const f = store[id];
-      f.status = 'todo'; f.page = location.href; f.result = ''; f.files = [];
-      ccfbPost({ type, quote: f.quote, context: f.context, section: f.section, note: f.note, page: location.href })
-        .then(r => r.json()).then(t => { f.sid = t.id; }).catch(() => {});
-    }
+    // page is set unconditionally (not just in connected mode) so a later morph's re-anchor
+    // pass (which filters on f.page === location.href) can find this entry regardless.
+    store[id] = { id, quote: pending.quote, context: pending.context, section: pending.section, note: ta.value.trim(), type, removed: false, page: location.href };
     pending = null;
+    if (CCFB) {                                  // connected mode: a new note is a local draft, not an instant POST
+      const f = store[id];
+      f.draft = true; f.status = 'todo'; f.result = ''; f.files = []; f.boardSeen = false;
+      if (fixNow) { submitDraft(f); showToast('Sent to the agent'); }
+      else { maybeFirstDraftToast(); }
+      schedulePersist();
+    }
     render();
     closePop();
     record(() => setRemoved(id, false), () => setRemoved(id, true)); // apply = restore, revert = remove
   }
+  // eslint-disable-next-line no-unused-vars -- param used once this stub is replaced in a later task
+  function submitDraft(f){ /* replaced in a later task */ }
+  function maybeFirstDraftToast(){ /* replaced in a later task */ }
 
   /* ---- range wrapping (handles selections spanning multiple nodes) ---- */
   function wrap(range, id, cls){

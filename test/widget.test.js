@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { loadWidget } = require('./helpers/dom.js');
+const { loadWidget, select, tick } = require('./helpers/dom.js');
 
 test('harness: loadWidget boots the real widget (disconnected mode)', () => {
   const { document } = loadWidget();
@@ -107,5 +107,50 @@ test('persistence: a restored draft:false entry with no sid reverts to a draft',
     window.eval('store[3].draft'),
     true,
     'no sid means the POST outcome is unknown; a visible Fix button beats a stranded card'
+  );
+});
+
+test('add(): connected mode creates a draft, does not POST, and sets page', async () => {
+  const { window, document, posted } = loadWidget({
+    ccfb: { endpoint: '', sessionId: 'test', mode: 'static' },
+  });
+  const p = document.getElementById('target');
+  select(window, p.firstChild, 0, 11); // "Hello world"
+  await tick();
+  document.getElementById('fb-text').value = 'make this bold';
+  document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+
+  assert.deepEqual(posted, [], 'no POST fired');
+  const f = window.eval('store[1]');
+  assert.equal(f.draft, true);
+  assert.equal(f.quote, 'Hello world');
+  assert.equal(f.note, 'make this bold');
+  assert.equal(f.page, 'http://127.0.0.1:4317/test.html');
+});
+
+test('add(): disconnected mode is unchanged (no draft field, no persistence)', async () => {
+  const { window, document } = loadWidget(); // no ccfb
+  const p = document.getElementById('target');
+  select(window, p.firstChild, 0, 11);
+  await tick();
+  document.getElementById('fb-text').value = 'a note';
+  document
+    .getElementById('fb-text')
+    .dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  await tick();
+
+  const f = window.eval('store[1]');
+  assert.equal(f.draft, undefined, 'draft is a connected-mode-only concept');
+  assert.equal(
+    window.sessionStorage.getItem('ccfb-drafts:/test.html'),
+    null,
+    'disconnected mode never writes the snapshot'
   );
 });

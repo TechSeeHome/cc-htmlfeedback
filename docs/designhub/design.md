@@ -1,6 +1,6 @@
 # DesignHub - design proposal (DRAFT for review)
 
-> **Status: draft v0.1 · 2026-07-02 · open for comments**
+> **Status: v1 implemented · spike-validated (see pocs/) · 2026-07-05 draft accepted**
 > A platform for publishing HTML/MD design docs from our repos to a Google-login-gated
 > hub, collecting in-page feedback from the whole company (including PMs and management
 > without GitHub accounts), and growing into an org knowledge portal.

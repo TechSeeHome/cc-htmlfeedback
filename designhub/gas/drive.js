@@ -66,10 +66,15 @@ function dhPortalRows_() {
 // Trailing underscore (final-review finding): a top-level GAS function without
 // one is reachable from a published doc's own script via google.script.run -
 // this function isn't part of D17(a)'s bridge contract (comment-Sheet rows +
-// catalog reads only) and shouldn't be client-callable at all. The Apps
-// Script editor's manual "Run" dropdown and ScriptApp trigger targeting both
-// still work on underscore-suffixed names - only google.script.run
-// reachability is affected.
+// catalog reads only) and shouldn't be client-callable at all. Correction
+// (live redeploy, 2026-07-06): the Apps Script editor's manual "Run" dropdown
+// and the Trigger dialog's function picker BOTH hide underscore-suffixed
+// functions too - confirmed empirically, not just a google.script.run effect.
+// ScriptApp.newTrigger('dhReconcile_') from CODE (as dhInstallReconcilerTrigger_
+// does below) still works fine - only the two UI pickers filter it out. Net
+// effect: reinstalling this trigger after a rename needs a temporary
+// non-underscore wrapper function pushed, run once via the UI, then removed -
+// see 00-overview.md.
 function dhReconcile_() {
   var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
   var shards = [];
@@ -98,10 +103,14 @@ function dhReconcile_() {
   return rows.length;
 }
 
-// One-time (idempotent) trigger install - run manually from the editor after
-// first deploy, or re-run any time; it replaces any existing dhReconcile_ trigger.
-// Also underscore-suffixed (see dhReconcile_'s comment) - it isn't part of the
-// bridge contract either.
+// One-time (idempotent) trigger install - invoke after first deploy, or
+// re-run any time. Also underscore-suffixed (see dhReconcile_'s comment) -
+// it isn't part of the bridge contract either, and per that same comment
+// can't be run directly from the editor's UI (a temporary non-underscore
+// wrapper is needed - see 00-overview.md). Only cleans up an existing
+// trigger already pointed at 'dhReconcile_' - a trigger left over from a
+// PRIOR function name (like 'dhReconcile' before this file's rename) is not
+// recognized or removed here and needs deleting separately.
 function dhInstallReconcilerTrigger_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'dhReconcile_') ScriptApp.deleteTrigger(t);

@@ -147,32 +147,33 @@ properly needs markdown-link-syntax detection, out of scope for what Task 10
 was asked to build. Left as a backlog item for whoever extends publishing
 beyond single-file HTML docs.
 
-**Pending production sync (final cross-task review):** fixes landed in
-`designhub/gas/` after Task 8's production deployment and have NOT
-been pushed/redeployed as part of this work. In `drive.js`: `dhReconcile`/
-`dhInstallReconcilerTrigger` were renamed to `dhReconcile_`/
-`dhInstallReconcilerTrigger_` (D17(a) containment - a top-level GAS function
-without a trailing underscore is reachable from a published doc's own script
-via `google.script.run`; these two aren't part of the bridge contract and
-shouldn't be client-callable). Deliberately not deployed in the same session:
-the reviewer assessed blast radius as low (both functions are idempotent,
-self-healing, and touch only the disposable `_portal-index` cache - no
-identity forging, no data loss, and the threat model is trusted domain
-publishers per D11/D17(d)), so a third live-production authorization round
-wasn't requested. **Before or during the next production touch:** `clasp
-push -f && clasp create-deployment -i <id> -d "<desc>"`, then re-run
-`dhInstallReconcilerTrigger_` once from the Apps Script editor (the old
-`dhInstallReconcilerTrigger`-named trigger keeps firing harmlessly against a
-function that will no longer exist post-push - GAS logs a failed trigger
-execution, doesn't error the app - until this reinstall step runs). Also
-rolled into this same pending push: `designhub/gas/widget.js` was
-regenerated (M-3 cleanup) to fix a stale `widget-designhub.js` filename in
-its own banner comment (`build-designhub.js`'s `transform()`, left over from
-before Task 7 renamed the artifact) - purely cosmetic, no behavior change,
-bundled here rather than triggering its own deploy round.
+**Production sync - DEPLOYED as version 3 (2026-07-06).** The
+`dhReconcile`/`dhInstallReconcilerTrigger` → `dhReconcile_`/
+`dhInstallReconcilerTrigger_` rename (D17(a) containment - a top-level GAS
+function without a trailing underscore is reachable from a published doc's
+own script via `google.script.run`; these two aren't part of the bridge
+contract and shouldn't be client-callable), the M-3 `widget.js` banner-comment
+cleanup, and the two post-launch fixes below all shipped together via
+`clasp push -f && clasp create-deployment -i <same id>` - the public `/exec`
+URL is unchanged, every previously-published doc link still works.
 
-**Post-launch fixes from live user testing (2026-07-06), also pending the
-same production sync:**
+**Reinstalling the reconciler trigger hit a real Apps Script quirk worth
+recording:** both the editor's "Run" function dropdown AND the Trigger
+dialog's function picker hide any function whose name ends in an underscore -
+confirmed empirically, not documented clearly by Google. `ScriptApp.newTrigger
+('dhReconcile_')` called *from code* (as `dhInstallReconcilerTrigger_` does)
+works fine; only the two UI pickers filter it out. Worked around by pushing a
+temporary one-line, non-underscore wrapper function, running it once via the
+Run dropdown (which created the correct `dhReconcile_` trigger), deleting the
+stale `dhReconcile`-named trigger via the Triggers page's row menu, then
+removing the wrapper and re-pushing - never committed to git. Confirmed
+afterward: exactly one trigger, correctly named `dhReconcile_`. See the
+corrected comments on `dhReconcile_`/`dhInstallReconcilerTrigger_` in
+`drive.js` for the full explanation, kept close to the code for the next
+person who renames a trigger-bound function.
+
+**Post-launch fixes from live user testing (2026-07-06), deployed and
+verified live as part of the same version 3 push:**
 - **Real per-comment delete.** The widget's ✕ (discard) button is upstream's
   personal, per-tab-only "hide" - `setRemoved` never reaches the server (see
   `feedback-widget.html`'s own "apply = remove, revert = restore" comment on
@@ -214,8 +215,6 @@ same production sync:**
 - Test coverage: `schema.test.js` ('deleted' in `VALID_STATUSES`),
   `transform.test.js` (relabeled strings present, old strings absent, R7's
   `discard()` guard on `f.sid`).
-function that will no longer exist post-push - GAS logs a failed trigger
-execution, doesn't error the app - until this reinstall step runs).
 
 ---
 

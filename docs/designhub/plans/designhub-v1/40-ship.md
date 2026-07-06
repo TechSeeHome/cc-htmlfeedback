@@ -42,7 +42,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
       - name: upstream build is clean (never edited)
         run: node build.js --check
       - name: upstream tests
@@ -60,6 +61,8 @@ node build.js --check && npm test && node designhub/build-designhub.js --check &
 ```
 
 Expected: all four green. (`npm test` and `build.js --check` prove the D16 promise: our additions did not disturb upstream.) `npm test` runs `node --test --test-force-exit`, a flag added in Node 20.14 - CI's `setup-node@v4` with `node-version: 20` resolves to a current 20.x and is fine, but if this fails locally with `bad option: --test-force-exit`, the dev machine's pinned node is older; `nvm install 20 && nvm use 20` (or bump the symlink per the user's global CLAUDE.md npm-globals note) before continuing. Do NOT edit upstream's `package.json` to work around it (D16).
+
+**Trap this exact command sequence can't catch:** a dev machine already has `node_modules/` installed from earlier work, so `npm test` passing locally does NOT prove CI (a fresh checkout) has its dependencies (e.g. `jsdom`, a devDependency `test/widget.test.js` needs) - that's exactly what caused this workflow to ship without an `npm ci` step in an earlier pass. To genuinely reproduce what CI sees, verify from a clean export: `git archive HEAD | (mkdir -p /tmp/ci-check && tar -x -C /tmp/ci-check) && cd /tmp/ci-check && npm ci && node build.js --check && npm test && node designhub/build-designhub.js --check && node --test designhub/test/; cd -`.
 
 - [ ] **Step 4: Commit:** `git add .claude-plugin/marketplace.json .github/ && git commit -m "designhub: marketplace entry + fork-side CI (D16)"`
 

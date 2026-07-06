@@ -1,13 +1,21 @@
 // doGet router: tree (no params) | ?doc=<path> (serve html/md + widget) |
 // ?asset=widget|marked|mermaid (ContentService JS - poc3: big bundles must
 // NOT be inlined, HtmlService truncates giant inline scripts).
+//
+// The widget asset specifically must NOT be served via
+// HtmlService.createHtmlOutputFromFile: verified empirically (Task 13 E2E
+// against the real deployed app) that Chrome's Opaque Response Blocking (ORB)
+// blocks that response when fetched as a <script> subresource from inside the
+// sandboxed content iframe - both as a static server-embedded <script src> tag
+// and as a dynamically-created one. DH_WIDGET_JS (gas/widget.js, a plain
+// script-scope string built by build-designhub.js) sidesteps HtmlService
+// entirely, matching the already-proven marked/mermaid DriveApp-based routes.
 
 function dhExecUrl_() { return ScriptApp.getService().getUrl(); }
 
 function dhAsset_(name) {
   if (name === 'widget') {
-    return ContentService.createTextOutput(HtmlService.createHtmlOutputFromFile('widget').getContent())
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    return ContentService.createTextOutput(DH_WIDGET_JS).setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   var id = DH_CONFIG.assets[name];
   if (!id) throw new Error('unknown asset: ' + name);

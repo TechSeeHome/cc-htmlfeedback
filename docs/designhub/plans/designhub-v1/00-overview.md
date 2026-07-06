@@ -45,7 +45,7 @@ and fill in your org's values.
 
 ```text
 designhub/
-  build-designhub.js            fail-loud transform: feedback-widget.html -> gas/widget.html (Task 7)
+  build-designhub.js            fail-loud transform: feedback-widget.html -> gas/widget.js (Task 7)
   config.example.js             DH_CONFIG template (committed - placeholders only; lives
                                 OUTSIDE gas/ so clasp push can never upload it, see Task 1)
   gas/                          clasp project (rootDir), created Task 1, deployed Task 8
@@ -54,7 +54,9 @@ designhub/
     main.js                     doGet router: tree | ?doc= | ?asset=
     drive.js                    DriveApp/SpreadsheetApp adapters (thin, no unit tests)
     bridge.js                   getIdentity/listCatalog/listComments/submitComment/reply/setStatus
-    widget.html                 BUILT ARTIFACT of build-designhub.js (committed, --check verified)
+    widget.js                   BUILT ARTIFACT of build-designhub.js: var DH_WIDGET_JS = "...";
+                                (committed, --check verified). A .js string constant, NOT an
+                                HtmlService .html file - see Task 7's ORB note (Task 13 finding).
     lib/
       schema.js                 columns, status map, row<->object mapping        (Task 2)
       paths.js                  D14 path sanitize/parse                          (Task 3)

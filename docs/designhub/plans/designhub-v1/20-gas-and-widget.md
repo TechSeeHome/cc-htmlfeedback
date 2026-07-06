@@ -217,13 +217,21 @@ function setStatus(docPath, id, status) {
 // doGet router: tree (no params) | ?doc=<path> (serve html/md + widget) |
 // ?asset=widget|marked|mermaid (ContentService JS - poc3: big bundles must
 // NOT be inlined, HtmlService truncates giant inline scripts).
+//
+// The widget asset specifically must NOT be served via
+// HtmlService.createHtmlOutputFromFile: verified empirically (Task 13 E2E
+// against the real deployed app) that Chrome's Opaque Response Blocking (ORB)
+// blocks that response when fetched as a <script> subresource from inside the
+// sandboxed content iframe - both as a static server-embedded <script src> tag
+// and as a dynamically-created one. DH_WIDGET_JS (gas/widget.js, a plain
+// script-scope string built by build-designhub.js) sidesteps HtmlService
+// entirely, matching the already-proven marked/mermaid DriveApp-based routes.
 
 function dhExecUrl_() { return ScriptApp.getService().getUrl(); }
 
 function dhAsset_(name) {
   if (name === 'widget') {
-    return ContentService.createTextOutput(HtmlService.createHtmlOutputFromFile('widget').getContent())
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    return ContentService.createTextOutput(DH_WIDGET_JS).setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   var id = DH_CONFIG.assets[name];
   if (!id) throw new Error('unknown asset: ' + name);
@@ -278,7 +286,9 @@ function doGet(e) {
 
 ### Task 7: `build-designhub.js` - the fail-loud widget transform (D16)
 
-Generates `designhub/gas/widget.html` (raw widget JS, served via `?asset=widget`) from untouched upstream `feedback-widget.html`. Mirrors upstream `build.js` extraction, then swaps the transport layer. Every replacement asserts its anchor string occurs EXACTLY ONCE so upstream drift fails the build instead of silently shipping a broken widget.
+Generates `designhub/gas/widget.js` (raw widget JS wrapped as a plain script-scope string, served via `?asset=widget`) from untouched upstream `feedback-widget.html`. Mirrors upstream `build.js` extraction, then swaps the transport layer. Every replacement asserts its anchor string occurs EXACTLY ONCE so upstream drift fails the build instead of silently shipping a broken widget.
+
+**Why a `.js` string constant and not an `.html` HtmlService file (execution-time finding, Task 13):** the artifact was originally `designhub/gas/widget.html`, served via `HtmlService.createHtmlOutputFromFile('widget').getContent()`. Task 13's real E2E run against the deployed app found this response gets blocked by Chrome's Opaque Response Blocking (ORB) when fetched as a `<script>` subresource from inside the sandboxed content iframe - reproduced both as a static server-embedded `<script src>` tag and as a dynamically-created one, and confirmed the differentiator empirically: the DriveApp-sourced `marked`/`mermaid` asset routes (same ContentService wrapping, no HtmlService involved) load fine via the identical dynamic-injection pattern. The fix moves the widget off HtmlService entirely: `build-designhub.js` wraps the transform's output as `var DH_WIDGET_JS = <JSON-escaped string>;` in a plain `.js` project file, and `dhAsset_('widget')` in Task 6's `main.js` returns it directly via `ContentService.createTextOutput(DH_WIDGET_JS)` - no file-read API at all.
 
 The complete upstream transport surface (verified by reading `feedback-widget.html` at the revision this plan was written; line refs for orientation only - match on strings, not lines):
 - `ccfbPost()` - POST `/__ccfb/tickets` (submit)
@@ -290,7 +300,7 @@ The complete upstream transport surface (verified by reading `feedback-widget.ht
 
 **Files:**
 - Create: `designhub/build-designhub.js`
-- Create: `designhub/gas/widget.html` (generated - never hand-edit)
+- Create: `designhub/gas/widget.js` (generated - never hand-edit)
 - Test: `designhub/test/transform.test.js`
 
 - [ ] **Step 1: Write the failing test** (`designhub/test/transform.test.js`) - runs the transform against the REAL upstream source so upstream drift is caught in CI:
@@ -368,7 +378,7 @@ test('transform fails loudly when the output would be malformed JS (syntax backs
 ```js
 #!/usr/bin/env node
 /* Build the DesignHub widget variant from UNTOUCHED upstream feedback-widget.html.
- *   node designhub/build-designhub.js          - write designhub/gas/widget.html
+ *   node designhub/build-designhub.js          - write designhub/gas/widget.js
  *   node designhub/build-designhub.js --check  - verify output matches source; exit 1 on drift
  * Transport swap: fetch /__ccfb/* + SSE -> google.script.run bridge (design D16, section 6).
  * FAIL-LOUD CONTRACT: every anchor string below must occur exactly once in the
@@ -380,7 +390,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = path.join(__dirname, '..');
-const OUT = path.join(__dirname, 'gas', 'widget.html');
+const OUT = path.join(__dirname, 'gas', 'widget.js');
 
 function fail(msg) { console.error('build-designhub.js: ' + msg); process.exit(1); }
 
@@ -493,7 +503,7 @@ ${body}
     execFileSync(process.execPath, ['--check', syntaxCheckFile], { stdio: 'pipe' });
   } catch (e) {
     const detail = (e.stderr ? e.stderr.toString() : e.message).trim();
-    throw new Error('generated widget.html is not valid JavaScript:\n' + detail + '\nThe transform likely produced a truncated/malformed body - re-check the R1-R5 anchors and the subscribeSSE regex against the current upstream structure');
+    throw new Error('generated widget.js is not valid JavaScript:\n' + detail + '\nThe transform likely produced a truncated/malformed body - re-check the R1-R5 anchors and the subscribeSSE regex against the current upstream structure');
   } finally {
     try { fs.unlinkSync(syntaxCheckFile); } catch { /* best-effort cleanup */ }
   }
@@ -501,18 +511,36 @@ ${body}
   return out;
 }
 
+// Wrapped as a plain script-scope JS string (a .js project file), NOT served via
+// HtmlService.createHtmlOutputFromFile: verified empirically against the real
+// deployed app (Task 13 E2E) that Chrome's Opaque Response Blocking (ORB) blocks
+// an HtmlService-sourced ContentService response when fetched as a <script>
+// subresource from inside the sandboxed content iframe - both as a static
+// server-embedded <script src> tag AND as a dynamically-created one. A plain
+// ContentService.createTextOutput(scriptScopeStringVar) response does not
+// trigger it (matches the already-proven marked/mermaid asset routes, which
+// read their content from DriveApp, never touching HtmlService).
+function wrap(out) {
+  return '// GENERATED by designhub/build-designhub.js from upstream feedback-widget.html - NEVER EDIT.\n' +
+    '// Served by the DesignHub web app as ?asset=widget via plain ContentService,\n' +
+    '// not HtmlService - see the comment above wrap() in build-designhub.js for why.\n' +
+    'var DH_WIDGET_JS = ' + JSON.stringify(out) + ';\n' +
+    "if (typeof module !== 'undefined') module.exports = DH_WIDGET_JS;\n";
+}
+
 function main() {
   const src = fs.readFileSync(path.join(root, 'feedback-widget.html'), 'utf8');
   let out;
   try { out = transform(src); } catch (e) { fail(e.message); }
+  const wrapped = wrap(out);
   if (process.argv.includes('--check')) {
     const disk = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
-    if (disk !== out) fail('designhub/gas/widget.html is stale - run: node designhub/build-designhub.js');
+    if (disk !== wrapped) fail('designhub/gas/widget.js is stale - run: node designhub/build-designhub.js');
     console.log('build-designhub: up to date');
     return;
   }
-  fs.writeFileSync(OUT, out);
-  console.log('wrote ' + OUT + ' (' + out.length + ' bytes)');
+  fs.writeFileSync(OUT, wrapped);
+  console.log('wrote ' + OUT + ' (' + wrapped.length + ' bytes)');
 }
 
 if (require.main === module) main();
@@ -524,7 +552,7 @@ module.exports = { transform };
 - [ ] **Step 5: Generate the artifact and re-check:**
 
 Run: `node designhub/build-designhub.js && node designhub/build-designhub.js --check`
-Expected: `wrote .../widget.html (~66000 bytes)` then `build-designhub: up to date`
+Expected: `wrote .../widget.js (~66000 bytes)` then `build-designhub: up to date`
 
 - [ ] **Step 6: Commit:** `git add designhub/ && git commit -m "designhub: fail-loud widget transform - GAS transport variant (D16)"`
 

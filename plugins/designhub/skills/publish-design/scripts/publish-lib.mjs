@@ -36,6 +36,16 @@ export function newIndexRow({ type, title, repo, feature, jira, owner,
     driveFileId, commentSheetId, url, 'active', now, now];
 }
 
+// Final-review finding: featureDir() only strips filesystem-illegal characters
+// (/ \ : * ? " < > |), not URL-query-hostile ones (& # %) that are legal in
+// git branch names - a raw, unencoded docPath containing e.g. "&" splits the
+// query string early, and main.js's dhResolveDoc_ then fails to resolve the
+// truncated path (the doc publishes fine but its own catalog link 404s).
+// GAS's e.parameter decodes a query value once, so per-segment encoding here
+// round-trips correctly through parseDocPath on the other side.
+export const docUrl = (execUrl, docPath) =>
+  `${execUrl}?doc=${docPath.split('/').map(encodeURIComponent).join('/')}`;
+
 // D19 direct-upsert decision point (00-overview.md "Two items for whoever
 // executes Task 6 and Task 10", item 2): gas/lib/rollup.js exports a tested
 // upsertRow(rows, row) - find a row by its key column, replace it in place,

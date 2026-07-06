@@ -104,7 +104,7 @@ for its hand-rolled array literals in Tasks 6 and 10 and update them by hand.
 Task 4):**
 1. `rollup.js`'s `buildRollup` breaks an exact `updatedAt` tie by first-row-wins,
    which is deterministic for a given `shards` array but NOT run-to-run stable if the
-   caller assembles `shards` in a non-fixed order. Task 6's `dhReconcile` walks Drive
+   caller assembles `shards` in a non-fixed order. Task 6's `dhReconcile_` walks Drive
    folders via `getFolders()`/`getFilesByName()`, whose iteration order Drive does not
    guarantee - so when implementing Task 6, consider sorting the shard list into a
    stable order (e.g. by folder path) before calling `buildRollup`, if reconciler
@@ -146,6 +146,25 @@ source wouldn't detect Markdown-syntax image/link references - closing this
 properly needs markdown-link-syntax detection, out of scope for what Task 10
 was asked to build. Left as a backlog item for whoever extends publishing
 beyond single-file HTML docs.
+
+**Pending production sync (final cross-task review):** two fixes landed in
+`designhub/gas/drive.js` after Task 8's production deployment and have NOT
+been pushed/redeployed as part of this work: `dhReconcile`/
+`dhInstallReconcilerTrigger` were renamed to `dhReconcile_`/
+`dhInstallReconcilerTrigger_` (D17(a) containment - a top-level GAS function
+without a trailing underscore is reachable from a published doc's own script
+via `google.script.run`; these two aren't part of the bridge contract and
+shouldn't be client-callable). Deliberately not deployed in the same session:
+the reviewer assessed blast radius as low (both functions are idempotent,
+self-healing, and touch only the disposable `_portal-index` cache - no
+identity forging, no data loss, and the threat model is trusted domain
+publishers per D11/D17(d)), so a third live-production authorization round
+wasn't requested. **Before or during the next production touch:** `clasp
+push -f && clasp create-deployment -i <id> -d "<desc>"`, then re-run
+`dhInstallReconcilerTrigger_` once from the Apps Script editor (the old
+`dhInstallReconcilerTrigger`-named trigger keeps firing harmlessly against a
+function that will no longer exist post-push - GAS logs a failed trigger
+execution, doesn't error the app - until this reinstall step runs).
 
 ---
 

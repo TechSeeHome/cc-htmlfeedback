@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { accessToken, api } from './gauth.mjs';
-import { scanAssets, featureDir, newIndexRow, upsertRowIndex,
+import { scanAssets, featureDir, newIndexRow, upsertRowIndex, docUrl,
   TICKET_COLS, INDEX_COLS, META_COLS } from './publish-lib.mjs';
 import { reanchorPass } from './anchors.mjs';
 
@@ -164,7 +164,7 @@ for (const ch of changes) {
 // ---- 6. feature _index upsert (stable row uuid) + title ----
 const title = (IS_MD ? (content.match(/^#\s+(.+)$/m) || [])[1]
   : (content.match(/<title>(.*?)<\/title>/i) || [])[1]) || FILE_NAME;
-const url = `${CONFIG.execUrl}?doc=${DOC_PATH}`;
+const url = docUrl(CONFIG.execUrl, DOC_PATH);
 const ID_COL = INDEX_COLS.indexOf('driveFileId');
 // D19 direct-upsert decision (see 00-overview.md "Two items for whoever
 // executes Task 6 and Task 10", item 2, and publish-lib.mjs's upsertRowIndex

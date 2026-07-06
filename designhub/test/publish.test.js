@@ -68,3 +68,19 @@ test('upsertRowIndex: empty rows always means append', async () => {
   const { upsertRowIndex } = await mod();
   assert.equal(upsertRowIndex([], 0, 'anything'), -1);
 });
+
+// Final-review finding: featureDir() sanitizes filesystem-illegal characters
+// but not URL-query-hostile ones (& # %), which are legal in git branch
+// names - an unencoded docPath containing "&" would split the query string
+// early and the doc's own published link would 404 against main.js's
+// parseDocPath.
+test('docUrl percent-encodes each path segment (branch names may contain & # %)', async () => {
+  const { docUrl, featureDir } = await mod();
+  const fd = featureDir('feature/foo&bar#baz');
+  const rawDocPath = `repo/${fd}/file.html`;
+  const url = docUrl('https://script.google.com/macros/s/X/exec', rawDocPath);
+  assert.equal(url, 'https://script.google.com/macros/s/X/exec?doc=repo/feature--foo%26bar%23baz/file.html');
+  // URLSearchParams decodes a query value exactly once - the same as GAS's
+  // e.parameter.doc - so this must come back to the original, unencoded path.
+  assert.equal(new URL(url).searchParams.get('doc'), rawDocPath);
+});

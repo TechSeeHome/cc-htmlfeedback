@@ -86,7 +86,14 @@ function dhPortalRows_() {
 // recording it alongside its shard and sorting by path before calling
 // buildRollup is free and makes the result deterministic run-to-run
 // regardless of Drive's listing order.
-function dhReconcile() {
+// Trailing underscore (final-review finding): a top-level GAS function without
+// one is reachable from a published doc's own script via google.script.run -
+// this function isn't part of D17(a)'s bridge contract (comment-Sheet rows +
+// catalog reads only) and shouldn't be client-callable at all. The Apps
+// Script editor's manual "Run" dropdown and ScriptApp trigger targeting both
+// still work on underscore-suffixed names - only google.script.run
+// reachability is affected.
+function dhReconcile_() {
   var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
   var shards = [];
   var queue = [{ folder: root, path: '' }];
@@ -115,12 +122,14 @@ function dhReconcile() {
 }
 
 // One-time (idempotent) trigger install - run manually from the editor after
-// first deploy, or re-run any time; it replaces any existing dhReconcile trigger.
-function dhInstallReconcilerTrigger() {
+// first deploy, or re-run any time; it replaces any existing dhReconcile_ trigger.
+// Also underscore-suffixed (see dhReconcile_'s comment) - it isn't part of the
+// bridge contract either.
+function dhInstallReconcilerTrigger_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'dhReconcile') ScriptApp.deleteTrigger(t);
+    if (t.getHandlerFunction() === 'dhReconcile_') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('dhReconcile').timeBased()
+  ScriptApp.newTrigger('dhReconcile_').timeBased()
     .everyHours(DH_CONFIG.reconcilerEveryHours).create();
 }
 ```
@@ -643,7 +652,7 @@ Expected: `Deployed <DEPLOYMENT_ID> @1`. The exec URL is `https://script.google.
 
 Open the exec URL in the logged-in dev-browser (named browser `designhub`), click "REVIEW PERMISSIONS", pick `<DH_PUBLISHER_ACCOUNT>`, on the scope screen **tick ALL FOUR scopes** (email, Drive read, Sheets, script triggers), Continue. The click-through sequence (popup handling, Select all pitfall) is documented in docs/designhub/pocs/poc1/README.md, Operational learnings #1; a human doing it in that browser window is equally fine.
 
-- [ ] **Step 4: Install the D19 reconciler trigger:** open `https://script.google.com/d/<SCRIPT_ID>/edit`, select function `dhInstallReconcilerTrigger`, Run once (grants may re-prompt; approve).
+- [ ] **Step 4: Install the D19 reconciler trigger:** open `https://script.google.com/d/<SCRIPT_ID>/edit`, select function `dhInstallReconcilerTrigger_` (the trailing underscore keeps it off `google.script.run`'s callable surface per D17(a) - the editor's Run dropdown still lists it), Run once (grants may re-prompt; approve).
 
 - [ ] **Step 5: Smoke-check via dev-browser:**
 

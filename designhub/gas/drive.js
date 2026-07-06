@@ -63,7 +63,14 @@ function dhPortalRows_() {
 // it alongside its shard and sorting by path before calling buildRollup is
 // free and makes the result deterministic run-to-run regardless of Drive's
 // listing order.
-function dhReconcile() {
+// Trailing underscore (final-review finding): a top-level GAS function without
+// one is reachable from a published doc's own script via google.script.run -
+// this function isn't part of D17(a)'s bridge contract (comment-Sheet rows +
+// catalog reads only) and shouldn't be client-callable at all. The Apps
+// Script editor's manual "Run" dropdown and ScriptApp trigger targeting both
+// still work on underscore-suffixed names - only google.script.run
+// reachability is affected.
+function dhReconcile_() {
   var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
   var shards = [];
   var queue = [{ folder: root, path: '' }];
@@ -92,11 +99,13 @@ function dhReconcile() {
 }
 
 // One-time (idempotent) trigger install - run manually from the editor after
-// first deploy, or re-run any time; it replaces any existing dhReconcile trigger.
-function dhInstallReconcilerTrigger() {
+// first deploy, or re-run any time; it replaces any existing dhReconcile_ trigger.
+// Also underscore-suffixed (see dhReconcile_'s comment) - it isn't part of the
+// bridge contract either.
+function dhInstallReconcilerTrigger_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'dhReconcile') ScriptApp.deleteTrigger(t);
+    if (t.getHandlerFunction() === 'dhReconcile_') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('dhReconcile').timeBased()
+  ScriptApp.newTrigger('dhReconcile_').timeBased()
     .everyHours(DH_CONFIG.reconcilerEveryHours).create();
 }

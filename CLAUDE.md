@@ -10,7 +10,7 @@ This repo is **both** a Claude Code plugin marketplace and the single source of 
 `/cc-htmlfeedback` skill. Layout:
 
 ```
-.claude-plugin/marketplace.json          ← marketplace (lists the one plugin)
+.claude-plugin/marketplace.json          ← marketplace (lists the plugins - cc-htmlfeedback, designhub)
 plugins/cc-htmlfeedback/                  ← the installable plugin
   .claude-plugin/plugin.json
   skills/cc-htmlfeedback/                 ← canonical skill source — EDIT HERE
@@ -29,13 +29,30 @@ and run `build.js` after changing the server, lib, or widget. `node build.js --c
 
 ### Install / use
 
+From a local checkout (recommended - always matches your current branch, including
+plugins not yet merged upstream):
+
 ```
-/plugin marketplace add leetwito/cc-htmlfeedback   # or: /plugin marketplace add .  (local dev)
+/plugin marketplace add .
 /plugin install cc-htmlfeedback@cc-htmlfeedback
 /cc-htmlfeedback
 ```
 
-After editing the skill text, run `/plugin marketplace update` to refresh the installed copy.
+To install from a GitHub remote instead, use *your own* fork/remote, not a hardcoded
+upstream repo - `/plugin marketplace add <owner>/cc-htmlfeedback` (substitute the
+owner you actually push to; installing from someone else's fork won't have your
+in-progress plugin work).
+
+The marketplace name is always `cc-htmlfeedback` regardless of source (it comes from
+the `name` field in `marketplace.json`, not the owner/repo path) - so
+`/plugin install <plugin>@cc-htmlfeedback` is correct either way.
+
+After editing the skill text, run `/plugin marketplace update` to refresh the
+installed copy. **If you added a brand-new plugin to `marketplace.json`** (not just
+edited an existing one), `/plugin install` may report "not found" even after
+`marketplace add`/`update` - the running CLI process can cache the marketplace's
+plugin list from session start. Exit the session (`/exit`) and start a fresh `claude`
+process, then retry the install - no need to re-add the marketplace.
 
 ## Architect review backlog — TODO (review: 2026-06-18)
 

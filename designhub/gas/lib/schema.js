@@ -10,7 +10,7 @@ var DH_SCHEMA = (function () {
     'updatedAt'];
   var META_COLS = ['repo', 'pathInRepo', 'branch', 'commitSha', 'pr', 'jira',
     'publisher', 'publishedAt', 'note'];
-  var VALID_STATUSES = ['open', 'in-progress', 'resolved', 'declined', 'anchor-lost'];
+  var VALID_STATUSES = ['open', 'in-progress', 'resolved', 'declined', 'anchor-lost', 'deleted'];
   var WIDGET_STATUS = { open: 'todo', 'in-progress': 'in-progress',
     resolved: 'done', declined: 'error', 'anchor-lost': 'error' };
 

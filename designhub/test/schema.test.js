@@ -57,3 +57,14 @@ test('VALID_STATUSES gates setStatus input', () => {
   assert.ok(S.VALID_STATUSES.includes('anchor-lost'));
   assert.ok(!S.VALID_STATUSES.includes('done'));
 });
+
+// The widget's per-card ✕ (discard) is wired (build-designhub.js R7) to
+// setStatus(..., 'deleted') for already-submitted tickets, so a click removes
+// it for everyone, not just the clicker's tab - bridge.js's listComments
+// filters 'deleted' rows out entirely rather than mapping them to a widget
+// board state (there's no "deleted" column in the widget's own status set).
+test('deleted is a valid status (real removal, not a widget board state)', () => {
+  assert.ok(S.VALID_STATUSES.includes('deleted'));
+  assert.equal(S.widgetStatus('deleted'), 'todo',
+    'unmapped by design - listComments filters deleted rows before this is ever called');
+});

@@ -58,7 +58,7 @@ function transform(src) {
     return m[1];
   };
   const css = grab(/<style>([\s\S]*?)<\/style>/, '<style> block').trim();
-  const markup = grab(/<\/style>([\s\S]*?)<script>/, 'markup between </style> and <script>').trim().replace(/^<!--[\s\S]*?-->\s*/, '');
+  let markup = grab(/<\/style>([\s\S]*?)<script>/, 'markup between </style> and <script>').trim().replace(/^<!--[\s\S]*?-->\s*/, '');
   const scriptFull = grab(/<script>([\s\S]*?)<\/script>/, '<script> block').trim();
   const iife = scriptFull.match(/^\(function\(\)\{([\s\S]*)\}\)\(\);?$/);
   if (!iife) throw new Error('source <script> must be a single bare IIFE: (function(){ ... })() - wrapper not found, upstream changed');
@@ -102,6 +102,59 @@ function transform(src) {
   const count = (body.match(/location\.href/g) || []).length;
   if (count !== 9) throw new Error('expected exactly 9 location.href sites after clean removal, found ' + count + ' - upstream changed, re-audit page keying');
   body = body.replace(/location\.href/g, 'dhPage()');
+
+  // -- R6: DesignHub v1 has no agent consumption loop yet (design.md phase 2) -
+  //    "Fix" promises an immediate live edit the local tool actually performs;
+  //    here a submission only becomes a TODO row in the Sheet. Relabel the
+  //    fast-path terminology so it matches what actually happens. Local tool
+  //    keeps "Fix" verbatim - it really does trigger one. --
+  body = replaceOnce(body,
+    '      ? \'<button class="fb-fixbtn" type="button" title="Send to the agent to fix" aria-label="Send to the agent to fix\' + (quoteSnippet ? \': \' + esc(quoteSnippet) : \'\') + \'">⚡ Fix</button>\'',
+    '      ? \'<button class="fb-fixbtn" type="button" title="Submit to the board" aria-label="Submit to the board\' + (quoteSnippet ? \': \' + esc(quoteSnippet) : \'\') + \'">⚡ Submit</button>\'',
+    'fix button label');
+  body = replaceOnce(body,
+    "      fixAllBtn.textContent = '⚡ Fix all (' + draftCount + ')';\n      fixAllBtn.setAttribute('aria-label', 'Fix all ' + draftCount + ' draft' + (draftCount === 1 ? '' : 's'));",
+    "      fixAllBtn.textContent = '⚡ Submit all (' + draftCount + ')';\n      fixAllBtn.setAttribute('aria-label', 'Submit all ' + draftCount + ' draft' + (draftCount === 1 ? '' : 's'));",
+    'fix-all button label');
+  body = replaceOnce(body,
+    "        if(!ok){ showToast('Fix all stopped - ' + sent + ' sent, ' + visibleItems().filter(x => x.draft).length + ' kept as drafts', true); return; }",
+    "        if(!ok){ showToast('Submit all stopped - ' + sent + ' sent, ' + visibleItems().filter(x => x.draft).length + ' kept as drafts', true); return; }",
+    'fix-all-stopped toast');
+  body = replaceOnce(body,
+    "    showToast('Saved as draft - nothing is sent until you click Fix', false, 4000);",
+    "    showToast('Saved as draft - nothing is sent until you click Submit', false, 4000);",
+    'draft-saved toast');
+  body = replaceOnce(body,
+    "      if (fixNow) { submitDraft(f); showToast('Sent to the agent'); }",
+    "      if (fixNow) { submitDraft(f); showToast('Submitted'); }",
+    'fix-now toast');
+  body = replaceOnce(body,
+    "    connEl.title = working ? ('Agent is working on ' + n + ' comment' + (n === 1 ? '' : 's') + ' on this page')\n      : connState === 'live' ? 'Connected - agent is idle'\n      : connState === 'connecting' ? 'Connecting to the agent session…'\n      : 'Run /cc-htmlfeedback to enable live fixes';",
+    "    connEl.title = working ? ('In progress: ' + n + ' comment' + (n === 1 ? '' : 's') + ' on this page')\n      : connState === 'live' ? 'Connected'\n      : connState === 'connecting' ? 'Connecting…'\n      : 'Not connected';",
+    'connection status tooltip');
+  // Static initial tooltip (markup, not body) - paintConn() overwrites this within
+  // milliseconds of load, but fixing the source avoids a local-tool-flavored flash.
+  markup = replaceOnce(markup,
+    '<span id="fb-conn" class="fb-conn" title="Run /cc-htmlfeedback to enable live fixes" aria-hidden="true"></span>',
+    '<span id="fb-conn" class="fb-conn" title="Not connected" aria-hidden="true"></span>',
+    'initial connection tooltip (markup)');
+
+  // -- R7: the ✕ (discard) button is upstream's per-tab-only "hide" (setRemoved
+  //    never reaches the server - see feedback-widget.html's own "apply = remove,
+  //    revert = restore" comment on discard()). In DesignHub the Sheet is a real
+  //    shared record, so a ✕ on an already-submitted ticket (f.sid set) also
+  //    calls the bridge to mark it 'deleted' - filtered out of listComments for
+  //    everyone (bridge.js), audited via setStatus's existing meta-tab log
+  //    (D17(c)). A still-local draft (no sid yet) has nothing to delete
+  //    server-side, so it's left as a plain local discard, same as upstream.
+  //    Known gap: Ctrl/Cmd+Z undo only restores the local view, not the
+  //    server-side status - reversing a DesignHub delete needs a fresh comment.
+  body = replaceOnce(body,
+    '  function discard(id){ setRemoved(id, true); record(() => setRemoved(id, true), () => setRemoved(id, false)); } // apply = remove, revert = restore',
+    "  function discard(id){ setRemoved(id, true); record(() => setRemoved(id, true), () => setRemoved(id, false));" +
+      " var f = store[id]; if(f && f.sid) dhRun('setStatus', dhPage(), f.sid, 'deleted').catch(() => {});" +
+      " } // apply = remove, revert = restore (DesignHub: also deletes server-side once submitted)",
+    'discard handler');
 
   // -- prepend the bridge helpers (function declarations hoist above first use) --
   body = "\n  function dhPage(){ return (window.__CCFB && window.__CCFB.docPath) || location.href; }\n" +

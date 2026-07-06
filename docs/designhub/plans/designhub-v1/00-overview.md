@@ -170,6 +170,50 @@ regenerated (M-3 cleanup) to fix a stale `widget-designhub.js` filename in
 its own banner comment (`build-designhub.js`'s `transform()`, left over from
 before Task 7 renamed the artifact) - purely cosmetic, no behavior change,
 bundled here rather than triggering its own deploy round.
+
+**Post-launch fixes from live user testing (2026-07-06), also pending the
+same production sync:**
+- **Real per-comment delete.** The widget's ✕ (discard) button is upstream's
+  personal, per-tab-only "hide" - `setRemoved` never reaches the server (see
+  `feedback-widget.html`'s own "apply = remove, revert = restore" comment on
+  `discard()`). In DesignHub the Sheet is a real shared record, so a
+  dismissed-but-never-actioned comment reappeared for everyone on reload,
+  which read as a bug once there's a durable backing store instead of a local
+  queue file. Fixed by adding `'deleted'` to `VALID_STATUSES` (`schema.js`)
+  and filtering it out of `listComments` (`bridge.js`) - the row stays in the
+  Sheet with a `setStatus` audit-log entry (D17(c): who deleted what, when),
+  but is invisible to every viewer, not just the person who clicked ✕. Wired
+  via a new `build-designhub.js` step (R7): `discard()` now also calls
+  `dhRun('setStatus', dhPage(), f.sid, 'deleted')` for already-submitted
+  tickets (`f.sid` set); a still-local draft has nothing to delete
+  server-side, so it's left as a plain local discard, same as upstream.
+  Deliberately NOT wired to a hard row-delete (would erase the audit trail
+  D17(c) exists to guarantee) or to `'resolved'` (semantically wrong for
+  something nobody ever acted on). **Known gap, accepted:** Ctrl/Cmd+Z undo
+  only restores the local view, not the server-side status - reversing a
+  DesignHub delete needs a fresh comment, not undo.
+- **"Fix" terminology was misleading.** DesignHub v1 has no agent consumption
+  loop (that's phase 2) - a submission only becomes a TODO row in the Sheet,
+  it doesn't get fixed. The local tool's "⚡ Fix" / "Sent to the agent" /
+  "Agent is working on N comments" wording promises something DesignHub
+  doesn't do yet. Added a new `build-designhub.js` step (R6) relabeling the
+  DesignHub widget variant only (button text/title/aria-label, the fast-path
+  toast, the connection-status tooltip, including the static initial tooltip
+  in the markup) to "Submit"/"Connected"/"Not connected" wording with no
+  agent/fix promise. The local tool's copy of `feedback-widget.html` is
+  untouched (D16) - it really does trigger an immediate live fix, so "Fix" is
+  correct there. One leftover "agent" string in the disconnected-mode banner
+  (`maybeBanner()`) was deliberately left alone - that function returns
+  immediately whenever `window.__CCFB` is set, which DesignHub always does,
+  so the banner (and its wording) is unreachable dead code for this variant.
+- Both verified live: rebuilt `widget.js` loaded directly in a dev-browser
+  harness with a stubbed `google.script.run` (not just via the transform's
+  string-matching tests) - confirmed the "Submitted" toast, "Connected"
+  tooltip, and that clicking ✕ on a submitted ticket calls
+  `setStatus(docPath, sid, 'deleted')` and the ticket disappears.
+- Test coverage: `schema.test.js` ('deleted' in `VALID_STATUSES`),
+  `transform.test.js` (relabeled strings present, old strings absent, R7's
+  `discard()` guard on `f.sid`).
 function that will no longer exist post-push - GAS logs a failed trigger
 execution, doesn't error the app - until this reinstall step runs).
 

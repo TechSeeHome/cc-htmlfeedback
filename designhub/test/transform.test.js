@@ -63,6 +63,37 @@ test('transform fails loudly when the output would be malformed JS (syntax backs
   assert.throws(() => transform(injected), /not valid JavaScript/);
 });
 
+test('transform relabels Fix -> Submit (DesignHub v1 has no agent consumption loop yet)', () => {
+  const out = transform(src);
+  assert.match(out, /⚡ Submit<\/button>/);
+  assert.match(out, /title="Submit to the board"/);
+  assert.match(out, /⚡ Submit all \(' \+ draftCount/);
+  assert.match(out, /Submit all stopped -/);
+  assert.match(out, /nothing is sent until you click Submit/);
+  assert.match(out, /showToast\('Submitted'\)/);
+  assert.match(out, /'Connected'/);
+  assert.match(out, /'Connecting…'/);
+  assert.match(out, /'Not connected'/);
+  assert.doesNotMatch(out, /⚡ Fix</);
+  assert.doesNotMatch(out, /Fix all stopped/);
+  assert.doesNotMatch(out, /Sent to the agent/);
+  // The disconnected-mode banner (maybeBanner) is unreachable when __CCFB is set
+  // (DesignHub always sets it), so its one leftover "agent"-adjacent string is
+  // deliberately left untouched - only assert against code lines actually reachable.
+  const reachableAgentMentions = out.split('\n')
+    .filter((l) => !l.trim().startsWith('//'))
+    .filter((l) => !l.includes("Run /cc-htmlfeedback to start the live feedback loop"))
+    .filter((l) => /agent/i.test(l));
+  assert.deepEqual(reachableAgentMentions, []);
+});
+
+test('transform wires discard() to delete already-submitted tickets server-side, not just locally', () => {
+  const out = transform(src);
+  const fn = out.match(/function discard\(id\)\{[\s\S]*?\n/)[0];
+  assert.match(fn, /dhRun\('setStatus', dhPage\(\), f\.sid, 'deleted'\)/);
+  assert.match(fn, /if\(f && f\.sid\)/, 'a still-local draft (no sid) must not call the bridge');
+});
+
 test('wrap() round-trips through require() to the exact transform() output (real widget content)', () => {
   const out = transform(src);
   const wrapped = wrap(out);

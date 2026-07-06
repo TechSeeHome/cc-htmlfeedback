@@ -21,8 +21,11 @@ function listCatalog(filter) {
 function listComments(docPath) {
   var c = dhCommentsFor_(docPath);
   var values = c.ss.getSheetByName('tickets').getDataRange().getValues().slice(1);
+  // 'deleted' rows stay in the Sheet (setStatus's audit-tab log preserves who/when -
+  // D17(c)) but never reach the widget for anyone - this is how the widget's
+  // per-card discard() becomes a real removal instead of a per-tab-only hide.
   var tickets = values.map(function (row) { return DH_SCHEMA.rowToTicket(row); })
-    .filter(function (t) { return !t.parentId; })
+    .filter(function (t) { return !t.parentId && t.status !== 'deleted'; })
     .map(function (t) {
       return { id: t.id, quote: t.quote, context: t.context, section: t.section,
         note: t.note, type: t.type, page: docPath,

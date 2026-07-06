@@ -616,6 +616,17 @@ Expected: `wrote .../widget.js (~66000 bytes)` then `build-designhub: up to date
 
 - [ ] **Step 6: Commit:** `git add designhub/ && git commit -m "designhub: fail-loud widget transform - GAS transport variant (D16)"`
 
+**Post-launch addendum (live user testing, 2026-07-06):** two more transform
+steps were added after this task originally shipped - R6 (relabels
+"Fix"/"agent" wording to "Submit"/connection-status language, since v1 has no
+agent consumption loop yet) and R7 (wires the ✕/discard button to a real
+server-side delete via `setStatus(..., 'deleted')` for already-submitted
+tickets, paired with a `bridge.js`/`schema.js` change in Task 6 to add and
+filter the new `'deleted'` status). Full rationale, the exact wording
+changes, and the live-verification method are in `00-overview.md`'s
+"Post-launch fixes from live user testing" note - not duplicated here to
+avoid the two docs drifting out of sync.
+
 ---
 
 ### Task 8: Create, deploy, and authorize the production web app

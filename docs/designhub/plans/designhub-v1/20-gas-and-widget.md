@@ -310,7 +310,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { transform } = require('../build-designhub.js');
+const os = require('node:os');
+const { transform, wrap } = require('../build-designhub.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', '..', 'feedback-widget.html'), 'utf8');
 
@@ -369,6 +370,34 @@ test('transform fails loudly when the output would be malformed JS (syntax backs
   );
   assert.throws(() => transform(injected), /not valid JavaScript/);
 });
+
+test('wrap() round-trips through require() to the exact transform() output (real widget content)', () => {
+  const out = transform(src);
+  const wrapped = wrap(out);
+  const f = path.join(os.tmpdir(), 'wrap-roundtrip-' + process.pid + '-' + Date.now() + '.js');
+  fs.writeFileSync(f, wrapped);
+  try {
+    delete require.cache[require.resolve(f)];
+    const roundTripped = require(f);
+    assert.equal(roundTripped, out);
+  } finally {
+    fs.unlinkSync(f);
+  }
+});
+
+test('wrap() safely escapes JS/JSON-tricky content: quotes, backslashes, backticks, ${}, U+2028/U+2029, emoji', () => {
+  const tricky = 'a"b\'c\\d`e${f}g h i</script>j 🎉 k';
+  const wrapped = wrap(tricky);
+  const f = path.join(os.tmpdir(), 'wrap-tricky-' + process.pid + '-' + Date.now() + '.js');
+  fs.writeFileSync(f, wrapped);
+  try {
+    delete require.cache[require.resolve(f)];
+    const roundTripped = require(f);
+    assert.equal(roundTripped, tricky);
+  } finally {
+    fs.unlinkSync(f);
+  }
+});
 ```
 
 - [ ] **Step 2: Run to verify FAIL:** `node --test designhub/test/transform.test.js`
@@ -399,6 +428,27 @@ function replaceOnce(body, anchor, replacement, label) {
   if (i === -1) throw new Error('anchor not found (' + label + '): upstream feedback-widget.html changed - review and update build-designhub.js');
   if (body.indexOf(anchor, i + 1) !== -1) throw new Error('anchor not unique (' + label + '): the exact text "' + anchor + '" occurs more than once - upstream duplicated or restructured this code; narrow the anchor and update build-designhub.js');
   return body.slice(0, i) + replacement + body.slice(i + anchor.length);
+}
+
+// Parse-only validity check (node --check on a temp file) rather than new
+// Function()/eval, which would construct a live, invocable function from
+// generated text - unnecessary here and an avoidable code-smell even though
+// nothing untrusted flows through this build-time-only script. Shared by both
+// transform()'s backstop (catches a truncated/malformed body) and main()'s
+// check on the final wrapped file (catches a wrapping-layer bug - belt and
+// braces, since ES2019's JSON-is-a-JS-subset guarantee already makes the
+// second check provably redundant for well-formed input).
+function assertValidJs(content, label) {
+  const f = path.join(os.tmpdir(), 'ccfb-designhub-' + label + '-' + process.pid + '-' + Date.now() + '.js');
+  try {
+    fs.writeFileSync(f, content);
+    execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' });
+  } catch (e) {
+    const detail = (e.stderr ? e.stderr.toString() : e.message).trim();
+    throw new Error('generated ' + label + ' is not valid JavaScript:\n' + detail);
+  } finally {
+    try { fs.unlinkSync(f); } catch { /* best-effort cleanup */ }
+  }
 }
 
 function transform(src) {
@@ -494,18 +544,10 @@ ${body}
   // a truncated or malformed body (e.g. a non-greedy anchor regex stopping at an unrelated brace
   // introduced by an upstream reformat) without any single check above catching it. Parsing the
   // FULL generated output catches that class of bug regardless of which step caused it.
-  // Uses `node --check` on a temp file (parse-only, no execution) rather than new Function()/eval,
-  // which would construct a live, invocable function from generated text - unnecessary here and an
-  // avoidable code-smell even though nothing untrusted flows through this build-time-only script.
-  const syntaxCheckFile = path.join(os.tmpdir(), 'ccfb-designhub-widget-' + process.pid + '-' + Date.now() + '.js');
   try {
-    fs.writeFileSync(syntaxCheckFile, out);
-    execFileSync(process.execPath, ['--check', syntaxCheckFile], { stdio: 'pipe' });
+    assertValidJs(out, 'widget.js (raw transform output)');
   } catch (e) {
-    const detail = (e.stderr ? e.stderr.toString() : e.message).trim();
-    throw new Error('generated widget.js is not valid JavaScript:\n' + detail + '\nThe transform likely produced a truncated/malformed body - re-check the R1-R5 anchors and the subscribeSSE regex against the current upstream structure');
-  } finally {
-    try { fs.unlinkSync(syntaxCheckFile); } catch { /* best-effort cleanup */ }
+    throw new Error(e.message + '\nThe transform likely produced a truncated/malformed body - re-check the R1-R5 anchors and the subscribeSSE regex against the current upstream structure');
   }
 
   return out;
@@ -533,6 +575,15 @@ function main() {
   let out;
   try { out = transform(src); } catch (e) { fail(e.message); }
   const wrapped = wrap(out);
+  // Belt and braces: transform() already validated `out` in isolation, but this
+  // checks the file exactly as GAS will load it (the var declaration + the
+  // module.exports tail too) - provably redundant given ES2019's JSON-is-a-JS-
+  // subset guarantee, but cheap enough to close the loop completely.
+  try {
+    assertValidJs(wrapped, 'widget.js (wrapped output)');
+  } catch (e) {
+    fail(e.message);
+  }
   if (process.argv.includes('--check')) {
     const disk = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
     if (disk !== wrapped) fail('designhub/gas/widget.js is stale - run: node designhub/build-designhub.js');
@@ -544,7 +595,7 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { transform };
+module.exports = { transform, wrap };
 ```
 
 - [ ] **Step 4: Run tests, expect PASS:** `node --test designhub/test/transform.test.js`

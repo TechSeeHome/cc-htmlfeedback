@@ -2,7 +2,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { transform } = require('../build-designhub.js');
+const os = require('node:os');
+const { transform, wrap } = require('../build-designhub.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', '..', 'feedback-widget.html'), 'utf8');
 
@@ -60,4 +61,32 @@ test('transform fails loudly when the output would be malformed JS (syntax backs
     "es.addEventListener('tickets', e => { try { reconcile(JSON.parse(e.data).tickets || []); } catch{} });\n      var X = {\n    a: 1\n  };"
   );
   assert.throws(() => transform(injected), /not valid JavaScript/);
+});
+
+test('wrap() round-trips through require() to the exact transform() output (real widget content)', () => {
+  const out = transform(src);
+  const wrapped = wrap(out);
+  const f = path.join(os.tmpdir(), 'wrap-roundtrip-' + process.pid + '-' + Date.now() + '.js');
+  fs.writeFileSync(f, wrapped);
+  try {
+    delete require.cache[require.resolve(f)];
+    const roundTripped = require(f);
+    assert.equal(roundTripped, out);
+  } finally {
+    fs.unlinkSync(f);
+  }
+});
+
+test('wrap() safely escapes JS/JSON-tricky content: quotes, backslashes, backticks, ${}, U+2028/U+2029, emoji', () => {
+  const tricky = 'a"b\'c\\d`e${f}g h i</script>j 🎉 k';
+  const wrapped = wrap(tricky);
+  const f = path.join(os.tmpdir(), 'wrap-tricky-' + process.pid + '-' + Date.now() + '.js');
+  fs.writeFileSync(f, wrapped);
+  try {
+    delete require.cache[require.resolve(f)];
+    const roundTripped = require(f);
+    assert.equal(roundTripped, tricky);
+  } finally {
+    fs.unlinkSync(f);
+  }
 });

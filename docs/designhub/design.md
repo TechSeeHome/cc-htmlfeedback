@@ -264,11 +264,14 @@ cc-htmlfeedback/                     (our fork)
     designhub/skills/designhub-agent/ NEW: phase-2 comment-driven fix loop
   designhub/
     build-designhub.js               fail-loud transform: widget source -> GAS-transport variant
-    widget-designhub.js              built artifact
     gas/                             Apps Script project, version-controlled via clasp
       main.js                        doGet: tree + serve + inject (thin entries)
-      bridge.js                      submitComment/listComments/reply/setStatus/listCatalog
-      sheets.js · rollup.js          plain-JS logic (node --test-able; enforces D5)
+      bridge.js                      getIdentity/listCatalog/listComments/submitComment/reply/setStatus
+      drive.js                       DriveApp/SpreadsheetApp adapters (thin, D5) + reconciler
+      widget.js                      built artifact - GENERATED, never hand-edit (see build-designhub.js)
+      lib/
+        schema.js · paths.js · rollup.js · render.js   plain-JS logic (node --test-able; enforces D5)
+    e2e/                            live-deployment verification scripts (dev-browser + Sheets API)
     test/
 ```
 

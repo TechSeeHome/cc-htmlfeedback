@@ -529,7 +529,7 @@ function transform(src) {
   if (/\/__ccfb\//.test(codeOnly)) throw new Error('a /__ccfb/ endpoint survived the transform');
 
   const esc = s => s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
-  const out = `/*! widget-designhub.js - the cc-htmlfeedback widget with google.script.run transport.
+  const out = `/*! widget.js - the cc-htmlfeedback widget with google.script.run transport.
  * GENERATED from upstream feedback-widget.html by designhub/build-designhub.js - NEVER EDIT.
  * Served by the DesignHub web app as ?asset=widget (never inlined - HtmlService
  * truncates giant inline scripts, see docs/designhub/pocs/poc3). */

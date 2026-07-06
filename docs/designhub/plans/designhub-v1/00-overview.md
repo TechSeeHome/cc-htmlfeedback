@@ -147,9 +147,9 @@ properly needs markdown-link-syntax detection, out of scope for what Task 10
 was asked to build. Left as a backlog item for whoever extends publishing
 beyond single-file HTML docs.
 
-**Pending production sync (final cross-task review):** two fixes landed in
-`designhub/gas/drive.js` after Task 8's production deployment and have NOT
-been pushed/redeployed as part of this work: `dhReconcile`/
+**Pending production sync (final cross-task review):** fixes landed in
+`designhub/gas/` after Task 8's production deployment and have NOT
+been pushed/redeployed as part of this work. In `drive.js`: `dhReconcile`/
 `dhInstallReconcilerTrigger` were renamed to `dhReconcile_`/
 `dhInstallReconcilerTrigger_` (D17(a) containment - a top-level GAS function
 without a trailing underscore is reachable from a published doc's own script
@@ -163,6 +163,13 @@ wasn't requested. **Before or during the next production touch:** `clasp
 push -f && clasp create-deployment -i <id> -d "<desc>"`, then re-run
 `dhInstallReconcilerTrigger_` once from the Apps Script editor (the old
 `dhInstallReconcilerTrigger`-named trigger keeps firing harmlessly against a
+function that will no longer exist post-push - GAS logs a failed trigger
+execution, doesn't error the app - until this reinstall step runs). Also
+rolled into this same pending push: `designhub/gas/widget.js` was
+regenerated (M-3 cleanup) to fix a stale `widget-designhub.js` filename in
+its own banner comment (`build-designhub.js`'s `transform()`, left over from
+before Task 7 renamed the artifact) - purely cosmetic, no behavior change,
+bundled here rather than triggering its own deploy round.
 function that will no longer exist post-push - GAS logs a failed trigger
 execution, doesn't error the app - until this reinstall step runs).
 

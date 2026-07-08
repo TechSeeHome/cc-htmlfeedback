@@ -348,7 +348,10 @@
 <section id="contract">
   <div class="sec-head"><span class="sec-num">03</span><h2>Two files, one writer each</h2></div>
   <p class="sec-sub">Per page, the queue holds two files with strict ownership. That ownership <b>is</b> the
-  concurrency design: each file has exactly one writer, so browser and AI can never conflict.</p>
+  concurrency design: each file has exactly one writer, so browser and AI can never conflict on them.
+  (A third, page-spanning file - the shared <code>index.json</code> that maps page URLs to their
+  per-page key - is a separate read-modify-write path outside that guarantee: concurrent first
+  comments on different new pages can race and drop an entry.)</p>
 
   <div class="contract">
     <div class="file inbox">
@@ -423,7 +426,9 @@
       <ul>
         <li>Same widget on <b>any</b> webpage - load unpacked, pin, click</li>
         <li>Notes live in page memory only</li>
-        <li><b>Copy feedback</b> exports structured text: quote + context + section + note + URL</li>
+        <li><b>Copy feedback</b> exports structured text: the page URL once, as a header line, then
+        each note's type marker (<code>[COMMENT]</code> / <code>[STRIKE / suggest removing]</code>),
+        section, quote, context, and note</li>
         <li>Paste to a colleague or an AI manually - same UX, no server, no queue</li>
       </ul>
     </div>
@@ -470,7 +475,7 @@
       desc:'One JSON line appended to that page’s feedback_inbox.jsonl. The server’s only write - the inbox is append-only, forever.' },
     { from:2, to:3, tag:'file grew → wake', c:C.disk,
       title:'The session wakes - no polling',
-      desc:'A tiny watcher (watch-inbox.js) blocks until any inbox file grows, then exits - waking the Claude session. Idle between comments: zero polling, zero token cost.' },
+      desc:'A tiny watcher (watch-inbox.js) blocks until any inbox file grows, then exits - waking the Claude session. It only starts once the drain loop has no pending todo tickets left to claim, though - while up to 5 are already in flight, a new inbox line just waits, unmerged, until the loop drains back to idle. Once idle: zero polling, zero token cost.' },
     { from:3, to:2, tag:'board: todo → in-progress', c:C.work,
       title:'Ticket claimed on the board',
       desc:'The session copies the ticket into feedback_tasks.json as todo, then claims it in-progress at dispatch. The session is the board’s only writer.' },

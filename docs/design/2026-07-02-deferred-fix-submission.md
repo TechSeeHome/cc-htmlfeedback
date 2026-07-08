@@ -184,9 +184,13 @@ No user-facing string mentions "Claude". The runtime on the other end may be any
   (`f.page === location.href && statusOf(f) !== 'done'`). Without this one line, the first
   completed fix would strip every remaining draft's highlight permanently - and "a fix lands
   while other drafts exist" is this design's normal case.
-- **Draft persistence** (`sessionStorage`, key `ccfb-drafts:` + the normalized path - the
-  widget never receives the server's hashed page key, so it derives one from
-  `location.pathname` using the server's own normalization (`/` → `/index.html`, as in
+- **Draft persistence** (`sessionStorage`, key `ccfb-drafts:` + an optional project namespace
+  + the normalized path. The namespace is `window.__CCFB.ns` - a stable hash of the queue dir
+  the server injects - falling back to `window.__CCFB.sessionId` (fresh per server start) for
+  an older server that doesn't send `ns`; without it, two different `/cc-htmlfeedback`
+  projects sharing the same default port+path would read and restore each other's drafts. The
+  path component: the widget never receives the server's hashed page key, so it derives one
+  from `location.pathname` using the server's own normalization (`/` → `/index.html`, as in
   `lib/queue.js`'s `fileOf`), so `/` and `/index.html` share one snapshot; query strings are
   ignored, matching the server's keying):
   - **What persists**: any entry that is a draft *or* not yet **board-seen** - excluding
@@ -261,12 +265,16 @@ store[id] = {
   `cardHTML`, so without explicit rebuilds the card's chrome would not follow the state. The payload is
   serialized at send, so the rebuild also prevents mid-flight edits from silently diverging
   from what the agent received.
-- `reconcile()`'s content matcher gains one condition: `!x.draft` (it currently adopts any
-  sid-less entry matching `quote`+`note`+`page`). Together with the send-time flip: an unsent
-  draft is `draft: true` and never adopted; an in-flight submission is `draft: false` and
-  immediately adoptable - so the existing SSE-beats-POST race stays closed, while a server
-  ticket that merely shares text with an unsent draft (another tab, a duplicate note) creates
-  its own card instead of stealing the draft.
+- `reconcile()`'s content matcher gains two conditions: `!x.draft`, and a `type` comparison
+  (it currently adopts any sid-less entry matching `quote`+`note`+`page`). `!x.draft` is
+  needed together with the send-time flip: an unsent draft is `draft: true` and never
+  adopted; an in-flight submission is `draft: false` and immediately adoptable - so the
+  existing SSE-beats-POST race stays closed, while a server ticket that merely shares text
+  with an unsent draft (another tab, a duplicate note) creates its own card instead of
+  stealing the draft. The `type` comparison closes a second, independent hole: without it, a
+  comment and a strike on the same quote with a matching (often empty) note are otherwise
+  indistinguishable, and cross-matching them would swap their outcomes (the strike's ticket
+  adopted as the comment's, or vice versa).
 - `isComposing()` needs no change - draft notes carry the `.fb-note` class its existing
   check already covers.
 
@@ -289,13 +297,27 @@ store[id] = {
   rescan-before-sleep change to the drain loop - both are skill/server-protocol changes, out of
   scope here. In practice a narrow window: a full fix+verify cycle takes much longer than a
   handful of sequential localhost POSTs.
+- **Sharper related risk: Clean during that same unmerged-inbox window.** While tickets sent
+  by `Fix all` (or a single Fix) sit in `feedback_inbox.jsonl` but haven't yet been merged into
+  `feedback_tasks.json` - the drain loop only merges when it goes globally idle, see `SKILL.md`
+  Step 1 - clicking **Clean** truncates that inbox file unconditionally, silently and
+  permanently discarding those tickets with no error surfaced. This is not a retry/duplicate
+  risk like the two items above it; it's outright data loss of already-sent work, and `Fix
+  all` raises both the odds and the blast radius of hitting it (several tickets land at once,
+  right when a user might reach for Clean). It's a server-side gap
+  (`server.js` `/__ccfb/clean`), out of scope for this widget-only design - see CLAUDE.md's
+  "Architect review backlog" entry "Clean can delete fix requests the agent never saw" for the
+  full writeup and candidate server-side fixes (merge-before-clean, or a server-drained inbox).
 - **Auto-expiry of submitted-pending entries.** If the board is wiped externally (Clean from
   another session, server restarted on a fresh queue) while a submission is pending
   board-merge, the persisted entry lingers as a card the server no longer knows about. The
   widget cannot distinguish "board wiped" from "skill just hasn't merged yet" (that gap can
   legitimately last minutes while the skill is busy), and auto-reverting to draft would
-  invite duplicate submissions - so v1 has no auto-expiry. ✕ or Clean is the escape hatch
-  (both purge the snapshot).
+  invite duplicate submissions - so v1 has no auto-expiry. ✕ is a safe escape hatch (it only
+  hides the card locally). **Clean is not unconditionally safe as an escape hatch** - per the
+  bullet above, it truncates the server-side inbox, so use it here only when the drain loop is
+  confirmed idle with no in-flight/unmerged tickets; otherwise it can silently destroy pending
+  work rather than merely clearing a stale card.
 
 ## 6. Release notes
 

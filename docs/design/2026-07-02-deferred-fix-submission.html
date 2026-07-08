@@ -119,8 +119,8 @@
 <body>
 <div class="wrap">
 
-  <h1>Deferred fix submission <span class="pill">design proposal</span></h1>
-  <div class="meta"><b>cc-htmlfeedback widget</b> · 2026-07-02 · branch <code>design/deferred-fix-submission</code> · spec: <code>docs/design/2026-07-02-deferred-fix-submission.md</code></div>
+  <h1>Deferred fix submission <span class="pill">implemented</span></h1>
+  <div class="meta"><b>cc-htmlfeedback widget</b> · 2026-07-02 · shipped in v1.2.0 (PR #4) · spec: <code>docs/design/2026-07-02-deferred-fix-submission.md</code></div>
 
   <p class="lede">Today, saving a note and handing it to the agent are one fused action: the moment you press
   <b>Comment</b> or <b>Strike</b>, the ticket is submitted and the agent starts working. This design separates
@@ -131,10 +131,10 @@
   <b>Fix</b> button <i>are</i> the UI - what you see is what will (not) be sent. A keyboard fast path
   (<kbd>Cmd/Ctrl</kbd>+<kbd>Enter</kbd> or <kbd>Cmd/Ctrl</kbd>+click = comment &amp; fix now) preserves today's zero-friction single-fix flow.</div>
 
-  <h2>1 · Flow: current vs. proposed</h2>
+  <h2>1 · Flow: before vs. shipped</h2>
   <div class="cols">
     <div class="col bad">
-      <h4>Current - fused save + submit</h4>
+      <h4>Before - fused save + submit</h4>
       <ul class="flow">
         <li class="user">Select text, type note, press Enter</li>
         <li class="agent">Ticket POSTed instantly; agent wakes and starts fixing</li>
@@ -143,7 +143,7 @@
       </ul>
     </div>
     <div class="col good">
-      <h4>Proposed - draft, review, then fix</h4>
+      <h4>Shipped - draft, review, then fix</h4>
       <ul class="flow">
         <li class="user">Select text, type note, press Enter - saved as a draft</li>
         <li class="user">Keep annotating a stable page; edit or discard drafts freely</li>
@@ -280,13 +280,23 @@
     <li><b>Drafts survive reload</b> (not tab close) via per-tab <code>sessionStorage</code> - and so do
       just-submitted tickets not yet on the board, until <code>reconcile()</code> sees them there. Restored
       entries re-anchor with the existing <code>reanchor()</code> path (empty-quote insertion points are
-      skipped, as today); ✕ and Clean purge the snapshot too.</li>
+      skipped, as today); ✕ purges its entry from the snapshot too. <b>Clean is not an unconditionally
+      safe escape hatch</b>: it also truncates the server-side inbox file, so if any tickets sent by
+      Fix / Fix all haven't yet been merged onto the board (the drain loop only merges when fully idle),
+      Clean silently and permanently discards them - see below and CLAUDE.md's "Architect review
+      backlog".</li>
     <li><b>Drafts survive morphs</b>: <code>add()</code> sets <code>page</code> at creation so the existing
       post-morph re-anchor pass restores draft highlights after another ticket's fix lands.</li>
     <li><b>POST failure returns the card to Drafts</b> with an error toast; Fix all submits in order, stops at
       the first failure, and a retry resumes from the failed item (earlier successes aren't resubmitted).</li>
     <li><b>Badge counts drafts</b> + submitted-but-not-done, so pending-but-unsent work is still visible.</li>
-    <li><b>Out of scope:</b> server-side draft status, draft reordering, editing already-submitted tickets.</li>
+    <li><b><code>Fix all</code> can outrun inbox ingestion</b>, leaving later tickets in a batch unmerged until an
+      unrelated future comment wakes the skill again - narrow in practice, but sharpened by the Clean
+      risk above: Clean during that same window doesn't just leave tickets unmerged, it deletes them.
+      Both are server/skill-protocol issues, out of scope for this widget-only change.</li>
+    <li><b>Out of scope:</b> server-side draft status, draft reordering, editing already-submitted tickets,
+      POST-failure idempotency, auto-expiry of submitted-pending entries when the board is wiped
+      externally.</li>
   </ul>
 
   <div class="footnote">Full specification with data model, edge cases, release checklist, and test plan:

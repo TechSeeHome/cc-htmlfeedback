@@ -127,9 +127,12 @@ Ticket schema (defined once in `lib/queue.js`'s `newTicket()`; shown here for re
 ### 3. The session wakes up (no polling)
 
 The Claude session runs a tiny watcher (`lib/watch-inbox.js`) that blocks until any
-page's inbox file **grows**, then exits - which wakes the session. Between comments the
-session is idle: no polling, no token cost. On wake it merges new inbox lines onto the
-board as `todo`, then claims them as `in-progress` at dispatch time.
+page's inbox file **grows**, then exits - which wakes the session. But the watcher only
+starts once the drain loop has no pending `todo` tickets left to claim; while up to 5
+tickets are already in flight, a new inbox line just waits - it isn't merged onto the
+board until the loop fully drains back to idle. Once idle, there's no polling, no token
+cost; on wake it merges new inbox lines onto the board as `todo`, then claims them as
+`in-progress` at dispatch time.
 
 ### 4. Live status in your tab
 
@@ -179,9 +182,10 @@ their quotes again. In proxy mode the upstream dev server's HMR does this job in
 ## The second mode: Chrome extension (no server, no AI)
 
 The same widget ships as a Chrome extension for any webpage. Nothing is connected: notes
-live only in page memory, and **Copy feedback** exports all notes as structured text
-(quote + context + section + note + file path) to your clipboard - to paste to a colleague
-or an AI manually. Same UX, zero infrastructure.
+live only in page memory, and **Copy feedback** exports all notes as structured text to
+your clipboard: the page URL is written once, as a header line, then each note lists its
+type marker (`[COMMENT]` or `[STRIKE / suggest removing]`), section, quote, context, and
+note - to paste to a colleague or an AI manually. Same UX, zero infrastructure.
 
 ## Boundaries worth knowing
 

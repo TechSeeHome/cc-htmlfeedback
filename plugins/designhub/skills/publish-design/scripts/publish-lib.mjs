@@ -35,12 +35,19 @@ export function scanAssets(html) {
 
   // CSS url(...) references inside <style> blocks (backgrounds, @font-face)
   // - untouched by the attribute scan above since they're not tag attrs.
+  // Quoted alternatives are matched separately (not via a shared backreference
+  // exclusion class) so a double-quoted url(...) value can safely contain
+  // literal single quotes, and vice versa - e.g. a data: URI wrapping inline
+  // SVG whose own attributes use the other quote style (background-image:
+  // url("data:image/svg+xml,...filter='url(%23n)'...")). A shared [^'")]*
+  // class would stop at that inner quote and let the regex re-match the
+  // nested url(%23n) as if it were its own (bogus) relative asset reference.
   const styleRe = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
   let stm;
   while ((stm = styleRe.exec(html))) {
-    const urlRe = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+    const urlRe = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s)]+))\s*\)/gi;
     let um;
-    while ((um = urlRe.exec(stm[1]))) push('style', um[2]);
+    while ((um = urlRe.exec(stm[1]))) push('style', um[1] ?? um[2] ?? um[3]);
   }
 
   return { assets: [...new Set(assets)], links: [...new Set(links)] };

@@ -23,6 +23,19 @@ test('scanAssets: CSS url() refs inside <style> (background-image, @font-face)',
   assert.deepEqual(r.links, []);
 });
 
+test('scanAssets: data: URI containing a nested url() in the opposite quote style is not itself flagged', async () => {
+  const { scanAssets } = await mod();
+  // Real regression: an inline SVG data: URI whose own attributes use single
+  // quotes (filter='url(%23n)') while the outer CSS url() uses double quotes.
+  // A naive shared-quote-class regex stops at the inner ', then re-matches
+  // url(%23n) as a bogus standalone relative asset.
+  const html = '<style>body{background-image:url("data:image/svg+xml,' +
+    '%3Csvg%3E%3Cfilter id=\'n\'%3E%3C/filter%3E%3Crect filter=\'url(%23n)\'/%3E%3C/svg%3E")}' +
+    '</style>';
+  const r = scanAssets(html);
+  assert.deepEqual(r.assets, []);
+});
+
 test('scanAssets: srcset with multiple relative entries (responsive images)', async () => {
   const { scanAssets } = await mod();
   const html = '<img srcset="./small.png 1x, ./big.png 2x" src="./small.png">' +

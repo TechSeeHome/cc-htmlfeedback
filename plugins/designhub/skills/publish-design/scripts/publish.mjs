@@ -183,7 +183,7 @@ async function main() {
   const LIST = rootMeta.driveId
     ? `${SAD}&includeItemsFromAllDrives=true&corpora=drive&driveId=${rootMeta.driveId}`
     : `${SAD}&includeItemsFromAllDrives=true&corpora=allDrives`;
-  const q = async (query) => (await api(at, `${DRIVE}/files?q=${encodeURIComponent(query)}&${LIST}&fields=files(id,name)`)).files;
+  const q = async (query) => (await api(at, `${DRIVE}/files?q=${encodeURIComponent(query)}&${LIST}&fields=files(id,name),nextPageToken`)).files;
   const child = async (parent, name, mime) => (await q(
     `'${parent}' in parents and name = '${name.replace(/'/g, "\\'")}' and trashed = false` +
     (mime ? ` and mimeType = '${mime}'` : '')))[0] || null;

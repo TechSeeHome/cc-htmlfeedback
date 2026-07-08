@@ -57,7 +57,7 @@ function submitComment(docPath, ticket) {
 function reply(docPath, parentId, note) {
   var c = dhCommentsFor_(docPath);
   var now = new Date().toISOString();
-  var t = { id: Utilities.getUuid(), parentId: String(parentId || ''), type: 'reply',
+  var t = { id: Utilities.getUuid(), parentId: DH_SCHEMA.sanitizeField(String(parentId || '')), type: 'reply',
     status: 'open', quote: '', context: '', section: '', note: DH_SCHEMA.sanitizeField(note),
     authorEmail: Session.getActiveUser().getEmail(), authorName: '', source: 'web',
     docVersion: '', result: '', files: '', createdAt: now, updatedAt: now };

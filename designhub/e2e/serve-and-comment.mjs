@@ -25,6 +25,7 @@ for (let i = 0; i < 20 && !identity; i++) {
 console.log("identity chip:", identity);
 const selected = await frame.evaluate(() => {
   const p = [...document.querySelectorAll("p,td,li")].find(el => el.innerText.trim().length > 60);
+  if (!p) throw new Error('no eligible element (p/td/li with >60 chars) found on fixture page');
   const r = document.createRange(); r.selectNodeContents(p);
   const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
   // The widget opens its popover ONLY on a real mouseup on the content (a
@@ -34,12 +35,24 @@ const selected = await frame.evaluate(() => {
 });
 console.log("selected:", JSON.stringify(selected));
 await page.waitForTimeout(800);
+// Get initial card count before submitting
+const initialCardCount = await frame.evaluate(() =>
+  document.querySelectorAll("#fb-panel li, #fb-panel .fb-card, #fb-panel .fb-item").length);
 // Meta/Ctrl+click on the popover Comment button is the connected-mode
 // "fix now" fast path - it calls submitDraft() and therefore the BRIDGE
 // immediately (a plain click only creates a local draft).
 await frame.click("#fb-comment", { modifiers: ["Meta"] });
-// bridge round-trip is async - give it time, then count board cards
-await page.waitForTimeout(6000);
+// Poll for the new card to appear on the board (max 20s, poll every 300ms)
+const maxWait = 20000;
+const pollInterval = 300;
+const startTime = Date.now();
+let cardCount = initialCardCount;
+while (cardCount === initialCardCount && Date.now() - startTime < maxWait) {
+  await page.waitForTimeout(pollInterval);
+  cardCount = await frame.evaluate(() =>
+    document.querySelectorAll("#fb-panel li, #fb-panel .fb-card, #fb-panel .fb-item").length);
+}
+if (cardCount === initialCardCount) throw new Error('board card count did not increase within ' + maxWait + 'ms');
 console.log("board cards:", await frame.evaluate(() =>
   document.querySelectorAll("#fb-panel li, #fb-panel .fb-card, #fb-panel .fb-item").length));
 console.log("screenshot:", await saveScreenshot(await page.screenshot(), "dh-e2e.png"));

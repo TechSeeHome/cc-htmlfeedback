@@ -96,9 +96,23 @@ function dhReconcile_() {
   shards.sort(function (a, b) { return a.path.localeCompare(b.path); });
   var rows = DH_ROLLUP.buildRollup(shards.map(function (s) { return s.rows; }));
   var it = root.getFilesByName('_portal-index');
-  if (!it.hasNext()) throw new Error('DesignHub: _portal-index missing - first publish creates it');
-  var sheet = SpreadsheetApp.openById(it.next().getId()).getSheets()[0];
-  sheet.getRange('A2:N10000').clearContent();
+  var sheet;
+  if (!it.hasNext()) {
+    // _portal-index doesn't exist yet - create it with the header row
+    var newSs = SpreadsheetApp.create('_portal-index');
+    var newFile = DriveApp.getFileById(newSs.getId());
+    root.addFile(newFile);
+    DriveApp.getRootFolder().removeFile(newFile);
+    sheet = newSs.getSheets()[0];
+    sheet.appendRow(DH_SCHEMA.INDEX_COLS);
+  } else {
+    sheet = SpreadsheetApp.openById(it.next().getId()).getSheets()[0];
+  }
+  // Clear existing data rows (keeping the header) using the actual sheet extent
+  var lastRow = Math.max(sheet.getLastRow() - 1, 0);
+  if (lastRow > 0) {
+    sheet.getRange(2, 1, lastRow, DH_SCHEMA.INDEX_COLS.length).clearContent();
+  }
   if (rows.length) sheet.getRange(2, 1, rows.length, DH_SCHEMA.INDEX_COLS.length).setValues(rows);
   return rows.length;
 }

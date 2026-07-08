@@ -54,17 +54,36 @@ export function waitForCode(port, redirect, onListen) {
   });
 }
 
+// Bug #1 fix: best-effort browser auto-open. `spawn`'s ENOENT (missing `open`
+// binary - e.g. non-macOS) surfaces ASYNCHRONOUSLY as an 'error' EVENT on the
+// returned ChildProcess, never as a thrown exception - a synchronous
+// try/catch around the spawn() call never sees it, and an unhandled 'error'
+// event crashes the whole process. Attach a handler that logs and swallows
+// it instead; the URL is always printed above for the user to click by hand,
+// so a failed auto-open just falls back to that already-visible path.
+// Exported for direct testing (same rationale as waitForCode above, and the
+// `cmd` param lets a test force a deterministic ENOENT); not part of
+// gauth.mjs's consumed surface (publish.mjs only imports accessToken/api).
+export function openUrl(url, cmd = 'open') {
+  const child = spawn(cmd, [url], { stdio: 'ignore' });
+  child.on('error', (err) => {
+    console.error(`(could not auto-open a browser: ${err.message} - use the URL above)`);
+  });
+  return child;
+}
+
 async function consent() {
   const { id, secret } = clientCreds();
   // dev-machine assumptions: fixed local port + macOS `open`; on other OSes
-  // the printed URL is the path (the spawn failure is swallowed on purpose)
+  // (or if `open` is missing) openUrl() logs and falls back to the printed
+  // URL above instead of crashing.
   const port = 8765;
   const redirect = `http://localhost:${port}/`;
   const url = 'https://accounts.google.com/o/oauth2/auth?' + new URLSearchParams({
     response_type: 'code', client_id: id, redirect_uri: redirect,
     scope: SCOPE, access_type: 'offline', prompt: 'consent select_account' });
   console.log('\nAuthorize DesignHub publishing - open this URL and approve:\n\n' + url + '\n');
-  try { spawn('open', [url], { stdio: 'ignore' }); } catch { /* print-only fallback */ }
+  openUrl(url);
   const code = await waitForCode(port, redirect);
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -90,7 +109,7 @@ export async function accessToken() {
   return consent();
 }
 
-export async function api(token, url, opts = {}) {
+async function fetchOnce(token, url, opts) {
   const r = await fetch(url, { ...opts,
     headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
   if (!r.ok) {
@@ -101,4 +120,31 @@ export async function api(token, url, opts = {}) {
     throw e;
   }
   return r.json();
+}
+
+export async function api(token, url, opts = {}) {
+  const json = await fetchOnce(token, url, opts);
+  // Bug #4 fix: Drive/Sheets list endpoints (files.list, etc.) only return
+  // one page - by default up to 100 files - plus a nextPageToken when more
+  // exist. Every caller treats api()'s return value as the complete result
+  // (e.g. publish.mjs's q()/child() read .files straight off it), so a
+  // Shared Drive folder with many children could silently look incomplete
+  // and ensure() would create duplicate folders/sheets/docs that already
+  // existed on a later page. Follow nextPageToken here, transparently, for
+  // every caller. Deliberately generic (concat whichever array-valued
+  // field(s) the response carries, e.g. Drive's `files`) rather than
+  // hardcoding a field name, since api() is a shared low-level fetch helper
+  // used for several different Google API response shapes - most of which
+  // (Sheets values.get/put/append, Drive about, single-file get) never
+  // return a nextPageToken at all, so this loop is a no-op for them.
+  let page = json;
+  while (page.nextPageToken) {
+    const sep = url.includes('?') ? '&' : '?';
+    page = await fetchOnce(token, `${url}${sep}pageToken=${encodeURIComponent(page.nextPageToken)}`, opts);
+    for (const key of Object.keys(page)) {
+      if (Array.isArray(page[key]) && Array.isArray(json[key])) json[key] = json[key].concat(page[key]);
+    }
+  }
+  delete json.nextPageToken;
+  return json;
 }

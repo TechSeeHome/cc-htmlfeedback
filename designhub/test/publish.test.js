@@ -13,6 +13,33 @@ test('scanAssets: asset loads vs navigation links (two severities)', async () =>
   assert.deepEqual(r.links, ['./other.md']);   // #, data:, absolute all ignored
 });
 
+test('scanAssets: CSS url() refs inside <style> (background-image, @font-face)', async () => {
+  const { scanAssets } = await mod();
+  const html = '<style>body{background:url(\'./bg.png\')}' +
+    '@font-face{font-family:F;src:url(./font.woff2)}' +
+    '.x{background:url("https://x.com/ok.png")}</style>';
+  const r = scanAssets(html);
+  assert.deepEqual(r.assets.sort(), ['./bg.png', './font.woff2']);
+  assert.deepEqual(r.links, []);
+});
+
+test('scanAssets: srcset with multiple relative entries (responsive images)', async () => {
+  const { scanAssets } = await mod();
+  const html = '<img srcset="./small.png 1x, ./big.png 2x" src="./small.png">' +
+    '<source srcset="./wide.png 2x, https://x.com/abs.png 3x">';
+  const r = scanAssets(html);
+  assert.deepEqual(r.assets.sort(), ['./big.png', './small.png', './wide.png']);
+});
+
+test('scanAssets: unquoted src attribute value (valid but unusual HTML)', async () => {
+  const { scanAssets } = await mod();
+  const html = '<img src=./pic.png><script src=lib/app.js></script>' +
+    '<a href=./other.md>sibling</a>';
+  const r = scanAssets(html);
+  assert.deepEqual(r.assets.sort(), ['./pic.png', 'lib/app.js']);
+  assert.deepEqual(r.links, ['./other.md']);
+});
+
 test('inferMetadata: repo from remote, feature from branch, jira from branch', async () => {
   const { inferMetadata } = await mod();
   const m = inferMetadata({

@@ -32,7 +32,7 @@ and run `build.js` after changing the server, lib, or widget. `node build.js --c
 From a local checkout (recommended - always matches your current branch, including
 plugins not yet merged upstream):
 
-```
+```shell
 /plugin marketplace add .
 /plugin install cc-htmlfeedback@cc-htmlfeedback
 /cc-htmlfeedback

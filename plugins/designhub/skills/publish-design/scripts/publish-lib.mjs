@@ -7,13 +7,42 @@ const REL = (u) => !/^(https?:|#|data:|mailto:|\/\/)/i.test(u);
 // NAV links merely 404 on click (soft warn). Classify by tag.
 export function scanAssets(html) {
   const assets = [], links = [];
-  const re = /<(a|img|script|link|source|iframe|video|audio)\b[^>]*?(?:src|href)\s*=\s*["']([^"']+)["']/gi;
+  const push = (tag, url) => {
+    if (!REL(url)) return;
+    (tag.toLowerCase() === 'a' ? links : assets).push(url);
+  };
+
+  // src/href - quoted (either style) or, since valid-but-unusual HTML may
+  // omit quotes entirely (e.g. <img src=./pic.png>), a bare unquoted run.
+  const re = /<(a|img|script|link|source|iframe|video|audio)\b[^>]*?(?:src|href)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
   let m;
   while ((m = re.exec(html))) {
-    const [, tag, url] = m;
-    if (!REL(url)) continue;
-    (tag.toLowerCase() === 'a' ? links : assets).push(url);
+    const [, tag, dq, sq, unq] = m;
+    push(tag, dq ?? sq ?? unq);
   }
+
+  // srcset - comma-separated "url descriptor" list for responsive images
+  // (e.g. srcset="./small.png 1x, ./big.png 2x"); only img/source carry it.
+  const srcsetRe = /<(img|source)\b[^>]*?srcset\s*=\s*["']([^"']+)["']/gi;
+  let sm;
+  while ((sm = srcsetRe.exec(html))) {
+    const [, tag, list] = sm;
+    for (const entry of list.split(',')) {
+      const url = entry.trim().split(/\s+/)[0];
+      if (url) push(tag, url);
+    }
+  }
+
+  // CSS url(...) references inside <style> blocks (backgrounds, @font-face)
+  // - untouched by the attribute scan above since they're not tag attrs.
+  const styleRe = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+  let stm;
+  while ((stm = styleRe.exec(html))) {
+    const urlRe = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+    let um;
+    while ((um = urlRe.exec(stm[1]))) push('style', um[2]);
+  }
+
   return { assets: [...new Set(assets)], links: [...new Set(links)] };
 }
 

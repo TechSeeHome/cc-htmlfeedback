@@ -218,8 +218,14 @@ Schema carried over from cc-htmlfeedback's ticket, extended for multi-user revie
 | `result` / `files` | filled by agents when they act on a ticket |
 | `createdAt` / `updatedAt` | timestamps |
 
-A `meta` tab holds: repo, path-in-repo, branch, commit SHA, PR number, jira, publisher,
-publish history (one row per re-publish).
+A `meta` tab (columns: `repo`, `pathInRepo`, `branch`, `commitSha`, `pr`, `jira`, `publisher`,
+`publishedAt`, `note`) carries two append-only logs in one tab: **publish history** (one row
+per re-publish, all columns populated) and the **status-change audit log** (D17(c)) - every
+`setStatus` call appends a row with `repo`/`pathInRepo`/`branch`/`commitSha`/`pr`/`jira` left
+blank, `publisher` set to the acting viewer's email (server-stamped from the session, never
+client-supplied) and `publishedAt` to the change timestamp, and `note` holding
+`setStatus <id>: <oldStatus> -> <newStatus>` - recording the prior status, not just the new
+one, so the log reconstructs full history instead of just the latest transition.
 
 ### Bridge functions (v1) = future REST surface
 
@@ -227,7 +233,7 @@ publish history (one row per re-publish).
 |---|---|
 | `listCatalog(filter)` | `GET /catalog` |
 | `getDoc(path)` | `GET /docs/{path}` |
-| `submitComment(ticket)` | `POST /docs/{path}/comments` |
+| `submitComment(path, ticket)` | `POST /docs/{path}/comments` |
 | `listComments(path)` | `GET /docs/{path}/comments` |
 | `reply(path, parentId, note)` | `POST /docs/{path}/comments/{id}/replies` |
 | `setStatus(path, id, status)` | `PATCH /docs/{path}/comments/{id}` |

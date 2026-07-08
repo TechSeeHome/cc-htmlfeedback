@@ -152,7 +152,7 @@ function transform(src) {
   body = replaceOnce(body,
     '  function discard(id){ setRemoved(id, true); record(() => setRemoved(id, true), () => setRemoved(id, false)); } // apply = remove, revert = restore',
     "  function discard(id){ setRemoved(id, true); record(() => setRemoved(id, true), () => setRemoved(id, false));" +
-      " var f = store[id]; if(f && f.sid) dhRun('setStatus', dhPage(), f.sid, 'deleted').catch(() => {});" +
+      " var f = store[id]; if(f && f.sid) dhRun('setStatus', dhPage(), f.sid, 'deleted').catch(function(){ setRemoved(id, false); showToast('Failed to delete - please try again', true); });" +
       " } // apply = remove, revert = restore (DesignHub: also deletes server-side once submitted)",
     'discard handler');
 

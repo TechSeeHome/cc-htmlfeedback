@@ -30,7 +30,10 @@ var DH_RENDER = (function () {
     var base = '<base target="_top">';
     html = /<head[^>]*>/i.test(html)
       ? html.replace(/<head[^>]*>/i, function (m) { return m + base; })
-      : base + html;
+      : (function() {
+          var doctypeMatch = html.match(/^(\s*)<!doctype[^>]*>/i);
+          return doctypeMatch ? html.slice(0, doctypeMatch[0].length) + '\n' + base + html.slice(doctypeMatch[0].length) : base + html;
+        })();
     return html.replace(/<a\s([^>]*href=["']#)/gi, '<a target="_self" $1');
   }
   function widgetTags(docPath, execUrl) {
@@ -60,7 +63,17 @@ var DH_RENDER = (function () {
   function serveHtml(html, docPath, execUrl) {
     html = injectBase(html);
     var tags = widgetTags(docPath, execUrl);
-    return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, tags + '</body>') : html + tags;
+    if (/<\/body>/i.test(html)) {
+      var lastIdx = -1;
+      for (var i = html.length - 1; i >= 0; i--) {
+        if (html.slice(i, i + 7).toLowerCase() === '</body>') {
+          lastIdx = i;
+          break;
+        }
+      }
+      return lastIdx >= 0 ? html.slice(0, lastIdx) + tags + html.slice(lastIdx) : html + tags;
+    }
+    return html + tags;
   }
   // MD shell (poc3): marked inline (39 KB, proven safe), mermaid via asset URL
   // (3.5 MB - inlining it gets truncated by HtmlService). Progressive: text
@@ -116,9 +129,9 @@ var DH_RENDER = (function () {
     if (!active.length) {
       body = '<p>No docs published yet. Publish one with <code>/publish-design</code>.</p>';
     } else {
-      var byRepo = {};
+      var byRepo = Object.create(null);
       active.forEach(function (r) {
-        byRepo[r.repo] = byRepo[r.repo] || {};
+        byRepo[r.repo] = byRepo[r.repo] || Object.create(null);
         (byRepo[r.repo][r.feature] = byRepo[r.repo][r.feature] || []).push(r);
       });
       body = Object.keys(byRepo).sort().map(function (repo) {

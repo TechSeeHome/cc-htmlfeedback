@@ -25,7 +25,14 @@ function dhAsset_(name) {
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
-  if (p.asset) return dhAsset_(p.asset);
+  if (p.asset) {
+    try {
+      return dhAsset_(p.asset);
+    } catch (err) {
+      return HtmlService.createHtmlOutput(DH_RENDER.notFoundHtml('unknown asset: ' + p.asset))
+        .setTitle('DesignHub - not found').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
+  }
   if (!p.doc) {
     return HtmlService.createHtmlOutput(DH_RENDER.treeHtml(dhPortalRows_()))
       .setTitle('DesignHub').addMetaTag('viewport', 'width=device-width, initial-scale=1');

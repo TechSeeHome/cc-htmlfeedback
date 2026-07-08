@@ -114,3 +114,67 @@ test('html entities are decoded on the markdown path too', async () => {
     context: 'Foo & Bar <3 the quick brown fox jumps over the lazy dog.' });
   assert.deepEqual(reanchorPass([ticket], md, false), []);
 });
+
+// ---- D15 §1: invalid numeric character references must not throw ----
+
+test('an out-of-range hex entity does not throw and does not break unrelated matching', async () => {
+  const { reanchorPass } = await mod();
+  const doc = '<html><body><h2>Intro</h2><p>&#x110000; The quick brown fox jumps over the lazy dog.</p></body></html>';
+  assert.doesNotThrow(() => reanchorPass([t()], doc, true));
+  assert.deepEqual(reanchorPass([t()], doc, true), []);
+});
+
+test('an out-of-range decimal entity does not throw and does not break unrelated matching', async () => {
+  const { reanchorPass } = await mod();
+  const doc = '<html><body><h2>Intro</h2><p>&#1114112; The quick brown fox jumps over the lazy dog.</p></body></html>';
+  assert.doesNotThrow(() => reanchorPass([t()], doc, true));
+  assert.deepEqual(reanchorPass([t()], doc, true), []);
+});
+
+// ---- D15 §2: quote/context/section must correlate to the SAME occurrence ----
+
+test('same quote+context survive verbatim but only under a DIFFERENT heading -> anchor-lost', async () => {
+  const { reanchorPass } = await mod();
+  // The original "Intro" section was replaced; the exact sentence the
+  // ticket was anchored to now lives only under "Appendix". A whole-document
+  // "does this text exist anywhere" check would wrongly call this found.
+  const doc = '<html><body><h2>Intro</h2><p>Something else entirely.</p>'
+    + '<h2>Appendix</h2><p>The quick brown fox jumps over the lazy dog.</p></body></html>';
+  const out = reanchorPass([t()], doc, true);
+  assert.equal(out[0].status, 'anchor-lost');
+  assert.match(out[0].result, /section/);
+});
+
+test('quote+context recur under an unrelated heading, but the ORIGINAL occurrence still stands -> found', async () => {
+  const { reanchorPass } = await mod();
+  // Duplicate content under "Appendix" must not cause a false anchor-lost
+  // for the ticket whose recorded section ("Intro") still correlates fine.
+  const doc = '<html><body><h2>Intro</h2><p>The quick brown fox jumps over the lazy dog.</p>'
+    + '<h2>Appendix</h2><p>The quick brown fox jumps over the lazy dog.</p></body></html>';
+  assert.deepEqual(reanchorPass([t()], doc, true), []);
+});
+
+// ---- D15 §3: <head>/<title> text must not leak into the matching haystack ----
+
+test('quote surviving only in <title> (body text actually removed) -> anchor-lost, not found', async () => {
+  const { reanchorPass } = await mod();
+  const doc = '<html><head><title>The quick brown fox jumps over the lazy dog.</title></head>'
+    + '<body><p>Something else entirely.</p></body></html>';
+  const out = reanchorPass([t()], doc, true);
+  assert.equal(out[0].status, 'anchor-lost');
+});
+
+// ---- D15 §4: raw inline HTML in a Markdown doc must be stripped like the HTML branch ----
+
+test('markdown mode strips raw inline HTML tags (matches how marked renders them)', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nThe <b>quick</b> brown fox jumps over the lazy dog.\n';
+  assert.deepEqual(reanchorPass([t()], md, false), []);
+});
+
+test('markdown mode: a strike whose text is unchanged (just re-tagged) must NOT auto-resolve', async () => {
+  const { reanchorPass } = await mod();
+  const md = '## Intro\n\nThe <b>quick</b> brown fox jumps over the lazy dog.\n';
+  const out = reanchorPass([t({ type: 'strike' })], md, false);
+  assert.deepEqual(out, []);
+});

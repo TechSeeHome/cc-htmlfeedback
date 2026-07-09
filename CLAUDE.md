@@ -54,6 +54,30 @@ edited an existing one), `/plugin install` may report "not found" even after
 plugin list from session start. Exit the session (`/exit`) and start a fresh `claude`
 process, then retry the install - no need to re-add the marketplace.
 
+## DesignHub quick reference
+
+Commands: `node --test designhub/test/` · `node designhub/build-designhub.js --check`
+(regenerates `designhub/gas/widget.js` - run after any transform-affecting change).
+
+**Deploying to production is 2 steps, not 1**: `clasp push -f` only updates the Apps Script
+project's HEAD - the live public URL stays pinned to its old version until you also run
+`clasp create-deployment -i <existing-deployment-id> -d "<desc>"` reusing the SAME deployment ID
+(a new ID would orphan every already-published doc link). See `designhub/README.md` for the
+full flow and `docs/designhub/design.md` for D1-D19 architecture decisions (D16: never edit
+upstream cc-htmlfeedback files - feedback-widget.html, build.js, server.js, lib/,
+plugins/cc-htmlfeedback/ - from DesignHub work).
+
+## DesignHub backlog — TODO
+
+- **`_index` upsert race** (`plugins/designhub/skills/publish-design/scripts/publish.mjs`): concurrent
+  publishes of the same doc can duplicate rows in the authoritative `_index` shard. Currently a
+  best-effort mitigation only (tightened read-before-write window + post-write dedupe pass) - a real
+  fix needs a server-side `LockService`-based Apps Script bridge function. Not resolved on PR #2.
+- **Delete tombstones don't propagate across tabs** (`designhub/gas/bridge.js` `listComments`):
+  the upstream widget's `reconcile()` has no removal-sweep mechanism at all (confirmed by reading
+  feedback-widget.html) - a card deleted in one tab lingers in others until reload. Fixing requires
+  an upstream widget change, blocked by D16 unless explicitly excepted.
+
 ## Architect review backlog — TODO (review: 2026-06-18)
 
 Known issues from a four-agent architect review (server/lib, widget/extension, skill/integration,
@@ -131,3 +155,7 @@ widget) also bump `plugins/cc-htmlfeedback/.claude-plugin/plugin.json` and the p
 `.claude-plugin/marketplace.json` (keep them in sync). Rebuild (`node build.js`) after editing the
 widget/server/lib so `extension/feedback-widget.js` and the assembled `plugins/cc-htmlfeedback/`
 copies match the source (`node build.js --check` verifies).
+
+Same rule applies to DesignHub: bump `plugins/designhub/.claude-plugin/plugin.json` and its
+marketplace.json entry when shipping a user-facing DesignHub change (gas/, publish-design
+scripts, or widget transform).

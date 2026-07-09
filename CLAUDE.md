@@ -91,9 +91,10 @@ moves).
   drain loop only merges inbox lines when it goes globally idle - see `SKILL.md` Step 1). Deferred
   fix submission's Fix all raises the odds and blast radius of hitting this (several tickets land at
   once, right when a user might Clean). Real fix needs a server-side change (e.g. merge-before-clean,
-  or an inbox the server itself drains) - out of scope for a widget-only PR. Related to the design
-  doc's already-accepted "Fix all outrunning inbox ingestion" and "POST-failure idempotency" risks
-  (`docs/design/2026-07-02-deferred-fix-submission.md` §5), but this is the sharper case: it's not a
+  or an inbox the server itself drains) - out of scope for a widget-only PR. Related to (but sharper
+  than) the deferred-fix-submission design's already-accepted "Fix all outrunning inbox ingestion"
+  and "POST-failure idempotency" risks (that design doc was removed post-ship - see git history for
+  `docs/design/2026-07-02-deferred-fix-submission.md` if the original framing is needed): it's not a
   retry/duplicate risk, it's silent deletion of already-sent work with no error surfaced.
 
 ### Open — LOW

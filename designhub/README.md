@@ -18,5 +18,5 @@ REST. Spec: `docs/designhub/design.md` (D1-D19). POC evidence:
 - Org-specific config is never committed: copy `config.example.js` to
   `gas/config.js` and `plugins/designhub/designhub.config.json` to
   `designhub.config.local.json`, then fill both from
-  `docs/designhub/plans/environment.local.md` (all three local files gitignored;
+  `docs/designhub/environment.local.md` (all three local files gitignored;
   the template stays outside `gas/` so clasp never pushes it).

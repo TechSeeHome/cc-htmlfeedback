@@ -1,6 +1,6 @@
 // DesignHub deployment configuration TEMPLATE (committed). Copy to
 // designhub/gas/config.js and fill in the real ids from
-// docs/designhub/plans/environment.local.md. gas/config.js is gitignored: the
+// docs/designhub/environment.local.md. gas/config.js is gitignored: the
 // ids are not secrets (access is enforced by Drive ACLs), but they are
 // org-specific and this fork stays generic. clasp pushes gas/config.js from
 // disk regardless of git. Keep this template OUT of gas/: two files assigning

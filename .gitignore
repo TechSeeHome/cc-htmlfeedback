@@ -24,12 +24,16 @@ docs/superpowers/
 # DesignHub POCs (local-only: org-specific fixtures, credentials, run logs)
 docs/designhub/pocs/
 
-# DesignHub org-specific values referenced by the plan docs (local-only)
+# DesignHub implementation plan docs (historical - shipped in v1, not maintained
+# post-merge; git history keeps them retrievable if ever needed)
+docs/designhub/plans/
+
+# DesignHub org-specific values referenced by the templates (local-only)
 docs/designhub/**/*.local.md
 
 # DesignHub local deployment values (org-specific - never committed; the committed
 # templates are designhub/config.example.js + plugins/designhub/designhub.config.json,
-# real values come from docs/designhub/plans/environment.local.md)
+# real values come from docs/designhub/environment.local.md)
 designhub/gas/config.js
 designhub/gas/.clasp.json
 plugins/designhub/designhub.config.local.json

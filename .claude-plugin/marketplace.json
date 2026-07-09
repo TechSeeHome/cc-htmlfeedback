@@ -7,6 +7,12 @@
       "source": "./plugins/cc-htmlfeedback",
       "description": "Live in-browser feedback loop for local web pages, fixed live by Claude Code.",
       "version": "1.2.0"
+    },
+    {
+      "name": "designhub",
+      "source": "./plugins/designhub",
+      "description": "Publish design docs to DesignHub - Google-login-gated review hub with in-page comments stored in Sheets.",
+      "version": "0.2.0"
     }
   ]
 }

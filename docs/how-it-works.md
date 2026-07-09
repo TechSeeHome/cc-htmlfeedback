@@ -11,7 +11,7 @@
 
 | Piece | What it is | Where it runs |
 |---|---|---|
-| **Widget** (`feedback-widget.js`) | Self-contained, zero-dependency script that draws the Feedback pill, the comment popover, and the side panel | Inside your page, in the browser |
+| **Widget** (`feedback-widget.js`) | Self-contained, zero-dependency script that draws the Feedback pill, the comment popover, and the side panel with its ⚡ Fix / ⚡ Fix all send buttons; keeps notes as local drafts until you send | Inside your page, in the browser |
 | **Companion server** (`server.js`) | Tiny Node HTTP server (default port `4317`) that serves your HTML and injects the widget into every page | Your machine, `127.0.0.1` only |
 | **Queue** (`.cc-htmlfeedback/`) | Plain files on disk next to your HTML - the only communication channel between browser and AI | Your working tree (gitignored) |
 | **Claude Code session** (the "loop") | Reads the queue, dispatches one subagent per comment to edit the source, writes results back | Your terminal |
@@ -87,9 +87,12 @@ form a **ticket** once the draft is sent:
 | `section` | Nearest heading above the selection | Human-readable locator |
 | `page` | The page URL | Maps to the source file |
 
-Drafts stay editable in the side panel and can be discarded. Clicking **Fix** on a draft (or
-**Fix all** to send every pending draft, one after another) is what actually POSTs it to the
-server - only then does it become a ticket the session can see. A fast path skips the draft
+Drafts stay editable in the side panel and can be discarded. Clicking **⚡ Fix** on a draft (or
+**⚡ Fix all (N)** to send every pending draft, one after another) is what actually POSTs it to the
+server - only then does it become a ticket the session can see. **Fix all sends sequentially and
+stops at the first failure**, keeping the unsent notes as drafts (with a toast saying how many were
+sent vs kept). Drafts survive reloads in the same tab - they are persisted per project namespace
+and restored on load. A fast path skips the draft
 stage for a quick single fix: **Cmd/Ctrl+Enter** (comment), **Cmd/Ctrl+Backspace** (strike, on
 an empty box), or **Cmd/Ctrl+click** on either button - all three save and send in one step.
 
@@ -124,9 +127,12 @@ Ticket schema (defined once in `lib/queue.js`'s `newTicket()`; shown here for re
 ### 3. The session wakes up (no polling)
 
 The Claude session runs a tiny watcher (`lib/watch-inbox.js`) that blocks until any
-page's inbox file **grows**, then exits - which wakes the session. Between comments the
-session is idle: no polling, no token cost. On wake it merges new inbox lines onto the
-board as `todo`, then claims them as `in-progress` at dispatch time.
+page's inbox file **grows**, then exits - which wakes the session. But the watcher only
+starts once the drain loop has no pending `todo` tickets left to claim; while up to 5
+tickets are already in flight, a new inbox line just waits - it isn't merged onto the
+board until the loop fully drains back to idle. Once idle, there's no polling, no token
+cost; on wake it merges new inbox lines onto the board as `todo`, then claims them as
+`in-progress` at dispatch time.
 
 ### 4. Live status in your tab
 
@@ -138,13 +144,15 @@ pulsing blue (working), and the exact text you commented on pulses while an agen
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> todo: comment submitted
+    [*] --> draft: note saved locally
+    draft --> todo: ⚡ Fix / ⚡ Fix all
     todo --> inprogress: session claims at dispatch
     inprogress --> done: fix applied + verified
     inprogress --> error: failed / edit collision
     done --> [*]: page morphs in place
     error --> todo: resurfaced / retried
 
+    draft: draft (browser-only, invisible to the session)
     inprogress: in-progress (highlight pulses)
 ```
 
@@ -174,9 +182,10 @@ their quotes again. In proxy mode the upstream dev server's HMR does this job in
 ## The second mode: Chrome extension (no server, no AI)
 
 The same widget ships as a Chrome extension for any webpage. Nothing is connected: notes
-live only in page memory, and **Copy feedback** exports all notes as structured text
-(quote + context + section + note + file path) to your clipboard - to paste to a colleague
-or an AI manually. Same UX, zero infrastructure.
+live only in page memory, and **Copy feedback** exports all notes as structured text to
+your clipboard: the page URL is written once, as a header line, then each note lists its
+type marker (`[COMMENT]` or `[STRIKE / suggest removing]`), section, quote, context, and
+note - to paste to a colleague or an AI manually. Same UX, zero infrastructure.
 
 ## Boundaries worth knowing
 

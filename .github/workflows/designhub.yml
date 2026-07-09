@@ -1,0 +1,23 @@
+name: designhub
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: upstream build is clean (never edited)
+        run: node build.js --check
+      - name: upstream tests
+        run: npm test
+      - name: designhub widget transform is fresh + anchors hold
+        run: node designhub/build-designhub.js --check
+      - name: designhub tests
+        run: node --test designhub/test/

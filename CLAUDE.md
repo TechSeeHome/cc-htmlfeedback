@@ -10,7 +10,7 @@ This repo is **both** a Claude Code plugin marketplace and the single source of 
 `/cc-htmlfeedback` skill. Layout:
 
 ```
-.claude-plugin/marketplace.json          ← marketplace (lists the one plugin)
+.claude-plugin/marketplace.json          ← marketplace (lists the plugins - cc-htmlfeedback, designhub)
 plugins/cc-htmlfeedback/                  ← the installable plugin
   .claude-plugin/plugin.json
   skills/cc-htmlfeedback/                 ← canonical skill source — EDIT HERE
@@ -29,13 +29,54 @@ and run `build.js` after changing the server, lib, or widget. `node build.js --c
 
 ### Install / use
 
-```
-/plugin marketplace add leetwito/cc-htmlfeedback   # or: /plugin marketplace add .  (local dev)
+From a local checkout (recommended - always matches your current branch, including
+plugins not yet merged upstream):
+
+```shell
+/plugin marketplace add .
 /plugin install cc-htmlfeedback@cc-htmlfeedback
 /cc-htmlfeedback
 ```
 
-After editing the skill text, run `/plugin marketplace update` to refresh the installed copy.
+To install from a GitHub remote instead, use *your own* fork/remote, not a hardcoded
+upstream repo - `/plugin marketplace add <owner>/cc-htmlfeedback` (substitute the
+owner you actually push to; installing from someone else's fork won't have your
+in-progress plugin work).
+
+The marketplace name is always `cc-htmlfeedback` regardless of source (it comes from
+the `name` field in `marketplace.json`, not the owner/repo path) - so
+`/plugin install <plugin>@cc-htmlfeedback` is correct either way.
+
+After editing the skill text, run `/plugin marketplace update` to refresh the
+installed copy. **If you added a brand-new plugin to `marketplace.json`** (not just
+edited an existing one), `/plugin install` may report "not found" even after
+`marketplace add`/`update` - the running CLI process can cache the marketplace's
+plugin list from session start. Exit the session (`/exit`) and start a fresh `claude`
+process, then retry the install - no need to re-add the marketplace.
+
+## DesignHub quick reference
+
+Commands: `node --test designhub/test/` · `node designhub/build-designhub.js --check`
+(regenerates `designhub/gas/widget.js` - run after any transform-affecting change).
+
+**Deploying to production is 2 steps, not 1**: `clasp push -f` only updates the Apps Script
+project's HEAD - the live public URL stays pinned to its old version until you also run
+`clasp create-deployment -i <existing-deployment-id> -d "<desc>"` reusing the SAME deployment ID
+(a new ID would orphan every already-published doc link). See `designhub/README.md` for the
+full flow and `docs/designhub/design.md` for D1-D19 architecture decisions (D16: never edit
+upstream cc-htmlfeedback files - feedback-widget.html, build.js, server.js, lib/,
+plugins/cc-htmlfeedback/ - from DesignHub work).
+
+## DesignHub backlog — TODO
+
+- **`_index` upsert race** (`plugins/designhub/skills/publish-design/scripts/publish.mjs`): concurrent
+  publishes of the same doc can duplicate rows in the authoritative `_index` shard. Currently a
+  best-effort mitigation only (tightened read-before-write window + post-write dedupe pass) - a real
+  fix needs a server-side `LockService`-based Apps Script bridge function. Not resolved on PR #2.
+- **Delete tombstones don't propagate across tabs** (`designhub/gas/bridge.js` `listComments`):
+  the upstream widget's `reconcile()` has no removal-sweep mechanism at all (confirmed by reading
+  feedback-widget.html) - a card deleted in one tab lingers in others until reload. Fixing requires
+  an upstream widget change, blocked by D16 unless explicitly excepted.
 
 ## Architect review backlog — TODO (review: 2026-06-18)
 
@@ -74,9 +115,10 @@ moves).
   drain loop only merges inbox lines when it goes globally idle - see `SKILL.md` Step 1). Deferred
   fix submission's Fix all raises the odds and blast radius of hitting this (several tickets land at
   once, right when a user might Clean). Real fix needs a server-side change (e.g. merge-before-clean,
-  or an inbox the server itself drains) - out of scope for a widget-only PR. Related to the design
-  doc's already-accepted "Fix all outrunning inbox ingestion" and "POST-failure idempotency" risks
-  (`docs/design/2026-07-02-deferred-fix-submission.md` §5), but this is the sharper case: it's not a
+  or an inbox the server itself drains) - out of scope for a widget-only PR. Related to (but sharper
+  than) the deferred-fix-submission design's already-accepted "Fix all outrunning inbox ingestion"
+  and "POST-failure idempotency" risks (that design doc was removed post-ship - see git history for
+  `docs/design/2026-07-02-deferred-fix-submission.md` if the original framing is needed): it's not a
   retry/duplicate risk, it's silent deletion of already-sent work with no error surfaced.
 
 ### Open — LOW
@@ -94,6 +136,15 @@ moves).
   (it's a documented demo fixture, not stray). `feedback-widget.html` is the build SOURCE despite the
   `.html` name — leave it, the `build.js` docstrings disambiguate.
 
+## Browser automation - use dev-browser
+
+Browser-driving in this repo (widget E2E, DesignHub POC verification, screenshots) uses
+the **`dev-browser`** skill/CLI - persistent daemon, full Playwright API in scripts - not
+a browser MCP (Playwright MCP was removed from this machine on purpose). Keep
+verification flows as committed scripts (e.g. under `docs/designhub/pocs/pocN/`) so they
+graduate into E2E tests. Logged-in Google profile setup:
+`docs/designhub/pocs/PREREQUISITES.md` P2.
+
 ## Releasing — bump the extension version when needed
 
 When you ship a user-facing change to the widget or the extension (new behavior, fixes,
@@ -104,3 +155,7 @@ widget) also bump `plugins/cc-htmlfeedback/.claude-plugin/plugin.json` and the p
 `.claude-plugin/marketplace.json` (keep them in sync). Rebuild (`node build.js`) after editing the
 widget/server/lib so `extension/feedback-widget.js` and the assembled `plugins/cc-htmlfeedback/`
 copies match the source (`node build.js --check` verifies).
+
+Same rule applies to DesignHub: bump `plugins/designhub/.claude-plugin/plugin.json` and its
+marketplace.json entry when shipping a user-facing DesignHub change (gas/, publish-design
+scripts, or widget transform).

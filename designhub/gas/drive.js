@@ -117,6 +117,108 @@ function dhReconcile_() {
   return rows.length;
 }
 
+// --- Knowledge Portal (K9/Option B) --------------------------------------
+// listKnowledge/refreshKnowledge (bridge.js) extend the bridge per the
+// Knowledge Portal design (apps/knowledge-portal in home-rnd-productivity-v2,
+// section 4.2/4.3). `_knowledge-index` is root-level like `_portal-index`
+// (D19) but is its OWN Sheet (K4) - the Importer/reconciler here never reads
+// or writes `_portal-index`, and DesignHub's reconciler never touches this
+// one.
+
+// Root-level lookup, mirrors dhPortalRows_ - returns null (not an error) when
+// nothing has synced yet, matching listKnowledge's "missing Sheet returns
+// {rows: []}" contract (portal falls back gracefully).
+function dhKnowledgeSheet_() {
+  var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
+  var it = root.getFilesByName('_knowledge-index');
+  return it.hasNext() ? SpreadsheetApp.openById(it.next().getId()) : null;
+}
+
+function dhKnowledgeRows_() {
+  var ss = dhKnowledgeSheet_();
+  var sheet = ss && ss.getSheetByName('links');
+  if (!sheet) return [];
+  return sheet.getDataRange().getValues().slice(1).map(function (row) { return DH_SCHEMA.rowToKnowledge(row); });
+}
+
+// Idempotent create: 'links' (data) + 'meta' (audit log, same append-only
+// pattern setStatus already uses on the comment Sheet's meta tab - D17(c)).
+function dhKnowledgeSheetEnsure_() {
+  var existing = dhKnowledgeSheet_();
+  if (existing) return existing;
+  var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
+  var ss = SpreadsheetApp.create('_knowledge-index');
+  var file = DriveApp.getFileById(ss.getId());
+  root.addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
+  var links = ss.getSheets()[0];
+  links.setName('links');
+  links.appendRow(DH_SCHEMA.KNOWLEDGE_COLS);
+  ss.insertSheet('meta').appendRow(DH_SCHEMA.META_COLS);
+  return ss;
+}
+
+// Walk the team Shared Drive (folder id is config, not a hardcode - same
+// treatment as DH_CONFIG.rootFolderId) and return plain file/folder
+// descriptors for DH_KNOWLEDGE.planSync. Same BFS shape as dhReconcile_'s
+// walk. Uses DriveApp (design section 4.3 allows "DriveApp or the Drive
+// advanced service"; the existing oauthScope is drive.readonly and ~100 files
+// is well within a plain-DriveApp walk's quota, so there is no reason to add
+// the advanced service and its extra manifest surface for this).
+//
+// getFolders()/getFiles() do not enumerate trashed items at all - a
+// deleted/trashed file simply never appears here, which already produces the
+// right outcome (planSync's "missing" branch flags it stale). The `trashed`
+// field is still read per-item (cheap: no extra API call, isTrashed() is a
+// property of the same Drive object) so planSync's own trashed handling stays
+// exercised if a future advanced-service walker starts returning trashed rows.
+//
+// owner (design section 4.2: "Drive last-modifying user") uses getOwner()
+// instead: DriveApp has no last-modifying-user getter (only the Drive
+// advanced service's `lastModifyingUser` field does), and Shared Drive items
+// can throw or return null from getOwner() (they are drive-owned, not
+// user-owned) - guarded per-file so one file's owner lookup can never abort
+// the whole sync.
+// Folder's MIME type is fixed and NOT exposed via getMimeType() - unlike
+// File, the Folder class has no such method at all - so it is supplied by the
+// caller instead of read off the object (see dhDriveDescriptor_).
+var DH_FOLDER_MIME_TYPE_ = 'application/vnd.google-apps.folder';
+
+function dhWalkTeamDrive_() {
+  var folderId = DH_CONFIG.teamDriveFolderId;
+  if (!folderId) throw new Error('DesignHub: teamDriveFolderId not configured');
+  var out = [];
+  var queue = [{ folder: DriveApp.getFolderById(folderId), path: '' }];
+  while (queue.length) {
+    var entry = queue.shift();
+    var files = entry.folder.getFiles();
+    while (files.hasNext()) {
+      var f = files.next();
+      out.push(dhDriveDescriptor_(f, entry.path, f.getMimeType()));
+    }
+    var subs = entry.folder.getFolders();
+    while (subs.hasNext()) {
+      var sub = subs.next();
+      out.push(dhDriveDescriptor_(sub, entry.path, DH_FOLDER_MIME_TYPE_));
+      queue.push({ folder: sub, path: entry.path ? entry.path + '/' + sub.getName() : sub.getName() });
+    }
+  }
+  return out;
+}
+
+function dhDriveDescriptor_(item, parentPath, mimeType) {
+  var owner = '';
+  try {
+    var o = item.getOwner();
+    if (o) owner = o.getEmail();
+  } catch (e) { /* Shared Drive items are drive-owned, not user-owned - '' is fine */ }
+  return {
+    id: item.getId(), name: item.getName(), mimeType: mimeType,
+    path: parentPath, url: item.getUrl(), owner: owner,
+    modifiedTime: item.getLastUpdated().toISOString(), trashed: item.isTrashed()
+  };
+}
+
 // One-time (idempotent) trigger install - invoke after first deploy, or
 // re-run any time. Also underscore-suffixed (see dhReconcile_'s comment) -
 // it isn't part of the bridge contract either, and per that same comment

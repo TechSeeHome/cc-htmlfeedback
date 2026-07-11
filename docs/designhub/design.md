@@ -241,6 +241,13 @@ one, so the log reconstructs full history instead of just the latest transition.
 Note: in v1 `getDoc` is not a bridge function - doc retrieval IS `doGet(?doc=path)`
 (a bridge `getDoc` has no consumer until a client-side router exists).
 
+**Knowledge Portal extension (K9/Option B, 2026-07-12):** the Knowledge Portal
+sub-app (`apps/knowledge-portal` in `home-rnd-productivity-v2`) adds two functions
+to this same bridge - `listKnowledge()` (`GET /knowledge`, reads `_knowledge-index`,
+mirrors `listCatalog`) and `refreshKnowledge()` (`POST /knowledge/refresh`, server-side
+Drive re-sync, D17-stamped identity). Same containment model, same file
+(`bridge.js`); see that design doc's K9 for the rationale.
+
 Every mutating call carries the doc `path`: with one companion Sheet per doc, the
 bridge resolves the target Sheet directly from the path - via the feature `_index`
 row's `commentSheetId` - instead of scanning every Sheet for a comment UUID
@@ -273,10 +280,11 @@ cc-htmlfeedback/                     (our fork)
     gas/                             Apps Script project, version-controlled via clasp
       main.js                        doGet: tree + serve + inject (thin entries)
       bridge.js                      getIdentity/listCatalog/listComments/submitComment/reply/setStatus
+                                      + listKnowledge/refreshKnowledge (Knowledge Portal K9)
       drive.js                       DriveApp/SpreadsheetApp adapters (thin, D5) + reconciler
       widget.js                      built artifact - GENERATED, never hand-edit (see build-designhub.js)
       lib/
-        schema.js · paths.js · rollup.js · render.js   plain-JS logic (node --test-able; enforces D5)
+        schema.js · paths.js · rollup.js · render.js · knowledge.js   plain-JS logic (node --test-able; enforces D5)
     e2e/                            live-deployment verification scripts (dev-browser + Sheets API)
     test/
 ```

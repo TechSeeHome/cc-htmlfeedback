@@ -10,6 +10,14 @@ var DH_SCHEMA = (function () {
     'updatedAt'];
   var META_COLS = ['repo', 'pathInRepo', 'branch', 'commitSha', 'pr', 'jira',
     'publisher', 'publishedAt', 'note'];
+  // Knowledge Portal design (apps/knowledge-portal in home-rnd-productivity-v2,
+  // section 4.2) - the `_knowledge-index` Sheet's `links` tab. A peer of
+  // INDEX_COLS: same shape of concern (one catalog row per known asset), owned
+  // by a different Sheet so the Importer and the DesignHub reconciler (D19)
+  // never contend on the same rows (K4).
+  var KNOWLEDGE_COLS = ['id', 'type', 'title', 'path', 'url', 'driveFileId',
+    'owner', 'tags', 'source', 'status', 'modifiedTime', 'syncedAt',
+    'createdAt', 'updatedAt'];
   var VALID_STATUSES = ['open', 'in-progress', 'resolved', 'declined', 'anchor-lost', 'deleted'];
   var WIDGET_STATUS = { open: 'todo', 'in-progress': 'in-progress',
     resolved: 'done', declined: 'error', 'anchor-lost': 'error' };
@@ -57,11 +65,14 @@ var DH_SCHEMA = (function () {
 
   return {
     TICKET_COLS: TICKET_COLS, INDEX_COLS: INDEX_COLS, META_COLS: META_COLS,
+    KNOWLEDGE_COLS: KNOWLEDGE_COLS,
     VALID_STATUSES: VALID_STATUSES,
     rowToTicket: function (row) { return rowToObj(TICKET_COLS, row); },
     ticketToRow: function (t) { return objToRow(TICKET_COLS, t); },
     rowToIndex: function (row) { return rowToObj(INDEX_COLS, row); },
     indexToRow: function (o) { return objToRow(INDEX_COLS, o); },
+    rowToKnowledge: function (row) { return rowToObj(KNOWLEDGE_COLS, row); },
+    knowledgeToRow: function (o) { return objToRow(KNOWLEDGE_COLS, o); },
     widgetStatus: function (s) { return WIDGET_STATUS[s] || 'todo'; },
     sanitizeField: sanitizeField,
     filesToArray: filesToArray

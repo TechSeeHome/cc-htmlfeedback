@@ -42,6 +42,25 @@ test('rowToIndex tolerates short rows (Sheets trims trailing empties)', () => {
   assert.equal(i.updatedAt, '');
 });
 
+test('knowledge columns match the Knowledge Portal design (section 4.2) exactly', () => {
+  assert.deepEqual(S.KNOWLEDGE_COLS, ['id', 'type', 'title', 'path', 'url',
+    'driveFileId', 'owner', 'tags', 'source', 'status', 'modifiedTime',
+    'syncedAt', 'createdAt', 'updatedAt']);
+});
+
+test('rowToKnowledge and knowledgeToRow round-trip', () => {
+  const k = { id: 'F1', type: 'gdoc', title: 'T', path: 'Research/CRM', url: 'U',
+    driveFileId: 'F1', owner: 'a@example.com', tags: '', source: 'drive-sync',
+    status: 'active', modifiedTime: 't0', syncedAt: 't1', createdAt: 't2', updatedAt: 't3' };
+  assert.deepEqual(S.rowToKnowledge(S.knowledgeToRow(k)), k);
+});
+
+test('rowToKnowledge tolerates short rows (Sheets trims trailing empties)', () => {
+  const k = S.rowToKnowledge(['F1', 'gdoc', 'T']);
+  assert.equal(k.driveFileId, '');
+  assert.equal(k.updatedAt, '');
+});
+
 test('widgetStatus maps DesignHub lifecycle to widget board states', () => {
   // widget knows: todo | in-progress | error | done (ORDER map in feedback-widget.html)
   assert.equal(S.widgetStatus('open'), 'todo');

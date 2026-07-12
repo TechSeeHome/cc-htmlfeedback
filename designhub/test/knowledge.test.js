@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  childPath,
   mimeToType,
   planSync,
   planRewriteRanges,
@@ -73,6 +74,85 @@ test('mimeToType falls back to file for unknown, empty, or missing MIME types', 
   assert.equal(mimeToType('application/octet-stream'), 'file');
   assert.equal(mimeToType(''), 'file');
   assert.equal(mimeToType(undefined), 'file');
+});
+
+// Drive-tree child path contract (design section 4.2, extracted out of
+// dhWalkTeamDrive_ in drive.js because that walk itself needs DriveApp and
+// cannot run under node --test - this pure join is the seam that can).
+test('childPath: a root-level child (parent path "") is just its own bare name', () => {
+  assert.equal(childPath('', 'Research'), 'Research');
+});
+
+test('childPath: a nested child is parent path + "/" + its own name', () => {
+  assert.equal(childPath('Research', 'CRM eval'), 'Research/CRM eval');
+  assert.equal(childPath('A/B', 'C'), 'A/B/C');
+});
+
+// Locks the contract itself (design section 4.2 / portal buildDriveTree): a
+// folder row's path is its OWN full path; a file row's path is its
+// CONTAINING folder's path, unchanged. This is the bug drive.js had: a
+// subfolder's descriptor was built with the PARENT's path (entry.path)
+// instead of its own (childPath(entry.path, name)) - the portal's
+// buildDriveTree then Object.assigns the folder row onto the tree node named
+// by its path, so a folder row carrying its parent's path renamed the
+// parent node instead of creating its own, corrupting the tree.
+test('planSync: a folder row gets its OWN path; a file in that folder keeps the folder as its parent path', () => {
+  // Simulates dhWalkTeamDrive_'s walk shape: walking root (path ''), 'Research'
+  // is discovered as a subfolder - its OWN path is childPath('', 'Research').
+  const researchOwnPath = childPath('', 'Research');
+  assert.equal(researchOwnPath, 'Research');
+
+  // Walking 'Research' (entry.path = researchOwnPath), it contains a file and
+  // a further subfolder 'CRM eval'.
+  const crmOwnPath = childPath(researchOwnPath, 'CRM eval');
+  assert.equal(crmOwnPath, 'Research/CRM eval');
+  assert.notEqual(crmOwnPath, researchOwnPath); // must NOT collapse to the parent's path (the bug)
+
+  const walk = [
+    // The 'Research' folder itself: its row path is its own full path.
+    driveFile({
+      id: 'D-research',
+      name: 'Research',
+      mimeType: 'application/vnd.google-apps.folder',
+      path: researchOwnPath,
+    }),
+    // A file living directly inside 'Research': its row path is the
+    // CONTAINING folder's path (Research's own path), unchanged.
+    driveFile({
+      id: 'F-doc',
+      name: 'Doc',
+      mimeType: 'application/vnd.google-apps.document',
+      path: researchOwnPath,
+    }),
+    // The 'CRM eval' subfolder of 'Research': its row path is ITS OWN full
+    // path, one level deeper than Research - not Research's path.
+    driveFile({
+      id: 'D-crm',
+      name: 'CRM eval',
+      mimeType: 'application/vnd.google-apps.folder',
+      path: crmOwnPath,
+    }),
+    // A file living inside 'CRM eval': its row path is CRM eval's path.
+    driveFile({
+      id: 'F-notes',
+      name: 'Notes',
+      mimeType: 'application/vnd.google-apps.document',
+      path: crmOwnPath,
+    }),
+  ];
+  const plan = planSync([], walk, { now: NOW });
+  const byId = (id) => plan.rows.find((r) => r.driveFileId === id);
+
+  assert.equal(byId('D-research').type, 'gfolder');
+  assert.equal(byId('D-research').path, 'Research');
+
+  assert.equal(byId('F-doc').path, 'Research');
+
+  assert.equal(byId('D-crm').type, 'gfolder');
+  assert.equal(byId('D-crm').path, 'Research/CRM eval');
+  assert.notEqual(byId('D-crm').path, byId('D-research').path); // own path, not the parent's
+
+  assert.equal(byId('F-notes').path, 'Research/CRM eval');
 });
 
 test('planSync creates a new drive-sync row for a file never seen before', () => {

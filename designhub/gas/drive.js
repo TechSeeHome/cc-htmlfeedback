@@ -250,11 +250,15 @@ function dhWalkTeamDrive_() {
     var subs = entry.folder.getFolders();
     while (subs.hasNext()) {
       var sub = subs.next();
-      out.push(dhDriveDescriptor_(sub, entry.path, DH_FOLDER_MIME_TYPE_));
-      queue.push({
-        folder: sub,
-        path: entry.path ? entry.path + '/' + sub.getName() : sub.getName(),
-      });
+      // Design section 4.2 contract: a folder row carries its OWN full path,
+      // not the parent's - compute it once (DH_KNOWLEDGE.childPath, the pure
+      // seam this is tested through) and use it for both the folder's own
+      // descriptor and the queue entry it recurses into. Files stay on
+      // entry.path unchanged (their CONTAINING folder's path) via the loop
+      // above.
+      var subPath = DH_KNOWLEDGE.childPath(entry.path, sub.getName());
+      out.push(dhDriveDescriptor_(sub, subPath, DH_FOLDER_MIME_TYPE_));
+      queue.push({ folder: sub, path: subPath });
     }
   }
   return out;

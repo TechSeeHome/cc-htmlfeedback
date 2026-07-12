@@ -23,6 +23,7 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "node build.js",
     "check": "node build.js --check",
     "test": "node --test --test-force-exit test/*.test.js",

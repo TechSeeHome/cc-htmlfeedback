@@ -12,6 +12,7 @@ var DH_CONFIG = {
     marked: '<DH_MARKED_BUNDLE_ID>',                    // marked 15 min bundle
     mermaid: '<DH_MERMAID_BUNDLE_ID>'                   // mermaid 11 min bundle
   },
-  reconcilerEveryHours: 1                                // D19 reconciler cadence
+  reconcilerEveryHours: 1,                               // D19 reconciler cadence
+  teamDriveFolderId: '<DH_TEAM_DRIVE_FOLDER_ID>'         // Knowledge Portal (K9) - refreshKnowledge's walk root
 };
 if (typeof module !== 'undefined') module.exports = DH_CONFIG;

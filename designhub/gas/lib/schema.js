@@ -10,6 +10,14 @@ var DH_SCHEMA = (function () {
     'updatedAt'];
   var META_COLS = ['repo', 'pathInRepo', 'branch', 'commitSha', 'pr', 'jira',
     'publisher', 'publishedAt', 'note'];
+  // Knowledge Portal design (apps/knowledge-portal in home-rnd-productivity-v2,
+  // section 4.2) - the `_knowledge-index` Sheet's `links` tab. A peer of
+  // INDEX_COLS: same shape of concern (one catalog row per known asset), owned
+  // by a different Sheet so the Importer and the DesignHub reconciler (D19)
+  // never contend on the same rows (K4).
+  var KNOWLEDGE_COLS = ['id', 'type', 'title', 'path', 'url', 'driveFileId',
+    'owner', 'tags', 'source', 'status', 'modifiedTime', 'syncedAt',
+    'createdAt', 'updatedAt'];
   var VALID_STATUSES = ['open', 'in-progress', 'resolved', 'declined', 'anchor-lost', 'deleted'];
   var WIDGET_STATUS = { open: 'todo', 'in-progress': 'in-progress',
     resolved: 'done', declined: 'error', 'anchor-lost': 'error' };
@@ -21,6 +29,28 @@ var DH_SCHEMA = (function () {
   }
   function objToRow(cols, o) {
     return cols.map(function (c) { return o[c] === undefined ? '' : o[c]; });
+  }
+
+  // google.script.run's return value (listKnowledge's whole point) cannot
+  // carry a Date instance, and getValues() returns a real Date object for
+  // any date-formatted cell - a manually edited modifiedTime/createdAt/
+  // updatedAt/syncedAt column, say - so a single such cell made
+  // listKnowledge() fail outright instead of serving a stringified date (P2
+  // review, thread PRRT_kwDOTLZBvs6QKAqu). Normalize at this pure schema
+  // boundary rather than in bridge.js/drive.js, and in both directions: no
+  // known input reaches knowledgeToRow still holding a Date (every row it
+  // writes has already passed through rowToKnowledge first), but leaving one
+  // direction unnormalized is a trap for whoever adds a write path later.
+  function dateToIso_(v) {
+    return v instanceof Date ? v.toISOString() : v;
+  }
+  function normalizeKnowledgeDates_(o) {
+    var out = {};
+    for (var i = 0; i < KNOWLEDGE_COLS.length; i++) {
+      var c = KNOWLEDGE_COLS[i];
+      out[c] = dateToIso_(o[c]);
+    }
+    return out;
   }
 
   // Formula/CSV injection defense: a user-supplied string that starts with
@@ -57,11 +87,14 @@ var DH_SCHEMA = (function () {
 
   return {
     TICKET_COLS: TICKET_COLS, INDEX_COLS: INDEX_COLS, META_COLS: META_COLS,
+    KNOWLEDGE_COLS: KNOWLEDGE_COLS,
     VALID_STATUSES: VALID_STATUSES,
     rowToTicket: function (row) { return rowToObj(TICKET_COLS, row); },
     ticketToRow: function (t) { return objToRow(TICKET_COLS, t); },
     rowToIndex: function (row) { return rowToObj(INDEX_COLS, row); },
     indexToRow: function (o) { return objToRow(INDEX_COLS, o); },
+    rowToKnowledge: function (row) { return normalizeKnowledgeDates_(rowToObj(KNOWLEDGE_COLS, row)); },
+    knowledgeToRow: function (o) { return objToRow(KNOWLEDGE_COLS, normalizeKnowledgeDates_(o)); },
     widgetStatus: function (s) { return WIDGET_STATUS[s] || 'todo'; },
     sanitizeField: sanitizeField,
     filesToArray: filesToArray

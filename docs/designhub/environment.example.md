@@ -9,6 +9,7 @@ Setup: copy this file to `environment.local.md` and fill in your org's values.
 | placeholder | what it is | example |
 |---|---|---|
 | `<DH_ROOT_FOLDER_ID>` | Drive folder ID of the production DesignHub root (inside your org's Shared Drive) | `1AbCdEfGhIjKlMnOpQrStUvWxYz012345` |
+| `<DH_TEAM_DRIVE_FOLDER_ID>` | Drive folder ID of the team Shared Drive `refreshKnowledge` walks (Knowledge Portal design, K9) | `1AbCdEfGhIjKlMnOpQrStUvWxYz678910` |
 | `<DH_POC_FOLDER_ID>` | Drive folder ID of the disposable POC/dev fixtures folder | `1ZyXwVuTsRqPoNmLkJiHgFeDcBa543210` |
 | `<DH_MARKED_BUNDLE_ID>` | Drive file ID of the marked 15 minified bundle | `1Aa...` |
 | `<DH_MERMAID_BUNDLE_ID>` | Drive file ID of the mermaid 11 minified bundle | `1Bb...` |

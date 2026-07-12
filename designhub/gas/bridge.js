@@ -15,6 +15,78 @@ function listCatalog(filter) {
   return { rows: rows };
 }
 
+// --- Knowledge Portal (K9/Option B) extension ----------------------------
+// apps/knowledge-portal (home-rnd-productivity-v2) design section 5: the
+// portal is a published DesignHub doc that calls the bridge live instead of
+// baking in JSON, so these two ride the same containment as everything above
+// - catalog-shaped reads plus one identity-stamped write path (D17). Neither
+// touches comment-Sheet rows or `_portal-index` (D19's disposable rollup
+// stays untouched, per the Knowledge Portal design's inherited-rules section).
+
+// REST-shaped like listCatalog (design section 3, "each bridge function is
+// deliberately shaped like a REST endpoint"). Missing `_knowledge-index`
+// Sheet -> {rows: []}, never an error - the portal falls back gracefully
+// (Knowledge Portal design K9) instead of failing to load before the first
+// sync has ever run.
+function listKnowledge() {
+  return { rows: dhKnowledgeRows_() };
+}
+
+// Server-side re-sync (Knowledge Portal design section 4.3): walks the team
+// Shared Drive, upserts source=drive-sync rows, flips missing/trashed ones to
+// stale (K7), and NEVER touches source=manual rows (K4) - all decided by the
+// pure DH_KNOWLEDGE.planSync (lib/knowledge.js), so this function stays a
+// thin read -> plan -> batched-write adapter, same shape as dhReconcile_.
+// D17: the triggering identity is stamped server-side, never client-supplied,
+// and recorded in the `_knowledge-index` Sheet's own 'meta' tab using the same
+// append-only audit pattern setStatus already uses (repo/pathInRepo/branch/
+// commitSha/pr/jira columns blank, publisher + publishedAt + a note).
+function refreshKnowledge() {
+  var email = Session.getActiveUser().getEmail();
+  var now = new Date().toISOString();
+  // Lock-protected (CodeRabbit review): the read of 'links', the plan, the
+  // clear, the rewrite, and the meta append below are separate calls - without
+  // a lock, two overlapping runs (the hourly trigger firing while someone
+  // clicks a manual refresh, say) could interleave them and stomp on each
+  // other's rewrite. Same pattern as setStatus() above.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = dhKnowledgeSheetEnsure_();
+    var sheet = ss.getSheetByName('links');
+    var existing = sheet.getDataRange().getValues().slice(1).map(function (row) { return DH_SCHEMA.rowToKnowledge(row); });
+    var driveFiles = dhWalkTeamDrive_();
+    var plan = DH_KNOWLEDGE.planSync(existing, driveFiles, { now: now });
+
+    // Batched write-then-trim (one read, up to two writes - same read/write
+    // batching spirit as dhReconcile_, just reordered) rather than per-row
+    // writes: ~100 files today, well within quota either way, but this stays
+    // flat as the drive grows. Write-then-trim, NOT clear-then-write (P2
+    // review, chatgpt-codex-connector thread PRRT_kwDOTLZBvs6QJ9lW): the
+    // `links` tab can hold source=manual rows, which are curated source of
+    // truth and never reproducible from a Drive walk (K4) - clearing first
+    // left a crash window where a dead execution emptied the tab and a retry
+    // lost those rows for good. Writing the new rows first means a mid-write
+    // crash leaves the old data intact (worst case: a stale leftover tail,
+    // trimmed by the next successful run); range math lives in
+    // DH_KNOWLEDGE.planRewriteRanges so it stays pure and node --test-able.
+    var oldRowCount = Math.max(sheet.getLastRow() - 1, 0);
+    var values = plan.rows.map(function (r) { return DH_SCHEMA.knowledgeToRow(r); });
+    var ranges = DH_KNOWLEDGE.planRewriteRanges(oldRowCount, values.length);
+    if (ranges.write) sheet.getRange(ranges.write.row, 1, ranges.write.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).setValues(values);
+    if (ranges.trim) sheet.getRange(ranges.trim.row, 1, ranges.trim.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).clearContent();
+
+    ss.getSheetByName('meta').appendRow(['', '', '', '', '', '', email, now,
+      'refreshKnowledge: created=' + plan.stats.created + ' updated=' + plan.stats.updated +
+      ' unchanged=' + plan.stats.unchanged + ' staled=' + plan.stats.staled]);
+
+    return { total: plan.rows.length, created: plan.stats.created, updated: plan.stats.updated,
+      unchanged: plan.stats.unchanged, staled: plan.stats.staled, triggeredBy: email, at: now };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // Returns tickets in the WIDGET's shape: page keyed by docPath, status mapped
 // to board states, replies excluded (v1 widget shows top-level tickets only;
 // threads live in the Sheet and the agent docs).

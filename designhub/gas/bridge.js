@@ -44,28 +44,39 @@ function listKnowledge() {
 function refreshKnowledge() {
   var email = Session.getActiveUser().getEmail();
   var now = new Date().toISOString();
-  var ss = dhKnowledgeSheetEnsure_();
-  var sheet = ss.getSheetByName('links');
-  var existing = sheet.getDataRange().getValues().slice(1).map(function (row) { return DH_SCHEMA.rowToKnowledge(row); });
-  var driveFiles = dhWalkTeamDrive_();
-  var plan = DH_KNOWLEDGE.planSync(existing, driveFiles, { now: now });
+  // Lock-protected (CodeRabbit review): the read of 'links', the plan, the
+  // clear, the rewrite, and the meta append below are separate calls - without
+  // a lock, two overlapping runs (the hourly trigger firing while someone
+  // clicks a manual refresh, say) could interleave them and stomp on each
+  // other's rewrite. Same pattern as setStatus() above.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = dhKnowledgeSheetEnsure_();
+    var sheet = ss.getSheetByName('links');
+    var existing = sheet.getDataRange().getValues().slice(1).map(function (row) { return DH_SCHEMA.rowToKnowledge(row); });
+    var driveFiles = dhWalkTeamDrive_();
+    var plan = DH_KNOWLEDGE.planSync(existing, driveFiles, { now: now });
 
-  // Batched clear-then-rebuild (one read, one write - same pattern as
-  // dhReconcile_) rather than per-row writes: ~100 files today, well within
-  // quota either way, but this stays flat as the drive grows.
-  var lastRow = Math.max(sheet.getLastRow() - 1, 0);
-  if (lastRow > 0) sheet.getRange(2, 1, lastRow, DH_SCHEMA.KNOWLEDGE_COLS.length).clearContent();
-  if (plan.rows.length) {
-    var values = plan.rows.map(function (r) { return DH_SCHEMA.knowledgeToRow(r); });
-    sheet.getRange(2, 1, values.length, DH_SCHEMA.KNOWLEDGE_COLS.length).setValues(values);
+    // Batched clear-then-rebuild (one read, one write - same pattern as
+    // dhReconcile_) rather than per-row writes: ~100 files today, well within
+    // quota either way, but this stays flat as the drive grows.
+    var lastRow = Math.max(sheet.getLastRow() - 1, 0);
+    if (lastRow > 0) sheet.getRange(2, 1, lastRow, DH_SCHEMA.KNOWLEDGE_COLS.length).clearContent();
+    if (plan.rows.length) {
+      var values = plan.rows.map(function (r) { return DH_SCHEMA.knowledgeToRow(r); });
+      sheet.getRange(2, 1, values.length, DH_SCHEMA.KNOWLEDGE_COLS.length).setValues(values);
+    }
+
+    ss.getSheetByName('meta').appendRow(['', '', '', '', '', '', email, now,
+      'refreshKnowledge: created=' + plan.stats.created + ' updated=' + plan.stats.updated +
+      ' unchanged=' + plan.stats.unchanged + ' staled=' + plan.stats.staled]);
+
+    return { total: plan.rows.length, created: plan.stats.created, updated: plan.stats.updated,
+      unchanged: plan.stats.unchanged, staled: plan.stats.staled, triggeredBy: email, at: now };
+  } finally {
+    lock.releaseLock();
   }
-
-  ss.getSheetByName('meta').appendRow(['', '', '', '', '', '', email, now,
-    'refreshKnowledge: created=' + plan.stats.created + ' updated=' + plan.stats.updated +
-    ' unchanged=' + plan.stats.unchanged + ' staled=' + plan.stats.staled]);
-
-  return { total: plan.rows.length, created: plan.stats.created, updated: plan.stats.updated,
-    unchanged: plan.stats.unchanged, staled: plan.stats.staled, triggeredBy: email, at: now };
 }
 
 // Returns tickets in the WIDGET's shape: page keyed by docPath, status mapped

@@ -43,6 +43,20 @@ var DH_KNOWLEDGE = (function () {
     return 'file';
   }
 
+  // Formula-injection defense (P2 review finding): a team-drive editor can
+  // name a file/folder starting with =,+,-,@, and that name/path/owner would
+  // otherwise be copied straight into the row and land in the Sheet via
+  // setValues (bridge.js's refreshKnowledge) - Sheets parses a leading one of
+  // those characters as a formula, the same class of attack the comment
+  // pipeline already guards against with DH_SCHEMA.sanitizeField (schema.js).
+  // Resolved lazily like rollup.js's cols_(): clasp pushes files
+  // alphabetically, so this file (k) loads before lib/schema.js (s) and
+  // DH_SCHEMA would be undefined at load time in the live GAS project.
+  function sanitize_(v) {
+    return (typeof DH_SCHEMA !== 'undefined') ? DH_SCHEMA.sanitizeField(v)
+      : require('./schema.js').sanitizeField(v);
+  }
+
   // One walked Drive file/folder -> one `drive-sync` knowledge row. `prev` is
   // the existing row for this driveFileId (if any) - only its `createdAt` is
   // ever carried forward; every other field is recomputed fresh from the walk
@@ -52,11 +66,11 @@ var DH_KNOWLEDGE = (function () {
     return {
       id: file.id,
       type: mimeToType(file.mimeType),
-      title: file.name,
-      path: file.path || '',
+      title: sanitize_(file.name),
+      path: sanitize_(file.path || ''),
       url: file.url || '',
       driveFileId: file.id,
-      owner: file.owner || '',
+      owner: sanitize_(file.owner || ''),
       tags: prev ? prev.tags : '',
       source: 'drive-sync',
       status: 'active',

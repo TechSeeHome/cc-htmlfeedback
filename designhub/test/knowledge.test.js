@@ -180,3 +180,30 @@ test('planSync defaults now to the current time when opts is omitted', () => {
   const stamped = Date.parse(plan.rows[0].createdAt);
   assert.ok(stamped >= before && stamped <= Date.now() + 1000);
 });
+
+// Formula-injection defense (P2 review finding): a Drive file/folder name or
+// path starting with =,+,-,@ must not reach the planned row raw - Sheets
+// would parse it as a formula once refreshKnowledge writes it with setValues.
+test('planSync sanitizes a title starting with = so Sheets cannot parse it as a formula', () => {
+  const plan = planSync([], [driveFile({ name: '=HYPERLINK("http://evil.example","click")', path: '=EvilFolder/Sub' })], { now: NOW });
+  assert.equal(plan.rows[0].title, '\'=HYPERLINK("http://evil.example","click")');
+  assert.equal(plan.rows[0].path, "'=EvilFolder/Sub");
+});
+
+test('planSync sanitizes a title starting with + so Sheets cannot parse it as a formula', () => {
+  const plan = planSync([], [driveFile({ name: '+SUM(A1)', path: '+EvilFolder' })], { now: NOW });
+  assert.equal(plan.rows[0].title, "'+SUM(A1)");
+  assert.equal(plan.rows[0].path, "'+EvilFolder");
+});
+
+test('planSync sanitizes an owner starting with - or @ the same way', () => {
+  const plan = planSync([], [driveFile({ owner: '-drop@example.com' })], { now: NOW });
+  assert.equal(plan.rows[0].owner, "'-drop@example.com");
+});
+
+test('planSync leaves safe titles/paths/owners untouched (no spurious apostrophe)', () => {
+  const plan = planSync([], [driveFile()], { now: NOW });
+  assert.equal(plan.rows[0].title, 'Doc');
+  assert.equal(plan.rows[0].path, 'Research');
+  assert.equal(plan.rows[0].owner, 'a@example.com');
+});

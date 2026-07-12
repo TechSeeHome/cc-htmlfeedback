@@ -143,6 +143,15 @@ function dhKnowledgeRows_() {
 
 // Idempotent create: 'links' (data) + 'meta' (audit log, same append-only
 // pattern setStatus already uses on the comment Sheet's meta tab - D17(c)).
+// root.addFile/DriveApp.getRootFolder().removeFile below reparent the new
+// Spreadsheet into DH_CONFIG.rootFolderId - Apps Script only allows
+// Folder.addFile/removeFile under the full 'https://www.googleapis.com/auth/
+// drive' scope, not 'drive.readonly' (P1 review fix; see appsscript.json's
+// oauthScopes). In production the Sheet already exists (created by the Node
+// importer, 2026-07-12), so this bootstrap path only runs in a fresh
+// environment - but the full scope is what makes refreshKnowledge
+// self-sufficient there too, instead of depending on someone running the
+// importer by hand first.
 function dhKnowledgeSheetEnsure_() {
   var existing = dhKnowledgeSheet_();
   if (existing) return existing;
@@ -162,9 +171,10 @@ function dhKnowledgeSheetEnsure_() {
 // treatment as DH_CONFIG.rootFolderId) and return plain file/folder
 // descriptors for DH_KNOWLEDGE.planSync. Same BFS shape as dhReconcile_'s
 // walk. Uses DriveApp (design section 4.3 allows "DriveApp or the Drive
-// advanced service"; the existing oauthScope is drive.readonly and ~100 files
-// is well within a plain-DriveApp walk's quota, so there is no reason to add
-// the advanced service and its extra manifest surface for this).
+// advanced service"; the manifest's Drive scope is broader than a read-only
+// walk needs (see dhKnowledgeSheetEnsure_'s comment) and ~100 files is well
+// within a plain-DriveApp walk's quota, so there is no reason to add the
+// advanced service and its extra manifest surface for this).
 //
 // getFolders()/getFiles() do not enumerate trashed items at all - a
 // deleted/trashed file simply never appears here, which already produces the

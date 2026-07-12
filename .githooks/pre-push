@@ -1,0 +1,21 @@
+#!/bin/sh
+# Local pre-push gate: fail fast on what CI would reject anyway.
+# Installed automatically by `npm install` (the "prepare" script sets
+# core.hooksPath to .githooks). Emergency bypass: git push --no-verify
+# (CI and the required "check" status on main still gate the merge).
+set -e
+
+echo "pre-push: lint"
+npm run lint --silent
+
+echo "pre-push: format check"
+npm run format:check --silent
+
+echo "pre-push: build drift"
+node build.js --check
+node designhub/build-designhub.js --check
+
+echo "pre-push: tests"
+npm run test:all --silent
+
+echo "pre-push: all gates passed"

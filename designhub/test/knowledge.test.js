@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mimeToType, planSync } = require('../gas/lib/knowledge.js');
+const { mimeToType, planSync, planRewriteRanges } = require('../gas/lib/knowledge.js');
 
 function driveFile(over) {
   return Object.assign({ id: 'F1', name: 'Doc', mimeType: 'application/vnd.google-apps.document',
@@ -206,4 +206,49 @@ test('planSync leaves safe titles/paths/owners untouched (no spurious apostrophe
   assert.equal(plan.rows[0].title, 'Doc');
   assert.equal(plan.rows[0].path, 'Research');
   assert.equal(plan.rows[0].owner, 'a@example.com');
+});
+
+// Write-then-trim range math (P2 review, chatgpt-codex-connector thread
+// PRRT_kwDOTLZBvs6QJ9lW) - refreshKnowledge must write the new rows before
+// trimming any leftover old rows, never clear first, so a crash mid-write
+// never leaves the `links` tab (and its source=manual rows) empty.
+test('planRewriteRanges: new set shorter than old - writes new rows then trims the leftover tail', () => {
+  const ranges = planRewriteRanges(5, 3);
+  assert.deepEqual(ranges.write, { row: 2, numRows: 3 });
+  assert.deepEqual(ranges.trim, { row: 5, numRows: 2 });
+});
+
+test('planRewriteRanges: new set longer than old - writes new rows, no trim needed', () => {
+  const ranges = planRewriteRanges(3, 5);
+  assert.deepEqual(ranges.write, { row: 2, numRows: 5 });
+  assert.equal(ranges.trim, null);
+});
+
+test('planRewriteRanges: new set same length as old - writes new rows, no trim needed', () => {
+  const ranges = planRewriteRanges(4, 4);
+  assert.deepEqual(ranges.write, { row: 2, numRows: 4 });
+  assert.equal(ranges.trim, null);
+});
+
+test('planRewriteRanges: new set empty but old rows existed - no write, trims the whole old range', () => {
+  const ranges = planRewriteRanges(5, 0);
+  assert.equal(ranges.write, null);
+  assert.deepEqual(ranges.trim, { row: 2, numRows: 5 });
+});
+
+test('planRewriteRanges: both empty (fresh sheet, nothing to sync) - no write, no trim', () => {
+  const ranges = planRewriteRanges(0, 0);
+  assert.equal(ranges.write, null);
+  assert.equal(ranges.trim, null);
+});
+
+test('planRewriteRanges: old empty, new has rows - writes new rows, no trim needed', () => {
+  const ranges = planRewriteRanges(0, 3);
+  assert.deepEqual(ranges.write, { row: 2, numRows: 3 });
+  assert.equal(ranges.trim, null);
+});
+
+test('planRewriteRanges defaults missing counts to 0', () => {
+  assert.deepEqual(planRewriteRanges(undefined, 3), { write: { row: 2, numRows: 3 }, trim: null });
+  assert.deepEqual(planRewriteRanges(5, undefined), { write: null, trim: { row: 2, numRows: 5 } });
 });

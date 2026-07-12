@@ -164,6 +164,34 @@ var DH_KNOWLEDGE = (function () {
     };
   }
 
-  return { mimeToType: mimeToType, planSync: planSync };
+  // Write-then-trim range math for refreshKnowledge's Sheet rewrite (P2
+  // review, chatgpt-codex-connector thread PRRT_kwDOTLZBvs6QJ9lW): the old
+  // clear-then-write left a crash window - if execution died between the
+  // clearContent() and the setValues(), the `links` tab sat empty and a retry
+  // permanently lost source=manual rows, which (unlike drive-sync rows) are
+  // never reproducible from a Drive walk (K4). Writing the new rows first and
+  // trimming only the now-unused leftover tail afterward closes that window:
+  // a crash before the write leaves the old data intact, and a crash after
+  // the write leaves stale leftover rows below the new data at worst, never a
+  // hole. oldRowCount/newRowCount are DATA row counts (i.e. excluding header
+  // row 1); the returned write/trim are 1-based ranges ready for
+  // sheet.getRange(row, 1, numRows, width), or null when that step is a
+  // no-op. Pure arithmetic - no Sheet object touches this function, so it
+  // stays node --test-able (D5).
+  function planRewriteRanges(oldRowCount, newRowCount) {
+    oldRowCount = oldRowCount || 0;
+    newRowCount = newRowCount || 0;
+    // newRowCount === 0 should only happen when the index is genuinely empty
+    // (no manual rows AND no drive-sync/stale rows): planSync always concats
+    // manualRows back into plan.rows untouched, so as long as ANY manual row
+    // exists, newRowCount can never be 0. If it legitimately is 0, there is
+    // nothing to preserve, so clearing the old tail below is safe.
+    var write = newRowCount > 0 ? { row: 2, numRows: newRowCount } : null;
+    var leftover = oldRowCount - newRowCount;
+    var trim = leftover > 0 ? { row: newRowCount + 2, numRows: leftover } : null;
+    return { write: write, trim: trim };
+  }
+
+  return { mimeToType: mimeToType, planSync: planSync, planRewriteRanges: planRewriteRanges };
 })();
 if (typeof module !== 'undefined') module.exports = DH_KNOWLEDGE;

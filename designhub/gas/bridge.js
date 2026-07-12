@@ -58,15 +58,23 @@ function refreshKnowledge() {
     var driveFiles = dhWalkTeamDrive_();
     var plan = DH_KNOWLEDGE.planSync(existing, driveFiles, { now: now });
 
-    // Batched clear-then-rebuild (one read, one write - same pattern as
-    // dhReconcile_) rather than per-row writes: ~100 files today, well within
-    // quota either way, but this stays flat as the drive grows.
-    var lastRow = Math.max(sheet.getLastRow() - 1, 0);
-    if (lastRow > 0) sheet.getRange(2, 1, lastRow, DH_SCHEMA.KNOWLEDGE_COLS.length).clearContent();
-    if (plan.rows.length) {
-      var values = plan.rows.map(function (r) { return DH_SCHEMA.knowledgeToRow(r); });
-      sheet.getRange(2, 1, values.length, DH_SCHEMA.KNOWLEDGE_COLS.length).setValues(values);
-    }
+    // Batched write-then-trim (one read, up to two writes - same read/write
+    // batching spirit as dhReconcile_, just reordered) rather than per-row
+    // writes: ~100 files today, well within quota either way, but this stays
+    // flat as the drive grows. Write-then-trim, NOT clear-then-write (P2
+    // review, chatgpt-codex-connector thread PRRT_kwDOTLZBvs6QJ9lW): the
+    // `links` tab can hold source=manual rows, which are curated source of
+    // truth and never reproducible from a Drive walk (K4) - clearing first
+    // left a crash window where a dead execution emptied the tab and a retry
+    // lost those rows for good. Writing the new rows first means a mid-write
+    // crash leaves the old data intact (worst case: a stale leftover tail,
+    // trimmed by the next successful run); range math lives in
+    // DH_KNOWLEDGE.planRewriteRanges so it stays pure and node --test-able.
+    var oldRowCount = Math.max(sheet.getLastRow() - 1, 0);
+    var values = plan.rows.map(function (r) { return DH_SCHEMA.knowledgeToRow(r); });
+    var ranges = DH_KNOWLEDGE.planRewriteRanges(oldRowCount, values.length);
+    if (ranges.write) sheet.getRange(ranges.write.row, 1, ranges.write.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).setValues(values);
+    if (ranges.trim) sheet.getRange(ranges.trim.row, 1, ranges.trim.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).clearContent();
 
     ss.getSheetByName('meta').appendRow(['', '', '', '', '', '', email, now,
       'refreshKnowledge: created=' + plan.stats.created + ' updated=' + plan.stats.updated +

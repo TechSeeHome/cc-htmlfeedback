@@ -63,7 +63,7 @@ test('validatePathInRepo accepts exactly what parseDocPath would also accept as 
   const { validatePathInRepo } = await mod();
   const P = require('../gas/lib/paths.js');
   const ok = 'docs/designhub/design.html';
-  validatePathInRepo(ok);   // must not throw
+  validatePathInRepo(ok); // must not throw
   const parsed = P.parseDocPath(['repo', 'feat--x', ok].join('/'));
   assert.deepEqual(parsed.segments, ok.split('/'));
 });
@@ -79,7 +79,10 @@ test('validatePathInRepo rejects exactly what parseDocPath would also reject as 
 // ---- Bug #5: execUrl not validated before catalog upserts ----
 test('findConfigProblem: flags a missing rootFolderId placeholder', async () => {
   const { findConfigProblem } = await mod();
-  assert.equal(findConfigProblem({ rootFolderId: '<DH_ROOT_FOLDER_ID>', execUrl: 'https://x/exec' }), 'rootFolderId');
+  assert.equal(
+    findConfigProblem({ rootFolderId: '<DH_ROOT_FOLDER_ID>', execUrl: 'https://x/exec' }),
+    'rootFolderId'
+  );
 });
 
 test('findConfigProblem: flags a missing execUrl', async () => {
@@ -89,15 +92,24 @@ test('findConfigProblem: flags a missing execUrl', async () => {
 
 test('findConfigProblem: flags an unfilled execUrl placeholder', async () => {
   const { findConfigProblem } = await mod();
-  assert.equal(findConfigProblem({
-    rootFolderId: 'real-id',
-    execUrl: 'https://script.google.com/macros/s/<DH_DEPLOYMENT_ID>/exec',
-  }), 'execUrl');
+  assert.equal(
+    findConfigProblem({
+      rootFolderId: 'real-id',
+      execUrl: 'https://script.google.com/macros/s/<DH_DEPLOYMENT_ID>/exec',
+    }),
+    'execUrl'
+  );
 });
 
 test('findConfigProblem: null when both are filled in', async () => {
   const { findConfigProblem } = await mod();
-  assert.equal(findConfigProblem({ rootFolderId: 'real-id', execUrl: 'https://script.google.com/macros/s/X/exec' }), null);
+  assert.equal(
+    findConfigProblem({
+      rootFolderId: 'real-id',
+      execUrl: 'https://script.google.com/macros/s/X/exec',
+    }),
+    null
+  );
 });
 
 // ---- Bug #6: Markdown docs skip the asset-scan gate entirely ----
@@ -119,7 +131,8 @@ test('scanMdAssets: ignores absolute/external/anchor/data/mailto targets', async
   const { scanMdAssets } = await mod();
   const r = scanMdAssets(
     '![ext](https://x.com/a.png) ![data](data:image/png;base64,x) ' +
-    '[abs](https://x.com/doc) [anchor](#sec) [mail](mailto:a@b.com)');
+      '[abs](https://x.com/doc) [anchor](#sec) [mail](mailto:a@b.com)'
+  );
   assert.deepEqual(r.assets, []);
   assert.deepEqual(r.links, []);
 });
@@ -133,25 +146,67 @@ test('scanMdAssets: does not double-count an image as also a link', async () => 
 
 test('scanMdAssets: a clean doc with no relative refs reports nothing', async () => {
   const { scanMdAssets } = await mod();
-  assert.deepEqual(scanMdAssets('# Title\n\njust text, no links or images'), { assets: [], links: [] });
+  assert.deepEqual(scanMdAssets('# Title\n\njust text, no links or images'), {
+    assets: [],
+    links: [],
+  });
 });
 
 // ---- Bug #8: commentSheetId never refreshed on republish ----
-const INDEX_COLS = ['id', 'type', 'title', 'repo', 'feature', 'jira', 'tags',
-  'owner', 'driveFileId', 'commentSheetId', 'url', 'status', 'publishedAt', 'updatedAt'];
+const INDEX_COLS = [
+  'id',
+  'type',
+  'title',
+  'repo',
+  'feature',
+  'jira',
+  'tags',
+  'owner',
+  'driveFileId',
+  'commentSheetId',
+  'url',
+  'status',
+  'publishedAt',
+  'updatedAt',
+];
 
 test('patchIndexRow: refreshes commentSheetId along with title/url/jira/updatedAt', async () => {
   const { patchIndexRow } = await mod();
-  const row = ['u1', 'html', 'Old Title', 'r', 'f', 'unassigned', '', 'me@example.com',
-    'FILE1', 'OLD-SHEET-ID', 'https://old-url', 'active', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'];
-  const patched = patchIndexRow(row,
-    { title: 'New Title', url: 'https://new-url', jira: 'PROJ-9', commentSheetId: 'NEW-SHEET-ID', now: '2026-07-08T00:00:00Z' },
-    INDEX_COLS);
+  const row = [
+    'u1',
+    'html',
+    'Old Title',
+    'r',
+    'f',
+    'unassigned',
+    '',
+    'me@example.com',
+    'FILE1',
+    'OLD-SHEET-ID',
+    'https://old-url',
+    'active',
+    '2026-01-01T00:00:00Z',
+    '2026-01-01T00:00:00Z',
+  ];
+  const patched = patchIndexRow(
+    row,
+    {
+      title: 'New Title',
+      url: 'https://new-url',
+      jira: 'PROJ-9',
+      commentSheetId: 'NEW-SHEET-ID',
+      now: '2026-07-08T00:00:00Z',
+    },
+    INDEX_COLS
+  );
   assert.equal(patched[INDEX_COLS.indexOf('title')], 'New Title');
   assert.equal(patched[INDEX_COLS.indexOf('url')], 'https://new-url');
   assert.equal(patched[INDEX_COLS.indexOf('jira')], 'PROJ-9');
-  assert.equal(patched[INDEX_COLS.indexOf('commentSheetId')], 'NEW-SHEET-ID',
-    'republishing after the companion Sheet was deleted/recreated must repoint the index row at the NEW sheet id');
+  assert.equal(
+    patched[INDEX_COLS.indexOf('commentSheetId')],
+    'NEW-SHEET-ID',
+    'republishing after the companion Sheet was deleted/recreated must repoint the index row at the NEW sheet id'
+  );
   assert.equal(patched[INDEX_COLS.indexOf('updatedAt')], '2026-07-08T00:00:00Z');
   // Untouched fields (id, type, repo, feature, driveFileId, status, publishedAt) survive as-is.
   assert.equal(patched[INDEX_COLS.indexOf('id')], 'u1');
@@ -161,9 +216,27 @@ test('patchIndexRow: refreshes commentSheetId along with title/url/jira/updatedA
 
 test('patchIndexRow: does not mutate the input row array', async () => {
   const { patchIndexRow } = await mod();
-  const row = ['u1', 'html', 'Old', 'r', 'f', 'unassigned', '', 'me@example.com',
-    'FILE1', 'OLD-SHEET-ID', 'https://old-url', 'active', 't1', 't1'];
+  const row = [
+    'u1',
+    'html',
+    'Old',
+    'r',
+    'f',
+    'unassigned',
+    '',
+    'me@example.com',
+    'FILE1',
+    'OLD-SHEET-ID',
+    'https://old-url',
+    'active',
+    't1',
+    't1',
+  ];
   const original = row.slice();
-  patchIndexRow(row, { title: 'New', url: 'u', jira: 'j', commentSheetId: 'NEW-SHEET-ID', now: 't2' }, INDEX_COLS);
+  patchIndexRow(
+    row,
+    { title: 'New', url: 'u', jira: 'j', commentSheetId: 'NEW-SHEET-ID', now: 't2' },
+    INDEX_COLS
+  );
   assert.deepEqual(row, original);
 });

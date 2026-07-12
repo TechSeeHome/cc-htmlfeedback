@@ -2,5 +2,16 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "oxc"],
   "categories": { "correctness": "error" },
-  "env": { "builtin": true, "browser": true, "node": true }
+  "env": { "builtin": true, "browser": true, "node": true },
+  "ignorePatterns": ["designhub/gas/widget.js"],
+  "overrides": [
+    {
+      "files": ["designhub/gas/*.js"],
+      "rules": { "no-unused-vars": "off" }
+    },
+    {
+      "files": ["designhub/gas/lib/render.js"],
+      "rules": { "no-control-regex": "off" }
+    }
+  ]
 }

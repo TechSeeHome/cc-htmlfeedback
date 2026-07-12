@@ -17,9 +17,15 @@ const GAS_DIR = path.join(__dirname, '..', 'gas');
 const ENTRY_FILES = ['main.js', 'bridge.js', 'drive.js'];
 const ALLOWED_PUBLIC = new Set([
   'doGet',
-  'getIdentity', 'listCatalog', 'listComments', 'submitComment', 'reply', 'setStatus',
+  'getIdentity',
+  'listCatalog',
+  'listComments',
+  'submitComment',
+  'reply',
+  'setStatus',
   // Knowledge Portal (K9/Option B) bridge extension - see bridge.js.
-  'listKnowledge', 'refreshKnowledge',
+  'listKnowledge',
+  'refreshKnowledge',
 ]);
 
 test('exactly the documented functions are google.script.run-reachable (no trailing underscore)', () => {
@@ -31,7 +37,11 @@ test('exactly the documented functions are google.script.run-reachable (no trail
     }
   }
   const names = publicFns.map((f) => f.split(':')[1]).sort();
-  assert.deepEqual(names, [...ALLOWED_PUBLIC].sort(),
-    'unexpected public (non-underscore) top-level function(s) found: ' + publicFns.join(', ') +
-    ' - either suffix with _ or add to ALLOWED_PUBLIC with a documented reason');
+  assert.deepEqual(
+    names,
+    [...ALLOWED_PUBLIC].sort(),
+    'unexpected public (non-underscore) top-level function(s) found: ' +
+      publicFns.join(', ') +
+      ' - either suffix with _ or add to ALLOWED_PUBLIC with a documented reason'
+  );
 });

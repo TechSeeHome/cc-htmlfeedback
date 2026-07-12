@@ -4,8 +4,14 @@
 import { accessToken, api } from '../../plugins/designhub/skills/publish-design/scripts/gauth.mjs';
 
 const sheetId = process.argv[2];
-if (!sheetId) { console.error('usage: node verify-sheet-row.mjs <sheetId>'); process.exit(1); }
+if (!sheetId) {
+  console.error('usage: node verify-sheet-row.mjs <sheetId>');
+  process.exit(1);
+}
 
 const at = await accessToken();
-const data = await api(at, `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tickets!A2:P`);
+const data = await api(
+  at,
+  `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tickets!A2:P`
+);
 console.log(JSON.stringify(data.values, null, 2));

@@ -22,13 +22,16 @@ test('injectBase prepends base when there is no head', () => {
 });
 
 test('serveHtml injects __CCFB config + widget asset tag before </body>', () => {
-  const out = R.serveHtml('<html><head></head><body><p>doc</p></body></html>',
-    'repo/feat/docs/a.html', EXEC);
+  const out = R.serveHtml(
+    '<html><head></head><body><p>doc</p></body></html>',
+    'repo/feat/docs/a.html',
+    EXEC
+  );
   assert.match(out, /window\.__CCFB=\{.*"docPath":"repo\/feat\/docs\/a\.html".*\}/);
   assert.match(out, new RegExp(EXEC.replace(/[/.]/g, '\\$&') + '\\?asset=widget'));
   assert.ok(out.indexOf('?asset=widget') < out.indexOf('</body>'));
-  assert.match(out, /"mode":"proxy"/);   // disables the widget's morph path
-  assert.match(out, /d\.id="dh-identity"/);   // the Task 13 E2E finds the chip by this id
+  assert.match(out, /"mode":"proxy"/); // disables the widget's morph path
+  assert.match(out, /d\.id="dh-identity"/); // the Task 13 E2E finds the chip by this id
 });
 
 test('widgetTags defuses </script> inside docPath (D14 does not character-restrict segments)', () => {
@@ -49,8 +52,12 @@ test('serveHtml defuses </script> inside docPath the same way', () => {
 });
 
 test('mdShell embeds MD as JSON, inlines marked, loads mermaid as asset', () => {
-  const out = R.mdShell('# Hi\n```mermaid\ngraph TD;A-->B;\n```', 'var marked={parse:function(){}};',
-    EXEC + '?asset=mermaid', 'design.md');
+  const out = R.mdShell(
+    '# Hi\n```mermaid\ngraph TD;A-->B;\n```',
+    'var marked={parse:function(){}};',
+    EXEC + '?asset=mermaid',
+    'design.md'
+  );
   assert.match(out, /var MD_SOURCE="# Hi/);
   assert.match(out, /var marked=/);
   assert.match(out, /\?asset=mermaid/);
@@ -68,19 +75,33 @@ test('mdShell defuses </script> inside the markdown payload', () => {
 
 test('treeHtml groups rows repo -> feature and links via the url column', () => {
   const rows = [
-    { repo: 'r1', feature: 'f1', title: 'Doc A', url: EXEC + '?doc=r1/f1/a.html', status: 'active' },
-    { repo: 'r1', feature: 'f2', title: 'Doc B', url: EXEC + '?doc=r1/f2/b.html', status: 'active' },
+    {
+      repo: 'r1',
+      feature: 'f1',
+      title: 'Doc A',
+      url: EXEC + '?doc=r1/f1/a.html',
+      status: 'active',
+    },
+    {
+      repo: 'r1',
+      feature: 'f2',
+      title: 'Doc B',
+      url: EXEC + '?doc=r1/f2/b.html',
+      status: 'active',
+    },
     { repo: 'r1', feature: 'f1', title: 'gone', url: '#', status: 'archived' },
   ];
   const out = R.treeHtml(rows);
   assert.match(out, /r1/);
   assert.match(out, />Doc A</);
-  assert.doesNotMatch(out, />gone</);          // archived rows hidden
+  assert.doesNotMatch(out, />gone</); // archived rows hidden
   assert.match(out, /<h3>f1<\/h3>[\s\S]*Doc A/);
 });
 
 test('treeHtml escapes titles', () => {
-  const out = R.treeHtml([{ repo: 'r', feature: 'f', title: '<img src=x>', url: '#', status: 'active' }]);
+  const out = R.treeHtml([
+    { repo: 'r', feature: 'f', title: '<img src=x>', url: '#', status: 'active' },
+  ]);
   assert.doesNotMatch(out, /<img src=x>/);
   assert.match(out, /&lt;img/);
 });
@@ -94,7 +115,9 @@ test('treeHtml blocks javascript: URLs planted in the url column (D18 Contributo
   // _portal-index Sheet at render time and Contributor Shared Drive access
   // can edit that Sheet's cells directly - esc() alone would not stop a
   // scheme-based attack since a javascript: URI needs no HTML-special chars.
-  const rows = [{ repo: 'r', feature: 'f', title: 'Evil', url: 'javascript:alert(1)', status: 'active' }];
+  const rows = [
+    { repo: 'r', feature: 'f', title: 'Evil', url: 'javascript:alert(1)', status: 'active' },
+  ];
   const out = R.treeHtml(rows);
   assert.doesNotMatch(out, /javascript:/i);
   assert.match(out, /href="#"/);

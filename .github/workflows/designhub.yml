@@ -15,9 +15,11 @@ jobs:
       - run: npm ci
       - name: upstream build is clean (never edited)
         run: node build.js --check
-      - name: upstream tests
-        run: npm test
+      - name: lint
+        run: npm run lint
+      - name: format check
+        run: npm run format:check
       - name: designhub widget transform is fresh + anchors hold
         run: node designhub/build-designhub.js --check
-      - name: designhub tests
-        run: node --test designhub/test/
+      - name: tests with coverage gate (floor 73% lines)
+        run: npm run test:cov

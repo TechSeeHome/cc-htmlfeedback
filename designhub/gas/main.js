@@ -11,16 +11,21 @@
 // script-scope string built by build-designhub.js) sidesteps HtmlService
 // entirely, matching the already-proven marked/mermaid DriveApp-based routes.
 
-function dhExecUrl_() { return ScriptApp.getService().getUrl(); }
+function dhExecUrl_() {
+  return ScriptApp.getService().getUrl();
+}
 
 function dhAsset_(name) {
   if (name === 'widget') {
-    return ContentService.createTextOutput(DH_WIDGET_JS).setMimeType(ContentService.MimeType.JAVASCRIPT);
+    return ContentService.createTextOutput(DH_WIDGET_JS).setMimeType(
+      ContentService.MimeType.JAVASCRIPT
+    );
   }
   var id = DH_CONFIG.assets[name];
   if (!id) throw new Error('unknown asset: ' + name);
-  return ContentService.createTextOutput(DriveApp.getFileById(id).getBlob().getDataAsString('UTF-8'))
-    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  return ContentService.createTextOutput(
+    DriveApp.getFileById(id).getBlob().getDataAsString('UTF-8')
+  ).setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
 function doGet(e) {
@@ -30,12 +35,14 @@ function doGet(e) {
       return dhAsset_(p.asset);
     } catch (err) {
       return HtmlService.createHtmlOutput(DH_RENDER.notFoundHtml('unknown asset: ' + p.asset))
-        .setTitle('DesignHub - not found').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+        .setTitle('DesignHub - not found')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     }
   }
   if (!p.doc) {
     return HtmlService.createHtmlOutput(DH_RENDER.treeHtml(dhPortalRows_()))
-      .setTitle('DesignHub').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+      .setTitle('DesignHub')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
   // A stale bookmark, typo, or deleted/renamed doc would otherwise surface as
   // GAS's generic, unbranded uncaught-exception page - render DesignHub's own
@@ -46,7 +53,8 @@ function doGet(e) {
     r = dhResolveDoc_(p.doc);
   } catch (err) {
     return HtmlService.createHtmlOutput(DH_RENDER.notFoundHtml(p.doc))
-      .setTitle('DesignHub - not found').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+      .setTitle('DesignHub - not found')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
   var out;
   if (/\.md$/i.test(r.parsed.fileName)) {
@@ -58,8 +66,8 @@ function doGet(e) {
     // if the markdown ever quotes closing tags - and widgetTags contains real
     // </script> sequences, which would truncate that script block.
     var tail = '</body></html>';
-    out = shell.slice(0, shell.length - tail.length) +
-      DH_RENDER.widgetTags(p.doc, dhExecUrl_()) + tail;
+    out =
+      shell.slice(0, shell.length - tail.length) + DH_RENDER.widgetTags(p.doc, dhExecUrl_()) + tail;
   } else {
     out = DH_RENDER.serveHtml(r.file.getBlob().getDataAsString('UTF-8'), p.doc, dhExecUrl_());
   }

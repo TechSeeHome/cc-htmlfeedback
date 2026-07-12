@@ -1,18 +1,47 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mimeToType, planSync, planRewriteRanges, planTabsEnsure } = require('../gas/lib/knowledge.js');
+const {
+  mimeToType,
+  planSync,
+  planRewriteRanges,
+  planTabsEnsure,
+} = require('../gas/lib/knowledge.js');
 
 function driveFile(over) {
-  return Object.assign({ id: 'F1', name: 'Doc', mimeType: 'application/vnd.google-apps.document',
-    path: 'Research', url: 'https://drive/F1', owner: 'a@example.com',
-    modifiedTime: '2026-01-01T00:00:00.000Z', trashed: false }, over);
+  return Object.assign(
+    {
+      id: 'F1',
+      name: 'Doc',
+      mimeType: 'application/vnd.google-apps.document',
+      path: 'Research',
+      url: 'https://drive/F1',
+      owner: 'a@example.com',
+      modifiedTime: '2026-01-01T00:00:00.000Z',
+      trashed: false,
+    },
+    over
+  );
 }
 function row(over) {
-  return Object.assign({ id: 'F1', type: 'gdoc', title: 'Doc', path: 'Research',
-    url: 'https://drive/F1', driveFileId: 'F1', owner: 'a@example.com', tags: '',
-    source: 'drive-sync', status: 'active', modifiedTime: '2026-01-01T00:00:00.000Z',
-    syncedAt: '2026-01-01T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z' }, over);
+  return Object.assign(
+    {
+      id: 'F1',
+      type: 'gdoc',
+      title: 'Doc',
+      path: 'Research',
+      url: 'https://drive/F1',
+      driveFileId: 'F1',
+      owner: 'a@example.com',
+      tags: '',
+      source: 'drive-sync',
+      status: 'active',
+      modifiedTime: '2026-01-01T00:00:00.000Z',
+      syncedAt: '2026-01-01T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    over
+  );
 }
 const NOW = '2026-02-01T00:00:00.000Z';
 
@@ -25,7 +54,10 @@ test('mimeToType maps every documented Google type', () => {
 
 test('mimeToType maps pdf and office powerpoint variants', () => {
   assert.equal(mimeToType('application/pdf'), 'pdf');
-  assert.equal(mimeToType('application/vnd.openxmlformats-officedocument.presentationml.presentation'), 'pptx');
+  assert.equal(
+    mimeToType('application/vnd.openxmlformats-officedocument.presentationml.presentation'),
+    'pptx'
+  );
   assert.equal(mimeToType('application/vnd.ms-powerpoint'), 'pptx');
 });
 
@@ -72,9 +104,9 @@ test('planSync is a no-op update (unchanged) when nothing about the file changed
   assert.equal(plan.stats.updated, 0);
   assert.equal(plan.stats.unchanged, 1);
   const r = plan.rows[0];
-  assert.equal(r.updatedAt, existing[0].updatedAt);   // preserved, not bumped
-  assert.equal(r.syncedAt, NOW);                       // bumped - this run re-confirmed it
-  assert.equal(r.createdAt, existing[0].createdAt);    // preserved
+  assert.equal(r.updatedAt, existing[0].updatedAt); // preserved, not bumped
+  assert.equal(r.syncedAt, NOW); // bumped - this run re-confirmed it
+  assert.equal(r.createdAt, existing[0].createdAt); // preserved
 });
 
 test('planSync counts updated and bumps updatedAt when title/path/owner changed', () => {
@@ -84,7 +116,7 @@ test('planSync counts updated and bumps updatedAt when title/path/owner changed'
   assert.equal(plan.stats.created, 0);
   assert.equal(plan.rows[0].title, 'New title');
   assert.equal(plan.rows[0].updatedAt, NOW);
-  assert.equal(plan.rows[0].createdAt, existing[0].createdAt);   // still preserved
+  assert.equal(plan.rows[0].createdAt, existing[0].createdAt); // still preserved
 });
 
 test('planSync preserves curator-set tags across a sync (v2 hook, never written by the walk)', () => {
@@ -115,22 +147,34 @@ test('planSync re-activates a stale row whose file reappears live in the walk', 
   const plan = planSync(existing, [driveFile()], { now: NOW });
   assert.equal(plan.rows[0].status, 'active');
   assert.equal(plan.stats.created, 0);
-  assert.equal(plan.stats.updated, 1);   // status stale -> active counts as a real change
+  assert.equal(plan.stats.updated, 1); // status stale -> active counts as a real change
 });
 
 test('planSync does not re-count a row that stays stale across runs, but still bumps syncedAt', () => {
   const existing = [row({ status: 'stale', updatedAt: '2026-01-10T00:00:00.000Z' })];
   const plan = planSync(existing, [], { now: NOW });
-  assert.equal(plan.stats.staled, 0);   // already stale - no NEW staling to report
-  assert.equal(plan.rows[0].updatedAt, '2026-01-10T00:00:00.000Z');   // not re-bumped
+  assert.equal(plan.stats.staled, 0); // already stale - no NEW staling to report
+  assert.equal(plan.rows[0].updatedAt, '2026-01-10T00:00:00.000Z'); // not re-bumped
   assert.equal(plan.rows[0].syncedAt, NOW);
 });
 
 test('planSync never touches source=manual rows - byte-identical output, no field stamped', () => {
-  const manual = { id: 'M1', type: 'link', title: 'Wiki', path: 'Research', url: 'https://wiki',
-    driveFileId: '', owner: 'curator@example.com', tags: 'onboarding', source: 'manual',
-    status: 'active', modifiedTime: '', syncedAt: '', createdAt: '2025-01-01T00:00:00.000Z',
-    updatedAt: '2025-01-01T00:00:00.000Z' };
+  const manual = {
+    id: 'M1',
+    type: 'link',
+    title: 'Wiki',
+    path: 'Research',
+    url: 'https://wiki',
+    driveFileId: '',
+    owner: 'curator@example.com',
+    tags: 'onboarding',
+    source: 'manual',
+    status: 'active',
+    modifiedTime: '',
+    syncedAt: '',
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  };
   const plan = planSync([manual, row()], [driveFile()], { now: NOW });
   const out = plan.rows.find((r) => r.id === 'M1');
   assert.deepEqual(out, manual);
@@ -165,13 +209,15 @@ test('planSync is idempotent: replanning from its own output over the same walk 
   assert.equal(second.stats.updated, 0);
   assert.equal(second.stats.unchanged, 1);
   assert.equal(second.rows[0].title, 'New');
-  assert.equal(second.rows[0].updatedAt, first.rows[0].updatedAt);   // unchanged since first run
+  assert.equal(second.rows[0].updatedAt, first.rows[0].updatedAt); // unchanged since first run
   assert.equal(second.rows[0].syncedAt, LATER);
 });
 
 test('planSync tolerates empty existing rows and empty walk (fresh Sheet, empty drive)', () => {
-  assert.deepEqual(planSync([], [], { now: NOW }), { rows: [],
-    stats: { created: 0, updated: 0, unchanged: 0, staled: 0 } });
+  assert.deepEqual(planSync([], [], { now: NOW }), {
+    rows: [],
+    stats: { created: 0, updated: 0, unchanged: 0, staled: 0 },
+  });
 });
 
 test('planSync defaults now to the current time when opts is omitted', () => {
@@ -185,7 +231,11 @@ test('planSync defaults now to the current time when opts is omitted', () => {
 // path starting with =,+,-,@ must not reach the planned row raw - Sheets
 // would parse it as a formula once refreshKnowledge writes it with setValues.
 test('planSync sanitizes a title starting with = so Sheets cannot parse it as a formula', () => {
-  const plan = planSync([], [driveFile({ name: '=HYPERLINK("http://evil.example","click")', path: '=EvilFolder/Sub' })], { now: NOW });
+  const plan = planSync(
+    [],
+    [driveFile({ name: '=HYPERLINK("http://evil.example","click")', path: '=EvilFolder/Sub' })],
+    { now: NOW }
+  );
   assert.equal(plan.rows[0].title, '\'=HYPERLINK("http://evil.example","click")');
   assert.equal(plan.rows[0].path, "'=EvilFolder/Sub");
 });
@@ -271,7 +321,10 @@ test('planTabsEnsure: both tabs already present - nothing to do', () => {
 });
 
 test('planTabsEnsure: extra unrelated tabs do not confuse the check', () => {
-  assert.deepEqual(planTabsEnsure(['links', 'meta', 'Sheet1']), { needsLinks: false, needsMeta: false });
+  assert.deepEqual(planTabsEnsure(['links', 'meta', 'Sheet1']), {
+    needsLinks: false,
+    needsMeta: false,
+  });
 });
 
 test('planTabsEnsure defaults missing/undefined sheet-name list to needing both tabs', () => {

@@ -80,7 +80,7 @@ var DH_SCHEMA = (function () {
       try {
         var parsed = JSON.parse(s);
         if (Array.isArray(parsed)) return parsed;
-      } catch (e) { /* not JSON - fall through to delimited-text parsing */ }
+      } catch { /* not JSON - fall through to delimited-text parsing */ }
     }
     return s.split(/[,\n]+/).map(function (x) { return x.trim(); }).filter(Boolean);
   }

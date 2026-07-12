@@ -11,7 +11,10 @@ function getIdentity(clientClaim) {
 
 function listCatalog(filter) {
   var rows = dhPortalRows_();
-  if (filter && filter.repo) rows = rows.filter(function (r) { return r.repo === filter.repo; });
+  if (filter && filter.repo)
+    rows = rows.filter(function (r) {
+      return r.repo === filter.repo;
+    });
   return { rows: rows };
 }
 
@@ -54,7 +57,13 @@ function refreshKnowledge() {
   try {
     var ss = dhKnowledgeSheetEnsure_();
     var sheet = ss.getSheetByName('links');
-    var existing = sheet.getDataRange().getValues().slice(1).map(function (row) { return DH_SCHEMA.rowToKnowledge(row); });
+    var existing = sheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (row) {
+        return DH_SCHEMA.rowToKnowledge(row);
+      });
     var driveFiles = dhWalkTeamDrive_();
     var plan = DH_KNOWLEDGE.planSync(existing, driveFiles, { now: now });
 
@@ -71,10 +80,18 @@ function refreshKnowledge() {
     // trimmed by the next successful run); range math lives in
     // DH_KNOWLEDGE.planRewriteRanges so it stays pure and node --test-able.
     var oldRowCount = Math.max(sheet.getLastRow() - 1, 0);
-    var values = plan.rows.map(function (r) { return DH_SCHEMA.knowledgeToRow(r); });
+    var values = plan.rows.map(function (r) {
+      return DH_SCHEMA.knowledgeToRow(r);
+    });
     var ranges = DH_KNOWLEDGE.planRewriteRanges(oldRowCount, values.length);
-    if (ranges.write) sheet.getRange(ranges.write.row, 1, ranges.write.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).setValues(values);
-    if (ranges.trim) sheet.getRange(ranges.trim.row, 1, ranges.trim.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).clearContent();
+    if (ranges.write)
+      sheet
+        .getRange(ranges.write.row, 1, ranges.write.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length)
+        .setValues(values);
+    if (ranges.trim)
+      sheet
+        .getRange(ranges.trim.row, 1, ranges.trim.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length)
+        .clearContent();
 
     // Null-safe lookup: dhKnowledgeSheetEnsure_ above guarantees `meta`
     // exists on THIS `ss` (it is the fix for the production crash this
@@ -83,12 +100,34 @@ function refreshKnowledge() {
     // `meta` yet), so fetch it off that same ensured reference rather than
     // re-deriving the spreadsheet some other way.
     var metaSheet = ss.getSheetByName('meta');
-    metaSheet.appendRow(['', '', '', '', '', '', email, now,
-      'refreshKnowledge: created=' + plan.stats.created + ' updated=' + plan.stats.updated +
-      ' unchanged=' + plan.stats.unchanged + ' staled=' + plan.stats.staled]);
+    metaSheet.appendRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      email,
+      now,
+      'refreshKnowledge: created=' +
+        plan.stats.created +
+        ' updated=' +
+        plan.stats.updated +
+        ' unchanged=' +
+        plan.stats.unchanged +
+        ' staled=' +
+        plan.stats.staled,
+    ]);
 
-    return { total: plan.rows.length, created: plan.stats.created, updated: plan.stats.updated,
-      unchanged: plan.stats.unchanged, staled: plan.stats.staled, triggeredBy: email, at: now };
+    return {
+      total: plan.rows.length,
+      created: plan.stats.created,
+      updated: plan.stats.updated,
+      unchanged: plan.stats.unchanged,
+      staled: plan.stats.staled,
+      triggeredBy: email,
+      at: now,
+    };
   } finally {
     lock.releaseLock();
   }
@@ -103,16 +142,30 @@ function listComments(docPath) {
   // 'deleted' rows stay in the Sheet (setStatus's audit-tab log preserves who/when -
   // D17(c)) but never reach the widget for anyone - this is how the widget's
   // per-card discard() becomes a real removal instead of a per-tab-only hide.
-  var tickets = values.map(function (row) { return DH_SCHEMA.rowToTicket(row); })
-    .filter(function (t) { return !t.parentId && t.status !== 'deleted'; })
+  var tickets = values
+    .map(function (row) {
+      return DH_SCHEMA.rowToTicket(row);
+    })
+    .filter(function (t) {
+      return !t.parentId && t.status !== 'deleted';
+    })
     .map(function (t) {
-      return { id: t.id, quote: t.quote, context: t.context, section: t.section,
-        note: t.note, type: t.type, page: docPath,
+      return {
+        id: t.id,
+        quote: t.quote,
+        context: t.context,
+        section: t.section,
+        note: t.note,
+        type: t.type,
+        page: docPath,
         // rawStatus: the lifecycle value before widgetStatus's lossy board-state
         // mapping (WIDGET_STATUS folds both 'declined' and 'anchor-lost' into
         // 'error') - callers that need to tell them apart use this instead.
-        status: DH_SCHEMA.widgetStatus(t.status), rawStatus: t.status,
-        result: t.result, files: DH_SCHEMA.filesToArray(t.files) };
+        status: DH_SCHEMA.widgetStatus(t.status),
+        rawStatus: t.status,
+        result: t.result,
+        files: DH_SCHEMA.filesToArray(t.files),
+      };
     });
   return { tickets: tickets };
 }
@@ -121,14 +174,24 @@ function submitComment(docPath, ticket) {
   ticket = ticket || {};
   var c = dhCommentsFor_(docPath);
   var now = new Date().toISOString();
-  var t = { id: Utilities.getUuid(), parentId: '', type: ticket.type === 'strike' ? 'strike' : 'comment',
-    status: 'open', quote: DH_SCHEMA.sanitizeField(ticket.quote),
+  var t = {
+    id: Utilities.getUuid(),
+    parentId: '',
+    type: ticket.type === 'strike' ? 'strike' : 'comment',
+    status: 'open',
+    quote: DH_SCHEMA.sanitizeField(ticket.quote),
     context: DH_SCHEMA.sanitizeField(ticket.context),
     section: DH_SCHEMA.sanitizeField(ticket.section),
     note: DH_SCHEMA.sanitizeField(ticket.note),
-    authorEmail: Session.getActiveUser().getEmail(),   // client-supplied identity ignored (D17)
-    authorName: '', source: 'web', docVersion: String(c.indexRow.updatedAt || ''),
-    result: '', files: '', createdAt: now, updatedAt: now };
+    authorEmail: Session.getActiveUser().getEmail(), // client-supplied identity ignored (D17)
+    authorName: '',
+    source: 'web',
+    docVersion: String(c.indexRow.updatedAt || ''),
+    result: '',
+    files: '',
+    createdAt: now,
+    updatedAt: now,
+  };
   c.ss.getSheetByName('tickets').appendRow(DH_SCHEMA.ticketToRow(t));
   return { id: t.id };
 }
@@ -136,10 +199,24 @@ function submitComment(docPath, ticket) {
 function reply(docPath, parentId, note) {
   var c = dhCommentsFor_(docPath);
   var now = new Date().toISOString();
-  var t = { id: Utilities.getUuid(), parentId: DH_SCHEMA.sanitizeField(String(parentId || '')), type: 'reply',
-    status: 'open', quote: '', context: '', section: '', note: DH_SCHEMA.sanitizeField(note),
-    authorEmail: Session.getActiveUser().getEmail(), authorName: '', source: 'web',
-    docVersion: '', result: '', files: '', createdAt: now, updatedAt: now };
+  var t = {
+    id: Utilities.getUuid(),
+    parentId: DH_SCHEMA.sanitizeField(String(parentId || '')),
+    type: 'reply',
+    status: 'open',
+    quote: '',
+    context: '',
+    section: '',
+    note: DH_SCHEMA.sanitizeField(note),
+    authorEmail: Session.getActiveUser().getEmail(),
+    authorName: '',
+    source: 'web',
+    docVersion: '',
+    result: '',
+    files: '',
+    createdAt: now,
+    updatedAt: now,
+  };
   c.ss.getSheetByName('tickets').appendRow(DH_SCHEMA.ticketToRow(t));
   return { id: t.id };
 }
@@ -172,8 +249,19 @@ function setStatus(docPath, id, status) {
         // or surprising activity is detectable and reversible. Recording the
         // prior value (not just the new one) makes the log actually useful for
         // reconstructing history instead of just the latest transition.
-        c.ss.getSheetByName('meta').appendRow(['', '', '', '', '', '', email, now,
-          'setStatus ' + id + ': ' + oldStatus + ' -> ' + status]);
+        c.ss
+          .getSheetByName('meta')
+          .appendRow([
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            email,
+            now,
+            'setStatus ' + id + ': ' + oldStatus + ' -> ' + status,
+          ]);
         return { id: id, status: status };
       }
     }

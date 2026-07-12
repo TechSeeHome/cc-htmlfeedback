@@ -7,12 +7,12 @@
 // DH_CONFIG in the same clasp-pushed directory is fragile and load-order
 // dependent (whichever loses would silently overwrite the other's values).
 var DH_CONFIG = {
-  rootFolderId: '<DH_ROOT_FOLDER_ID>',                  // DesignHub (prod root)
+  rootFolderId: '<DH_ROOT_FOLDER_ID>', // DesignHub (prod root)
   assets: {
-    marked: '<DH_MARKED_BUNDLE_ID>',                    // marked 15 min bundle
-    mermaid: '<DH_MERMAID_BUNDLE_ID>'                   // mermaid 11 min bundle
+    marked: '<DH_MARKED_BUNDLE_ID>', // marked 15 min bundle
+    mermaid: '<DH_MERMAID_BUNDLE_ID>', // mermaid 11 min bundle
   },
-  reconcilerEveryHours: 1,                               // D19 reconciler cadence
-  teamDriveFolderId: '<DH_TEAM_DRIVE_FOLDER_ID>'         // Knowledge Portal (K9) - refreshKnowledge's walk root
+  reconcilerEveryHours: 1, // D19 reconciler cadence
+  teamDriveFolderId: '<DH_TEAM_DRIVE_FOLDER_ID>', // Knowledge Portal (K9) - refreshKnowledge's walk root
 };
 if (typeof module !== 'undefined') module.exports = DH_CONFIG;

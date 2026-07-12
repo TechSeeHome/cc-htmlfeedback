@@ -13,31 +13,43 @@ test('transform produces a self-injecting widget with GAS transport', () => {
   assert.match(out, /dhRun\('submitComment'/);
   assert.match(out, /dhRun\('listComments'/);
   // Upstream comment lines legitimately MENTION /__ccfb/ - assert on code lines only.
-  const code = out.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-  assert.doesNotMatch(code, /\/__ccfb\//);        // no live server endpoints remain
-  assert.doesNotMatch(out, /EventSource/);        // SSE fully removed (v1)
+  const code = out
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('//'))
+    .join('\n');
+  assert.doesNotMatch(code, /\/__ccfb\//); // no live server endpoints remain
+  assert.doesNotMatch(out, /EventSource/); // SSE fully removed (v1)
   // Page keying goes through dhPage(); its own fallback is the ONE allowed use.
-  assert.equal((code.match(/location\.href/g) || []).length, 1,
-    'only the dhPage() fallback may reference location.href');
+  assert.equal(
+    (code.match(/location\.href/g) || []).length,
+    1,
+    'only the dhPage() fallback may reference location.href'
+  );
   assert.match(out, /function dhPage\(\)/);
   assert.match(out, /setInterval\(loadTickets, 30000\)/);
-  assert.match(out, /__fbWidgetLoaded/);          // self-injection guard kept
+  assert.match(out, /__fbWidgetLoaded/); // self-injection guard kept
   assert.ok(out.length > 30000, 'suspiciously small output: ' + out.length);
 });
 
 test('transform fails loudly when an anchor string is missing (upstream drift)', () => {
-  assert.throws(() => transform(src.replace('function ccfbPost', 'function ccfbPostX')),
-    /ccfbPost/);
+  assert.throws(
+    () => transform(src.replace('function ccfbPost', 'function ccfbPostX')),
+    /ccfbPost/
+  );
 });
 
 test('transform fails loudly when a second anchor string is missing (loadTickets renamed)', () => {
-  assert.throws(() => transform(src.replace('function loadTickets', 'function loadTicketsX')),
-    /loadTickets/);
+  assert.throws(
+    () => transform(src.replace('function loadTickets', 'function loadTicketsX')),
+    /loadTickets/
+  );
 });
 
 test('transform fails loudly when subscribeSSE cannot be located (renamed/restructured upstream)', () => {
-  assert.throws(() => transform(src.replace('function subscribeSSE(){', 'function subscribeSSEX(){')),
-    /subscribeSSE/);
+  assert.throws(
+    () => transform(src.replace('function subscribeSSE(){', 'function subscribeSSEX(){')),
+    /subscribeSSE/
+  );
 });
 
 test('transform fails loudly on a second <style> block (would otherwise be silently dropped)', () => {
@@ -46,7 +58,10 @@ test('transform fails loudly on a second <style> block (would otherwise be silen
 });
 
 test('transform fails loudly on a second <script> block (would otherwise be silently dropped, even one carrying a new /__ccfb/ endpoint)', () => {
-  const injected = src.replace('</script>', '</script>\n<script>fetch("/__ccfb/newthing");</script>');
+  const injected = src.replace(
+    '</script>',
+    '</script>\n<script>fetch("/__ccfb/newthing");</script>'
+  );
   assert.throws(() => transform(injected), /exactly one <script> block/);
 });
 
@@ -80,9 +95,10 @@ test('transform relabels Fix -> Submit (DesignHub v1 has no agent consumption lo
   // The disconnected-mode banner (maybeBanner) is unreachable when __CCFB is set
   // (DesignHub always sets it), so its one leftover "agent"-adjacent string is
   // deliberately left untouched - only assert against code lines actually reachable.
-  const reachableAgentMentions = out.split('\n')
+  const reachableAgentMentions = out
+    .split('\n')
     .filter((l) => !l.trim().startsWith('//'))
-    .filter((l) => !l.includes("Run /cc-htmlfeedback to start the live feedback loop"))
+    .filter((l) => !l.includes('Run /cc-htmlfeedback to start the live feedback loop'))
     .filter((l) => /agent/i.test(l));
   assert.deepEqual(reachableAgentMentions, []);
 });

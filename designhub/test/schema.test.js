@@ -3,22 +3,64 @@ const assert = require('node:assert/strict');
 const S = require('../gas/lib/schema.js');
 
 test('ticket columns match design.md section 5 exactly', () => {
-  assert.deepEqual(S.TICKET_COLS, ['id', 'parentId', 'type', 'status', 'quote',
-    'context', 'section', 'note', 'authorEmail', 'authorName', 'source',
-    'docVersion', 'result', 'files', 'createdAt', 'updatedAt']);
+  assert.deepEqual(S.TICKET_COLS, [
+    'id',
+    'parentId',
+    'type',
+    'status',
+    'quote',
+    'context',
+    'section',
+    'note',
+    'authorEmail',
+    'authorName',
+    'source',
+    'docVersion',
+    'result',
+    'files',
+    'createdAt',
+    'updatedAt',
+  ]);
 });
 
 test('index columns match design.md section 4 exactly', () => {
-  assert.deepEqual(S.INDEX_COLS, ['id', 'type', 'title', 'repo', 'feature',
-    'jira', 'tags', 'owner', 'driveFileId', 'commentSheetId', 'url', 'status',
-    'publishedAt', 'updatedAt']);
+  assert.deepEqual(S.INDEX_COLS, [
+    'id',
+    'type',
+    'title',
+    'repo',
+    'feature',
+    'jira',
+    'tags',
+    'owner',
+    'driveFileId',
+    'commentSheetId',
+    'url',
+    'status',
+    'publishedAt',
+    'updatedAt',
+  ]);
 });
 
 test('rowToTicket and ticketToRow round-trip', () => {
-  const t = { id: 'u1', parentId: '', type: 'comment', status: 'open',
-    quote: 'q', context: 'c', section: 's', note: 'n',
-    authorEmail: 'a@example.com', authorName: '', source: 'web', docVersion: '',
-    result: '', files: '', createdAt: 't1', updatedAt: 't2' };
+  const t = {
+    id: 'u1',
+    parentId: '',
+    type: 'comment',
+    status: 'open',
+    quote: 'q',
+    context: 'c',
+    section: 's',
+    note: 'n',
+    authorEmail: 'a@example.com',
+    authorName: '',
+    source: 'web',
+    docVersion: '',
+    result: '',
+    files: '',
+    createdAt: 't1',
+    updatedAt: 't2',
+  };
   assert.deepEqual(S.rowToTicket(S.ticketToRow(t)), t);
 });
 
@@ -29,10 +71,22 @@ test('rowToTicket tolerates short rows (Sheets trims trailing empties)', () => {
 });
 
 test('rowToIndex and indexToRow round-trip', () => {
-  const i = { id: 'u1', type: 'html', title: 'T', repo: 'r', feature: 'f',
-    jira: 'unassigned', tags: '', owner: 'me@example.com', driveFileId: 'F',
-    commentSheetId: 'C', url: 'U', status: 'active',
-    publishedAt: 't1', updatedAt: 't2' };
+  const i = {
+    id: 'u1',
+    type: 'html',
+    title: 'T',
+    repo: 'r',
+    feature: 'f',
+    jira: 'unassigned',
+    tags: '',
+    owner: 'me@example.com',
+    driveFileId: 'F',
+    commentSheetId: 'C',
+    url: 'U',
+    status: 'active',
+    publishedAt: 't1',
+    updatedAt: 't2',
+  };
   assert.deepEqual(S.rowToIndex(S.indexToRow(i)), i);
 });
 
@@ -43,15 +97,41 @@ test('rowToIndex tolerates short rows (Sheets trims trailing empties)', () => {
 });
 
 test('knowledge columns match the Knowledge Portal design (section 4.2) exactly', () => {
-  assert.deepEqual(S.KNOWLEDGE_COLS, ['id', 'type', 'title', 'path', 'url',
-    'driveFileId', 'owner', 'tags', 'source', 'status', 'modifiedTime',
-    'syncedAt', 'createdAt', 'updatedAt']);
+  assert.deepEqual(S.KNOWLEDGE_COLS, [
+    'id',
+    'type',
+    'title',
+    'path',
+    'url',
+    'driveFileId',
+    'owner',
+    'tags',
+    'source',
+    'status',
+    'modifiedTime',
+    'syncedAt',
+    'createdAt',
+    'updatedAt',
+  ]);
 });
 
 test('rowToKnowledge and knowledgeToRow round-trip', () => {
-  const k = { id: 'F1', type: 'gdoc', title: 'T', path: 'Research/CRM', url: 'U',
-    driveFileId: 'F1', owner: 'a@example.com', tags: '', source: 'drive-sync',
-    status: 'active', modifiedTime: 't0', syncedAt: 't1', createdAt: 't2', updatedAt: 't3' };
+  const k = {
+    id: 'F1',
+    type: 'gdoc',
+    title: 'T',
+    path: 'Research/CRM',
+    url: 'U',
+    driveFileId: 'F1',
+    owner: 'a@example.com',
+    tags: '',
+    source: 'drive-sync',
+    status: 'active',
+    modifiedTime: 't0',
+    syncedAt: 't1',
+    createdAt: 't2',
+    updatedAt: 't3',
+  };
   assert.deepEqual(S.rowToKnowledge(S.knowledgeToRow(k)), k);
 });
 
@@ -69,8 +149,22 @@ test('rowToKnowledge tolerates short rows (Sheets trims trailing empties)', () =
 test('rowToKnowledge normalizes Date cells to ISO strings', () => {
   const modifiedTime = new Date('2026-01-01T00:00:00.000Z');
   const createdAt = new Date('2026-02-02T00:00:00.000Z');
-  const row = ['F1', 'gdoc', 'T', 'Research/CRM', 'U', 'F1', 'a@example.com', '',
-    'drive-sync', 'active', modifiedTime, 't1', createdAt, 't3'];
+  const row = [
+    'F1',
+    'gdoc',
+    'T',
+    'Research/CRM',
+    'U',
+    'F1',
+    'a@example.com',
+    '',
+    'drive-sync',
+    'active',
+    modifiedTime,
+    't1',
+    createdAt,
+    't3',
+  ];
   const k = S.rowToKnowledge(row);
   assert.equal(k.modifiedTime, modifiedTime.toISOString());
   assert.equal(k.createdAt, createdAt.toISOString());
@@ -85,9 +179,22 @@ test('rowToKnowledge normalizes Date cells to ISO strings', () => {
 // live Date once either mapper has touched it.
 test('knowledgeToRow normalizes Date fields symmetrically with rowToKnowledge', () => {
   const modifiedTime = new Date('2026-01-01T00:00:00.000Z');
-  const k = { id: 'F1', type: 'gdoc', title: 'T', path: 'Research/CRM', url: 'U',
-    driveFileId: 'F1', owner: 'a@example.com', tags: '', source: 'drive-sync',
-    status: 'active', modifiedTime: modifiedTime, syncedAt: 't1', createdAt: 't2', updatedAt: 't3' };
+  const k = {
+    id: 'F1',
+    type: 'gdoc',
+    title: 'T',
+    path: 'Research/CRM',
+    url: 'U',
+    driveFileId: 'F1',
+    owner: 'a@example.com',
+    tags: '',
+    source: 'drive-sync',
+    status: 'active',
+    modifiedTime: modifiedTime,
+    syncedAt: 't1',
+    createdAt: 't2',
+    updatedAt: 't3',
+  };
   const row = S.knowledgeToRow(k);
   assert.equal(row[S.KNOWLEDGE_COLS.indexOf('modifiedTime')], modifiedTime.toISOString());
   // non-date values pass through unchanged
@@ -117,6 +224,9 @@ test('VALID_STATUSES gates setStatus input', () => {
 // board state (there's no "deleted" column in the widget's own status set).
 test('deleted is a valid status (real removal, not a widget board state)', () => {
   assert.ok(S.VALID_STATUSES.includes('deleted'));
-  assert.equal(S.widgetStatus('deleted'), 'todo',
-    'unmapped by design - listComments filters deleted rows before this is ever called');
+  assert.equal(
+    S.widgetStatus('deleted'),
+    'todo',
+    'unmapped by design - listComments filters deleted rows before this is ever called'
+  );
 });

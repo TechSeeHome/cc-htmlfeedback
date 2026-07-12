@@ -25,28 +25,36 @@ function dhResolveDoc_(path) {
 
 function dhIndexRows_(featureFolder) {
   var it = featureFolder.getFilesByName('_index');
-  if (!it.hasNext()) throw new Error('DesignHub: _index missing for feature ' + featureFolder.getName());
+  if (!it.hasNext())
+    throw new Error('DesignHub: _index missing for feature ' + featureFolder.getName());
   var sheet = SpreadsheetApp.openById(it.next().getId()).getSheetByName('index');
   var values = sheet.getDataRange().getValues();
-  return values.slice(1).map(function (row) { return DH_SCHEMA.rowToIndex(row); });
+  return values.slice(1).map(function (row) {
+    return DH_SCHEMA.rowToIndex(row);
+  });
 }
 
 // path -> the doc's companion tickets spreadsheet (+ file id for audit rows)
 function dhCommentsFor_(path) {
   var r = dhResolveDoc_(path);
   var fileId = r.file.getId();
-  var row = dhIndexRows_(r.featureFolder).filter(function (o) { return o.driveFileId === fileId; })[0];
-  if (!row || !row.commentSheetId) throw new Error('DesignHub: no index row / commentSheetId for ' + path);
+  var row = dhIndexRows_(r.featureFolder).filter(function (o) {
+    return o.driveFileId === fileId;
+  })[0];
+  if (!row || !row.commentSheetId)
+    throw new Error('DesignHub: no index row / commentSheetId for ' + path);
   return { ss: SpreadsheetApp.openById(row.commentSheetId), indexRow: row, fileId: fileId };
 }
 
 function dhPortalRows_() {
   var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
   var it = root.getFilesByName('_portal-index');
-  if (!it.hasNext()) return [];   // nothing published yet
+  if (!it.hasNext()) return []; // nothing published yet
   var sheet = SpreadsheetApp.openById(it.next().getId()).getSheets()[0];
   var values = sheet.getDataRange().getValues();
-  return values.slice(1).map(function (row) { return DH_SCHEMA.rowToIndex(row); });
+  return values.slice(1).map(function (row) {
+    return DH_SCHEMA.rowToIndex(row);
+  });
 }
 
 // D19 reconciler: rebuild _portal-index from every feature _index shard.
@@ -93,8 +101,14 @@ function dhReconcile_() {
       if (ss) shards.push({ path: entry.path, rows: ss.getDataRange().getValues().slice(1) });
     }
   }
-  shards.sort(function (a, b) { return a.path.localeCompare(b.path); });
-  var rows = DH_ROLLUP.buildRollup(shards.map(function (s) { return s.rows; }));
+  shards.sort(function (a, b) {
+    return a.path.localeCompare(b.path);
+  });
+  var rows = DH_ROLLUP.buildRollup(
+    shards.map(function (s) {
+      return s.rows;
+    })
+  );
   var it = root.getFilesByName('_portal-index');
   var sheet;
   if (!it.hasNext()) {
@@ -138,7 +152,13 @@ function dhKnowledgeRows_() {
   var ss = dhKnowledgeSheet_();
   var sheet = ss && ss.getSheetByName('links');
   if (!sheet) return [];
-  return sheet.getDataRange().getValues().slice(1).map(function (row) { return DH_SCHEMA.rowToKnowledge(row); });
+  return sheet
+    .getDataRange()
+    .getValues()
+    .slice(1)
+    .map(function (row) {
+      return DH_SCHEMA.rowToKnowledge(row);
+    });
 }
 
 // Idempotent create: 'links' (data) + 'meta' (audit log, same append-only
@@ -229,7 +249,10 @@ function dhWalkTeamDrive_() {
     while (subs.hasNext()) {
       var sub = subs.next();
       out.push(dhDriveDescriptor_(sub, entry.path, DH_FOLDER_MIME_TYPE_));
-      queue.push({ folder: sub, path: entry.path ? entry.path + '/' + sub.getName() : sub.getName() });
+      queue.push({
+        folder: sub,
+        path: entry.path ? entry.path + '/' + sub.getName() : sub.getName(),
+      });
     }
   }
   return out;
@@ -240,11 +263,18 @@ function dhDriveDescriptor_(item, parentPath, mimeType) {
   try {
     var o = item.getOwner();
     if (o) owner = o.getEmail();
-  } catch (e) { /* Shared Drive items are drive-owned, not user-owned - '' is fine */ }
+  } catch (e) {
+    /* Shared Drive items are drive-owned, not user-owned - '' is fine */
+  }
   return {
-    id: item.getId(), name: item.getName(), mimeType: mimeType,
-    path: parentPath, url: item.getUrl(), owner: owner,
-    modifiedTime: item.getLastUpdated().toISOString(), trashed: item.isTrashed()
+    id: item.getId(),
+    name: item.getName(),
+    mimeType: mimeType,
+    path: parentPath,
+    url: item.getUrl(),
+    owner: owner,
+    modifiedTime: item.getLastUpdated().toISOString(),
+    trashed: item.isTrashed(),
   };
 }
 
@@ -260,6 +290,8 @@ function dhInstallReconcilerTrigger_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'dhReconcile_') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('dhReconcile_').timeBased()
-    .everyHours(DH_CONFIG.reconcilerEveryHours).create();
+  ScriptApp.newTrigger('dhReconcile_')
+    .timeBased()
+    .everyHours(DH_CONFIG.reconcilerEveryHours)
+    .create();
 }

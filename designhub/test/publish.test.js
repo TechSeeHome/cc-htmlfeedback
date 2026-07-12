@@ -4,18 +4,20 @@ const mod = () => import('../../plugins/designhub/skills/publish-design/scripts/
 
 test('scanAssets: asset loads vs navigation links (two severities)', async () => {
   const { scanAssets } = await mod();
-  const html = '<img src="./pic.png"><script src="lib/x.js"></script>' +
+  const html =
+    '<img src="./pic.png"><script src="lib/x.js"></script>' +
     '<link rel="stylesheet" href="style.css">' +
     '<a href="./other.md">sibling</a><a href="#sec">in-page</a>' +
     '<a href="https://x.com">out</a><img src="data:image/png;base64,x">';
   const r = scanAssets(html);
   assert.deepEqual(r.assets.sort(), ['./pic.png', 'lib/x.js', 'style.css']);
-  assert.deepEqual(r.links, ['./other.md']);   // #, data:, absolute all ignored
+  assert.deepEqual(r.links, ['./other.md']); // #, data:, absolute all ignored
 });
 
 test('scanAssets: CSS url() refs inside <style> (background-image, @font-face)', async () => {
   const { scanAssets } = await mod();
-  const html = '<style>body{background:url(\'./bg.png\')}' +
+  const html =
+    "<style>body{background:url('./bg.png')}" +
     '@font-face{font-family:F;src:url(./font.woff2)}' +
     '.x{background:url("https://x.com/ok.png")}</style>';
   const r = scanAssets(html);
@@ -29,8 +31,9 @@ test('scanAssets: data: URI containing a nested url() in the opposite quote styl
   // quotes (filter='url(%23n)') while the outer CSS url() uses double quotes.
   // A naive shared-quote-class regex stops at the inner ', then re-matches
   // url(%23n) as a bogus standalone relative asset.
-  const html = '<style>body{background-image:url("data:image/svg+xml,' +
-    '%3Csvg%3E%3Cfilter id=\'n\'%3E%3C/filter%3E%3Crect filter=\'url(%23n)\'/%3E%3C/svg%3E")}' +
+  const html =
+    '<style>body{background-image:url("data:image/svg+xml,' +
+    "%3Csvg%3E%3Cfilter id='n'%3E%3C/filter%3E%3Crect filter='url(%23n)'/%3E%3C/svg%3E\")}" +
     '</style>';
   const r = scanAssets(html);
   assert.deepEqual(r.assets, []);
@@ -38,7 +41,8 @@ test('scanAssets: data: URI containing a nested url() in the opposite quote styl
 
 test('scanAssets: srcset with multiple relative entries (responsive images)', async () => {
   const { scanAssets } = await mod();
-  const html = '<img srcset="./small.png 1x, ./big.png 2x" src="./small.png">' +
+  const html =
+    '<img srcset="./small.png 1x, ./big.png 2x" src="./small.png">' +
     '<source srcset="./wide.png 2x, https://x.com/abs.png 3x">';
   const r = scanAssets(html);
   assert.deepEqual(r.assets.sort(), ['./big.png', './small.png', './wide.png']);
@@ -46,8 +50,8 @@ test('scanAssets: srcset with multiple relative entries (responsive images)', as
 
 test('scanAssets: unquoted src attribute value (valid but unusual HTML)', async () => {
   const { scanAssets } = await mod();
-  const html = '<img src=./pic.png><script src=lib/app.js></script>' +
-    '<a href=./other.md>sibling</a>';
+  const html =
+    '<img src=./pic.png><script src=lib/app.js></script>' + '<a href=./other.md>sibling</a>';
   const r = scanAssets(html);
   assert.deepEqual(r.assets.sort(), ['./pic.png', 'lib/app.js']);
   assert.deepEqual(r.links, ['./other.md']);
@@ -57,7 +61,8 @@ test('inferMetadata: repo from remote, feature from branch, jira from branch', a
   const { inferMetadata } = await mod();
   const m = inferMetadata({
     remoteUrl: 'git@github.com:example-org/cc-htmlfeedback.git',
-    branch: 'design/PROJ-123-designhub' });
+    branch: 'design/PROJ-123-designhub',
+  });
   assert.equal(m.repo, 'cc-htmlfeedback');
   assert.equal(m.feature, 'design/PROJ-123-designhub');
   assert.equal(m.jira, 'PROJ-123');
@@ -79,9 +84,18 @@ test('featureDir mirrors gas/lib/paths.js exactly (D14 - keep the two in sync)',
 
 test('newIndexRow shapes a section-4 row with stable uuid and active status', async () => {
   const { newIndexRow } = await mod();
-  const row = newIndexRow({ type: 'html', title: 'T', repo: 'r', feature: 'f',
-    jira: 'unassigned', owner: 'me@example.com', driveFileId: 'F', commentSheetId: 'C',
-    url: 'U', now: '2026-07-05T00:00:00Z' });
+  const row = newIndexRow({
+    type: 'html',
+    title: 'T',
+    repo: 'r',
+    feature: 'f',
+    jira: 'unassigned',
+    owner: 'me@example.com',
+    driveFileId: 'F',
+    commentSheetId: 'C',
+    url: 'U',
+    now: '2026-07-05T00:00:00Z',
+  });
   assert.equal(row.length, 14);
   assert.match(row[0], /^[0-9a-f-]{36}$/);
   assert.equal(row[8], 'F');
@@ -96,12 +110,32 @@ test('newIndexRow shapes a section-4 row with stable uuid and active status', as
 // `rows.findIndex(r => r[keyCol] === key)` lookup inline.
 test('upsertRowIndex: -1 when the key is new (caller should append)', async () => {
   const { upsertRowIndex } = await mod();
-  assert.equal(upsertRowIndex([['a', 1], ['b', 2]], 0, 'z'), -1);
+  assert.equal(
+    upsertRowIndex(
+      [
+        ['a', 1],
+        ['b', 2],
+      ],
+      0,
+      'z'
+    ),
+    -1
+  );
 });
 
 test('upsertRowIndex: the row index when the key already exists (caller should update in place)', async () => {
   const { upsertRowIndex } = await mod();
-  assert.equal(upsertRowIndex([['a', 1], ['b', 2]], 0, 'b'), 1);
+  assert.equal(
+    upsertRowIndex(
+      [
+        ['a', 1],
+        ['b', 2],
+      ],
+      0,
+      'b'
+    ),
+    1
+  );
 });
 
 test('upsertRowIndex: empty rows always means append', async () => {
@@ -119,7 +153,10 @@ test('docUrl percent-encodes each path segment (branch names may contain & # %)'
   const fd = featureDir('feature/foo&bar#baz');
   const rawDocPath = `repo/${fd}/file.html`;
   const url = docUrl('https://script.google.com/macros/s/X/exec', rawDocPath);
-  assert.equal(url, 'https://script.google.com/macros/s/X/exec?doc=repo/feature--foo%26bar%23baz/file.html');
+  assert.equal(
+    url,
+    'https://script.google.com/macros/s/X/exec?doc=repo/feature--foo%26bar%23baz/file.html'
+  );
   // URLSearchParams decodes a query value exactly once - the same as GAS's
   // e.parameter.doc - so this must come back to the original, unencoded path.
   assert.equal(new URL(url).searchParams.get('doc'), rawDocPath);

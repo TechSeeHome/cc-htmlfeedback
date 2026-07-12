@@ -143,27 +143,46 @@ function dhKnowledgeRows_() {
 
 // Idempotent create: 'links' (data) + 'meta' (audit log, same append-only
 // pattern setStatus already uses on the comment Sheet's meta tab - D17(c)).
-// root.addFile/DriveApp.getRootFolder().removeFile below reparent the new
-// Spreadsheet into DH_CONFIG.rootFolderId - Apps Script only allows
+// root.addFile/DriveApp.getRootFolder().removeFile below reparent a newly
+// created Spreadsheet into DH_CONFIG.rootFolderId - Apps Script only allows
 // Folder.addFile/removeFile under the full 'https://www.googleapis.com/auth/
 // drive' scope, not 'drive.readonly' (P1 review fix; see appsscript.json's
-// oauthScopes). In production the Sheet already exists (created by the Node
-// importer, 2026-07-12), so this bootstrap path only runs in a fresh
-// environment - but the full scope is what makes refreshKnowledge
-// self-sufficient there too, instead of depending on someone running the
-// importer by hand first.
+// oauthScopes).
+//
+// In production the Sheet already exists (created by the Node importer,
+// home-rnd-productivity-v2), which only ever creates the `links` tab - a bare
+// early-return-if-exists here left `meta` never created, and refreshKnowledge
+// (bridge.js) crashed with "Cannot read properties of null (reading
+// 'appendRow')" the first time it tried to append an audit row. So this
+// checks BOTH tabs every call, on both the bootstrap (brand-new spreadsheet)
+// and pre-existing-spreadsheet paths, via the same DH_KNOWLEDGE.planTabsEnsure
+// decision either way - the full Drive scope is what makes refreshKnowledge
+// self-sufficient in a fresh environment too, instead of depending on someone
+// running the importer by hand first.
 function dhKnowledgeSheetEnsure_() {
-  var existing = dhKnowledgeSheet_();
-  if (existing) return existing;
-  var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
-  var ss = SpreadsheetApp.create('_knowledge-index');
-  var file = DriveApp.getFileById(ss.getId());
-  root.addFile(file);
-  DriveApp.getRootFolder().removeFile(file);
-  var links = ss.getSheets()[0];
-  links.setName('links');
-  links.appendRow(DH_SCHEMA.KNOWLEDGE_COLS);
-  ss.insertSheet('meta').appendRow(DH_SCHEMA.META_COLS);
+  var ss = dhKnowledgeSheet_();
+  var isNew = !ss;
+  if (isNew) {
+    var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
+    ss = SpreadsheetApp.create('_knowledge-index');
+    var file = DriveApp.getFileById(ss.getId());
+    root.addFile(file);
+    DriveApp.getRootFolder().removeFile(file);
+  }
+  var names = ss.getSheets().map(function (s) { return s.getName(); });
+  var plan = DH_KNOWLEDGE.planTabsEnsure(names);
+  if (plan.needsLinks) {
+    // Only a spreadsheet WE just created has its default sheet (e.g.
+    // "Sheet1") renamed in place - an existing spreadsheet that somehow
+    // lacks `links` gets a real new tab instead, so no unrelated tab it
+    // already has (e.g. a lone `meta`) is ever renamed out from under it.
+    var links = isNew ? ss.getSheets()[0] : ss.insertSheet();
+    links.setName('links');
+    links.appendRow(DH_SCHEMA.KNOWLEDGE_COLS);
+  }
+  if (plan.needsMeta) {
+    ss.insertSheet('meta').appendRow(DH_SCHEMA.META_COLS);
+  }
   return ss;
 }
 

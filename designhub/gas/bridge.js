@@ -76,7 +76,14 @@ function refreshKnowledge() {
     if (ranges.write) sheet.getRange(ranges.write.row, 1, ranges.write.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).setValues(values);
     if (ranges.trim) sheet.getRange(ranges.trim.row, 1, ranges.trim.numRows, DH_SCHEMA.KNOWLEDGE_COLS.length).clearContent();
 
-    ss.getSheetByName('meta').appendRow(['', '', '', '', '', '', email, now,
+    // Null-safe lookup: dhKnowledgeSheetEnsure_ above guarantees `meta`
+    // exists on THIS `ss` (it is the fix for the production crash this
+    // function used to throw - "Cannot read properties of null (reading
+    // 'appendRow')" - when an importer-created spreadsheet had `links` but no
+    // `meta` yet), so fetch it off that same ensured reference rather than
+    // re-deriving the spreadsheet some other way.
+    var metaSheet = ss.getSheetByName('meta');
+    metaSheet.appendRow(['', '', '', '', '', '', email, now,
       'refreshKnowledge: created=' + plan.stats.created + ' updated=' + plan.stats.updated +
       ' unchanged=' + plan.stats.unchanged + ' staled=' + plan.stats.staled]);
 

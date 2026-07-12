@@ -1,6 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mimeToType, planSync, planRewriteRanges, planTabsEnsure } = require('../gas/lib/knowledge.js');
+const {
+  mimeToType,
+  planSync,
+  planRewriteRanges,
+  planTabsEnsure,
+} = require('../gas/lib/knowledge.js');
 
 function driveFile(over) {
   return Object.assign(
@@ -316,7 +321,10 @@ test('planTabsEnsure: both tabs already present - nothing to do', () => {
 });
 
 test('planTabsEnsure: extra unrelated tabs do not confuse the check', () => {
-  assert.deepEqual(planTabsEnsure(['links', 'meta', 'Sheet1']), { needsLinks: false, needsMeta: false });
+  assert.deepEqual(planTabsEnsure(['links', 'meta', 'Sheet1']), {
+    needsLinks: false,
+    needsMeta: false,
+  });
 });
 
 test('planTabsEnsure defaults missing/undefined sheet-name list to needing both tabs', () => {

@@ -41,8 +41,17 @@
     "prettier": "3.9.4"
   },
   "c8": {
+    "all": true,
+    "include": [
+      "server.js",
+      "build.js",
+      "lib/**",
+      "designhub/build-designhub.js",
+      "designhub/gas/lib/**",
+      "plugins/designhub/skills/publish-design/scripts/**"
+    ],
     "check-coverage": true,
-    "lines": 75,
+    "lines": 73,
     "reporter": ["text", "text-summary"]
   },
   "license": "MIT",

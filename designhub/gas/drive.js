@@ -189,7 +189,9 @@ function dhKnowledgeSheetEnsure_() {
     root.addFile(file);
     DriveApp.getRootFolder().removeFile(file);
   }
-  var names = ss.getSheets().map(function (s) { return s.getName(); });
+  var names = ss.getSheets().map(function (s) {
+    return s.getName();
+  });
   var plan = DH_KNOWLEDGE.planTabsEnsure(names);
   if (plan.needsLinks) {
     // Only a spreadsheet WE just created has its default sheet (e.g.

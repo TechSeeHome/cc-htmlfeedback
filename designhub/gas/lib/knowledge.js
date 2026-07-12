@@ -34,6 +34,23 @@ var DH_KNOWLEDGE = (function () {
     [/^audio\//, 'audio']
   ];
 
+  // Drive-tree child path (design section 4.2 contract, extracted out of
+  // dhWalkTeamDrive_ (drive.js) the same way planRewriteRanges was pulled out
+  // of refreshKnowledge below: the walk itself needs DriveApp and can't run
+  // under node --test, but the one line of path arithmetic it depends on can,
+  // so that line lives here instead of being duplicated inline). A folder's
+  // row carries its OWN full path (parent joined with its own name); a
+  // file's row carries its CONTAINING folder's path unchanged (the parent
+  // path, not run through this function). Getting that swapped - passing a
+  // folder the PARENT's path instead of its own - is exactly the bug this
+  // function exists to make impossible to reintroduce: the portal's
+  // buildDriveTree Object.assigns a folder row onto the tree node named by
+  // its path, so a folder row carrying its parent's path renames the parent
+  // node instead of creating its own.
+  function childPath(parentPath, name) {
+    return parentPath ? parentPath + '/' + name : name;
+  }
+
   function mimeToType(mimeType) {
     var m = String(mimeType || '');
     if (EXACT_MIME_MAP[m]) return EXACT_MIME_MAP[m];
@@ -207,7 +224,7 @@ var DH_KNOWLEDGE = (function () {
     };
   }
 
-  return { mimeToType: mimeToType, planSync: planSync, planRewriteRanges: planRewriteRanges,
-    planTabsEnsure: planTabsEnsure };
+  return { childPath: childPath, mimeToType: mimeToType, planSync: planSync,
+    planRewriteRanges: planRewriteRanges, planTabsEnsure: planTabsEnsure };
 })();
 if (typeof module !== 'undefined') module.exports = DH_KNOWLEDGE;

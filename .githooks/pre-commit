@@ -2,7 +2,8 @@
 # Pre-commit hook: format and lint staged files before allowing a commit.
 #
 # Only operates on staged files (not the whole repo), so it stays fast.
-# Enable with: git config core.hooksPath .githooks
+# Installed automatically by `npm install` (the "prepare" script sets
+# core.hooksPath to .githooks). Emergency bypass: git commit --no-verify.
 set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
@@ -20,49 +21,48 @@ fi
 
 status=0
 
-# --- Prettier check --------------------------------------------------------
-# Extensions match what this repo already formats with Prettier (see
-# .prettierrc.json). Prettier itself still applies .prettierignore even to
-# explicitly-listed files, so we only need to pre-filter by extension here to
-# decide whether it's worth invoking prettier at all.
-prettier_files=()
+# --- oxfmt check ------------------------------------------------------------
+# Extensions match what this repo formats with oxfmt (see .oxfmtrc.json).
+# oxfmt still applies its ignorePatterns to explicitly-listed files, so we
+# only pre-filter by extension to decide whether to invoke it at all.
+fmt_files=()
 for file in "${staged_files[@]}"; do
   case "$file" in
     *.js | *.mjs | *.cjs | *.jsx | *.ts | *.tsx | *.json | *.md | *.mdx | *.html | *.css | *.scss | *.less | *.yml | *.yaml)
-      prettier_files+=("$file")
+      fmt_files+=("$file")
       ;;
   esac
 done
 
-if [ "${#prettier_files[@]}" -eq 0 ]; then
-  echo "pre-commit: no staged files for prettier to check, skipping."
+if [ "${#fmt_files[@]}" -eq 0 ]; then
+  echo "pre-commit: no staged files for oxfmt to check, skipping."
 else
-  echo "pre-commit: running prettier --check on ${#prettier_files[@]} staged file(s)..."
-  if ! npx --no-install prettier --check --ignore-unknown "${prettier_files[@]}"; then
+  echo "pre-commit: running oxfmt --check on ${#fmt_files[@]} staged file(s)..."
+  if ! npx --no-install oxfmt --check "${fmt_files[@]}"; then
     echo ""
-    echo "pre-commit: prettier check FAILED on the file(s) listed above."
-    echo "Fix with: npx prettier --write <file...> on the failing files, then re-stage and commit again."
+    echo "pre-commit: oxfmt check FAILED on the file(s) listed above."
+    echo "Fix with: npx oxfmt <file...> on the failing files, then re-stage and commit again."
     status=1
   fi
 fi
 
-# --- oxlint check (staged designhub JS only) -------------------------------
-designhub_js_files=()
+# --- oxlint check (staged JS in linted areas) -------------------------------
+lint_files=()
 for file in "${staged_files[@]}"; do
   case "$file" in
-    designhub/*.js)
-      designhub_js_files+=("$file")
+    server.js | build.js | lib/*.js | test/*.js | designhub/*.js | designhub/*/*.js | designhub/*/*/*.js)
+      lint_files+=("$file")
       ;;
   esac
 done
 
-if [ "${#designhub_js_files[@]}" -eq 0 ]; then
-  echo "pre-commit: no staged designhub/*.js files for oxlint to check, skipping."
+if [ "${#lint_files[@]}" -eq 0 ]; then
+  echo "pre-commit: no staged files for oxlint to check, skipping."
 else
-  echo "pre-commit: running oxlint on ${#designhub_js_files[@]} staged designhub js file(s)..."
-  if ! npx --no-install oxlint "${designhub_js_files[@]}"; then
+  echo "pre-commit: running oxlint on ${#lint_files[@]} staged file(s)..."
+  if ! npx --no-install oxlint "${lint_files[@]}"; then
     echo ""
-    echo "pre-commit: oxlint reported errors in the designhub file(s) listed above."
+    echo "pre-commit: oxlint reported errors in the file(s) listed above."
     echo "Fix the errors, then re-stage and commit again."
     status=1
   fi

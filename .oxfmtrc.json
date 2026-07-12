@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "singleQuote": true,
+  "trailingComma": "es5",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "node_modules",
+    "package-lock.json",
+    "package.json",
+    "feedback-widget.html",
+    "playground_file.html",
+    "extension/",
+    "plugins/",
+    "server.js",
+    "build.js",
+    "lib/",
+    "test/queue.test.js",
+    "test/server.test.js",
+    "test/watch-inbox.test.js",
+    "test/inject.test.js",
+    "docs/",
+    "README.md",
+    "CLAUDE.md",
+    "coverage/",
+    "designhub/gas/widget.js"
+  ]
+}

@@ -38,3 +38,6 @@ docs/designhub/**/*.local.md
 designhub/gas/config.js
 designhub/gas/.clasp.json
 plugins/designhub/designhub.config.local.json
+
+# c8 coverage output
+coverage/

@@ -2,25 +2,48 @@
   "name": "cc-htmlfeedback",
   "version": "1.2.0",
   "description": "A self-contained, dependency-free in-page feedback tool. Highlight text on any page to leave comments and strikethrough suggestions, then copy structured feedback (with the page URL) to share.",
-  "keywords": ["feedback", "annotation", "chrome-extension", "claude-code", "review", "highlight"],
-  "homepage": "https://github.com/leetwito/cc-htmlfeedback#readme",
-  "repository": { "type": "git", "url": "git+https://github.com/leetwito/cc-htmlfeedback.git" },
-  "bugs": { "url": "https://github.com/leetwito/cc-htmlfeedback/issues" },
+  "keywords": [
+    "feedback",
+    "annotation",
+    "chrome-extension",
+    "claude-code",
+    "review",
+    "highlight"
+  ],
+  "homepage": "https://github.com/TechSeeHome/cc-htmlfeedback#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TechSeeHome/cc-htmlfeedback.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TechSeeHome/cc-htmlfeedback/issues"
+  },
   "author": "leetwito",
-  "engines": { "node": "^20.19.0 || >=22.12.0" },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "build": "node build.js",
     "check": "node build.js --check",
     "test": "node --test --test-force-exit test/*.test.js",
+    "test:designhub": "node --test --test-force-exit designhub/test/*.test.js",
+    "test:all": "npm test && npm run test:designhub",
+    "test:cov": "c8 npm run test:all",
     "serve": "node server.js",
     "lint": "npm run build --silent && oxlint extension/feedback-widget.js server.js lib build.js test",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "c8": "11.0.0",
     "jsdom": "25.0.1",
     "oxlint": "1.72.0",
     "prettier": "3.9.4"
+  },
+  "c8": {
+    "check-coverage": true,
+    "lines": 75,
+    "reporter": ["text", "text-summary"]
   },
   "license": "MIT",
   "private": false

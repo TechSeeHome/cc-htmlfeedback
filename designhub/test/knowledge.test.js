@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mimeToType, planSync, planRewriteRanges } = require('../gas/lib/knowledge.js');
+const { mimeToType, planSync, planRewriteRanges, planTabsEnsure } = require('../gas/lib/knowledge.js');
 
 function driveFile(over) {
   return Object.assign({ id: 'F1', name: 'Doc', mimeType: 'application/vnd.google-apps.document',
@@ -251,4 +251,30 @@ test('planRewriteRanges: old empty, new has rows - writes new rows, no trim need
 test('planRewriteRanges defaults missing counts to 0', () => {
   assert.deepEqual(planRewriteRanges(undefined, 3), { write: { row: 2, numRows: 3 }, trim: null });
   assert.deepEqual(planRewriteRanges(5, undefined), { write: null, trim: { row: 2, numRows: 5 } });
+});
+
+// Idempotent-ensure decision for dhKnowledgeSheetEnsure_ (drive.js) - the
+// production bug this guards against: a spreadsheet created by the Node
+// importer (home-rnd-productivity-v2) has ONLY a `links` tab, and the old
+// ensure function's early-return-if-exists never checked for `meta` at all,
+// so refreshKnowledge (bridge.js) crashed appending the audit row.
+test('planTabsEnsure: brand-new spreadsheet (no sheets match yet) needs both tabs', () => {
+  assert.deepEqual(planTabsEnsure(['Sheet1']), { needsLinks: true, needsMeta: true });
+});
+
+test('planTabsEnsure: importer-created spreadsheet has links but no meta - the production bug', () => {
+  assert.deepEqual(planTabsEnsure(['links']), { needsLinks: false, needsMeta: true });
+});
+
+test('planTabsEnsure: both tabs already present - nothing to do', () => {
+  assert.deepEqual(planTabsEnsure(['links', 'meta']), { needsLinks: false, needsMeta: false });
+});
+
+test('planTabsEnsure: extra unrelated tabs do not confuse the check', () => {
+  assert.deepEqual(planTabsEnsure(['links', 'meta', 'Sheet1']), { needsLinks: false, needsMeta: false });
+});
+
+test('planTabsEnsure defaults missing/undefined sheet-name list to needing both tabs', () => {
+  assert.deepEqual(planTabsEnsure(undefined), { needsLinks: true, needsMeta: true });
+  assert.deepEqual(planTabsEnsure([]), { needsLinks: true, needsMeta: true });
 });

@@ -192,6 +192,22 @@ var DH_KNOWLEDGE = (function () {
     return { write: write, trim: trim };
   }
 
-  return { mimeToType: mimeToType, planSync: planSync, planRewriteRanges: planRewriteRanges };
+  // Idempotent-ensure decision for dhKnowledgeSheetEnsure_ (drive.js):
+  // production hit "Cannot read properties of null (reading 'appendRow')"
+  // because the Node importer (home-rnd-productivity-v2) creates
+  // `_knowledge-index` with only a `links` tab, so the old ensure function's
+  // early-return-if-exists never checked for `meta` at all. Pure sheet-name
+  // check so the decision itself stays node --test-able (D5) even though
+  // actually creating a sheet needs SpreadsheetApp.
+  function planTabsEnsure(existingSheetNames) {
+    existingSheetNames = existingSheetNames || [];
+    return {
+      needsLinks: existingSheetNames.indexOf('links') === -1,
+      needsMeta: existingSheetNames.indexOf('meta') === -1
+    };
+  }
+
+  return { mimeToType: mimeToType, planSync: planSync, planRewriteRanges: planRewriteRanges,
+    planTabsEnsure: planTabsEnsure };
 })();
 if (typeof module !== 'undefined') module.exports = DH_KNOWLEDGE;

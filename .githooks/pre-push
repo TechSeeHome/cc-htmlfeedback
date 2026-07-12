@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Pre-push hook: run the same checks CI runs, so failures are caught locally
+# before they show up in a CI run.
+#
+# Enable with: git config core.hooksPath .githooks
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+run_step() {
+  local description="$1"
+  shift
+  echo "pre-push: running $description..."
+  if ! "$@"; then
+    echo ""
+    echo "pre-push: FAILED at step: $description"
+    echo "pre-push: push blocked, fix the failure above and try again."
+    exit 1
+  fi
+}
+
+run_step "designhub tests (node --test designhub/test/)" node --test designhub/test/
+run_step "build check (node build.js --check)" node build.js --check
+run_step "designhub build check (node designhub/build-designhub.js --check)" node designhub/build-designhub.js --check
+
+echo "pre-push: all checks passed."
+exit 0

@@ -66,6 +66,15 @@ npm run build     # build extension/feedback-widget.js + assemble plugins/cc-htm
 npm run check     # verify all outputs are in sync (no writes; non-zero on drift)
 ```
 
+### Git hooks
+
+Committed git hooks live in `.githooks/` (pre-commit runs prettier/oxlint on staged files;
+pre-push runs the test/build checks CI runs). Enable them once per clone with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## License
 
 MIT - see [LICENSE](LICENSE).

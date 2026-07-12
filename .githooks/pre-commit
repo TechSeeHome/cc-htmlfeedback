@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Pre-commit hook: format and lint staged files before allowing a commit.
+#
+# Only operates on staged files (not the whole repo), so it stays fast.
+# Installed automatically by `npm install` (the "prepare" script sets
+# core.hooksPath to .githooks). Emergency bypass: git commit --no-verify.
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+# Collect staged, added/copied/modified files (skip deletions).
+staged_files=()
+while IFS= read -r file; do
+  [ -n "$file" ] && staged_files+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+if [ "${#staged_files[@]}" -eq 0 ]; then
+  exit 0
+fi
+
+status=0
+
+# --- oxfmt check ------------------------------------------------------------
+# Extensions match what this repo formats with oxfmt (see .oxfmtrc.json).
+# oxfmt still applies its ignorePatterns to explicitly-listed files, so we
+# only pre-filter by extension to decide whether to invoke it at all.
+fmt_files=()
+for file in "${staged_files[@]}"; do
+  case "$file" in
+    *.js | *.mjs | *.cjs | *.jsx | *.ts | *.tsx | *.json | *.md | *.mdx | *.html | *.css | *.scss | *.less | *.yml | *.yaml)
+      fmt_files+=("$file")
+      ;;
+  esac
+done
+
+if [ "${#fmt_files[@]}" -eq 0 ]; then
+  echo "pre-commit: no staged files for oxfmt to check, skipping."
+else
+  echo "pre-commit: running oxfmt --check on ${#fmt_files[@]} staged file(s)..."
+  if ! npx --no-install oxfmt --check "${fmt_files[@]}"; then
+    echo ""
+    echo "pre-commit: oxfmt check FAILED on the file(s) listed above."
+    echo "Fix with: npx oxfmt <file...> on the failing files, then re-stage and commit again."
+    status=1
+  fi
+fi
+
+# --- oxlint check (staged JS in linted areas) -------------------------------
+lint_files=()
+for file in "${staged_files[@]}"; do
+  case "$file" in
+    server.js | build.js | lib/*.js | test/*.js | designhub/*.js | designhub/*/*.js | designhub/*/*/*.js)
+      lint_files+=("$file")
+      ;;
+  esac
+done
+
+if [ "${#lint_files[@]}" -eq 0 ]; then
+  echo "pre-commit: no staged files for oxlint to check, skipping."
+else
+  echo "pre-commit: running oxlint on ${#lint_files[@]} staged file(s)..."
+  if ! npx --no-install oxlint "${lint_files[@]}"; then
+    echo ""
+    echo "pre-commit: oxlint reported errors in the file(s) listed above."
+    echo "Fix the errors, then re-stage and commit again."
+    status=1
+  fi
+fi
+
+if [ "$status" -ne 0 ]; then
+  echo ""
+  echo "pre-commit: commit blocked, see failures above."
+fi
+
+exit "$status"

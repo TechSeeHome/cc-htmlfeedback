@@ -66,6 +66,18 @@ npm run build     # build extension/feedback-widget.js + assemble plugins/cc-htm
 npm run check     # verify all outputs are in sync (no writes; non-zero on drift)
 ```
 
+### Git hooks
+
+Committed git hooks live in `.githooks/` (pre-commit runs oxfmt/oxlint on staged files;
+pre-push runs the full lint/format/build/test gate CI enforces). `npm install` activates
+them automatically (the `prepare` script sets `core.hooksPath`); to enable manually:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Emergency bypass: `--no-verify` - CI and the required `check` status on `main` still gate.
+
 ## License
 
 MIT - see [LICENSE](LICENSE).

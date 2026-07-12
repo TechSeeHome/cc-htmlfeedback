@@ -106,19 +106,39 @@ test('planSync: a folder row gets its OWN path; a file in that folder keeps the 
   // a further subfolder 'CRM eval'.
   const crmOwnPath = childPath(researchOwnPath, 'CRM eval');
   assert.equal(crmOwnPath, 'Research/CRM eval');
-  assert.notEqual(crmOwnPath, researchOwnPath);   // must NOT collapse to the parent's path (the bug)
+  assert.notEqual(crmOwnPath, researchOwnPath); // must NOT collapse to the parent's path (the bug)
 
   const walk = [
     // The 'Research' folder itself: its row path is its own full path.
-    driveFile({ id: 'D-research', name: 'Research', mimeType: 'application/vnd.google-apps.folder', path: researchOwnPath }),
+    driveFile({
+      id: 'D-research',
+      name: 'Research',
+      mimeType: 'application/vnd.google-apps.folder',
+      path: researchOwnPath,
+    }),
     // A file living directly inside 'Research': its row path is the
     // CONTAINING folder's path (Research's own path), unchanged.
-    driveFile({ id: 'F-doc', name: 'Doc', mimeType: 'application/vnd.google-apps.document', path: researchOwnPath }),
+    driveFile({
+      id: 'F-doc',
+      name: 'Doc',
+      mimeType: 'application/vnd.google-apps.document',
+      path: researchOwnPath,
+    }),
     // The 'CRM eval' subfolder of 'Research': its row path is ITS OWN full
     // path, one level deeper than Research - not Research's path.
-    driveFile({ id: 'D-crm', name: 'CRM eval', mimeType: 'application/vnd.google-apps.folder', path: crmOwnPath }),
+    driveFile({
+      id: 'D-crm',
+      name: 'CRM eval',
+      mimeType: 'application/vnd.google-apps.folder',
+      path: crmOwnPath,
+    }),
     // A file living inside 'CRM eval': its row path is CRM eval's path.
-    driveFile({ id: 'F-notes', name: 'Notes', mimeType: 'application/vnd.google-apps.document', path: crmOwnPath }),
+    driveFile({
+      id: 'F-notes',
+      name: 'Notes',
+      mimeType: 'application/vnd.google-apps.document',
+      path: crmOwnPath,
+    }),
   ];
   const plan = planSync([], walk, { now: NOW });
   const byId = (id) => plan.rows.find((r) => r.driveFileId === id);
@@ -130,7 +150,7 @@ test('planSync: a folder row gets its OWN path; a file in that folder keeps the 
 
   assert.equal(byId('D-crm').type, 'gfolder');
   assert.equal(byId('D-crm').path, 'Research/CRM eval');
-  assert.notEqual(byId('D-crm').path, byId('D-research').path);   // own path, not the parent's
+  assert.notEqual(byId('D-crm').path, byId('D-research').path); // own path, not the parent's
 
   assert.equal(byId('F-notes').path, 'Research/CRM eval');
 });

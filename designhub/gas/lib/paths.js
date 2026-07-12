@@ -3,7 +3,7 @@
 // scheme of the web app (?doc=<repo>/<featureDir>/<subpath...>).
 var DH_PATHS = (function () {
   function featureDir(feature) {
-    return String(feature).replace(/[\/\\]/g, '--').replace(/[:*?"<>|]/g, '-');
+    return String(feature).replace(/[/\\]/g, '--').replace(/[:*?"<>|]/g, '-');
   }
   function docPath(repo, feature, pathInRepo) {
     return [repo, featureDir(feature)].concat(String(pathInRepo).split('/')).join('/');

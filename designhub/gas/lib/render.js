@@ -19,7 +19,7 @@ var DH_RENDER = (function () {
     // control chars + space and remove ALL tab/CR/LF from anywhere in the
     // string before ever looking at the scheme - so "  java\tscript:alert(1)"
     // still runs as javascript: unless checked against the same normalization.
-    var normalized = u.replace(/[\t\r\n]/g, '').replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '');
+    var normalized = u.replace(/[\t\r\n]/g, '').replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
     return /^https?:\/\//i.test(normalized) || !/^[a-z][a-z0-9+.-]*:/i.test(normalized) ? u : '#';
   }
   // <base target="_top"> is required or in-doc navigation silently fails in the

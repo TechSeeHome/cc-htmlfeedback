@@ -187,10 +187,81 @@ var DH_INGEST = (function () {
     return { action: 'update', row: row };
   }
 
+  // Design doc's "Add external link" pinned type list. NOTE: the spec's own
+  // dialog copy lists "sheet"/"slides" (informal shorthand) - the real values
+  // used everywhere else in this codebase are gsheet/gslides (see this
+  // task's top-of-task design note); folder is deliberately excluded (no
+  // Drive-native surface concept applies to a manual link).
+  var LINK_TYPES = ['link', 'gdoc', 'gsheet', 'gslides', 'pdf', 'video', 'file'];
+  // Deliberately NOT the global `URL` class - not reliably available in the
+  // Apps Script V8 runtime (a browser/Node platform addition, not core
+  // ECMAScript), so this stays a portable regex check, dual-runtime-safe.
+  var URL_RE = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
+  var LINK_REQUIRED = ['title', 'url', 'type', 'path'];
+
+  // input: the Manage dialog's "Add external link" payload (title, url,
+  // type, path, description, tags - owner is deliberately NOT a field, it is
+  // server-stamped from ctx.actorEmail). existingManualRows: the CALLER's
+  // source=manual rows only (this function does not filter by source
+  // itself - the caller is expected to have already narrowed it, matching
+  // the design doc's "reject duplicate URLs among source=manual rows").
+  // ctx: {id, actorEmail, nowIso} - all server-derived, never client input.
+  function planCreateLink(input, existingManualRows, ctx) {
+    input = input || {};
+    existingManualRows = existingManualRows || [];
+    ctx = ctx || {};
+
+    for (var i = 0; i < LINK_REQUIRED.length; i++) {
+      var f = LINK_REQUIRED[i];
+      if (!input[f] || !String(input[f]).trim()) {
+        return { ok: false, error: { code: 'INVALID_INPUT', field: f, message: f + ' is required' } };
+      }
+    }
+    if (!URL_RE.test(String(input.url).trim())) {
+      return { ok: false, error: { code: 'INVALID_INPUT', field: 'url', message: 'Enter a valid http(s) URL' } };
+    }
+    if (LINK_TYPES.indexOf(input.type) === -1) {
+      return {
+        ok: false,
+        error: { code: 'INVALID_INPUT', field: 'type', message: 'Unsupported link type: ' + input.type },
+      };
+    }
+
+    var urlLower = String(input.url).trim().toLowerCase();
+    var dupe = existingManualRows.filter(function (r) {
+      return String(r.url || '').trim().toLowerCase() === urlLower;
+    })[0];
+    if (dupe) {
+      return { ok: false, error: { code: 'DUPLICATE_ENTRY', message: 'Already added as "' + dupe.title + '"' } };
+    }
+
+    return {
+      ok: true,
+      row: {
+        id: ctx.id,
+        type: input.type,
+        title: String(input.title).trim(),
+        path: String(input.path).trim(),
+        url: String(input.url).trim(),
+        driveFileId: '',
+        owner: ctx.actorEmail,
+        tags: input.tags ? String(input.tags).trim() : '',
+        source: 'manual',
+        status: 'active',
+        modifiedTime: '',
+        syncedAt: '',
+        createdAt: ctx.nowIso,
+        updatedAt: ctx.nowIso,
+        description: input.description ? String(input.description).trim() : '',
+      },
+    };
+  }
+
   return {
     base64DecodedByteLength: base64DecodedByteLength,
     validatePublishInput: validatePublishInput,
     planPublish: planPublish,
+    planCreateLink: planCreateLink,
   };
 })();
 if (typeof module !== 'undefined') module.exports = DH_INGEST;

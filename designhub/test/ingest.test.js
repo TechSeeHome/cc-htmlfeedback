@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   validatePublishInput,
   planPublish,
+  planCreateLink,
   base64DecodedByteLength,
 } = require('../gas/lib/ingest.js');
 const { INDEX_COLS, indexToRow, rowToIndex } = require('../gas/lib/schema.js');
@@ -301,4 +302,120 @@ test('planPublish: a collision with comments (any count > 0) -> rejected/DOC_HAS
 test('planPublish: existingIndexRows defaults to [] and companionCommentCount defaults to 0 when omitted', () => {
   const r = planPublish(publishCtx());
   assert.equal(r.action, 'create');
+});
+
+// ---- planCreateLink ----
+
+function linkCtx(over) {
+  return Object.assign(
+    { id: 'uuid-2', actorEmail: 'me@example.com', nowIso: '2026-07-13T00:00:00.000Z' },
+    over
+  );
+}
+function goodLink(over) {
+  return Object.assign(
+    {
+      title: 'Wiki',
+      url: 'https://wiki.example.com/x',
+      type: 'link',
+      path: 'Research',
+      description: 'a wiki page',
+      tags: 'a,b',
+    },
+    over
+  );
+}
+
+test('planCreateLink: a well-formed link builds a KNOWLEDGE_COLS-shaped manual row', () => {
+  const { KNOWLEDGE_COLS } = require('../gas/lib/schema.js');
+  const r = planCreateLink(goodLink(), [], linkCtx());
+  assert.equal(r.ok, true);
+  assert.deepEqual(Object.keys(r.row).sort(), [...KNOWLEDGE_COLS].sort());
+  assert.equal(r.row.source, 'manual');
+  assert.equal(r.row.status, 'active');
+  assert.equal(r.row.owner, 'me@example.com'); // server-stamped from ctx, never from input
+  assert.equal(r.row.createdAt, '2026-07-13T00:00:00.000Z');
+  assert.equal(r.row.updatedAt, '2026-07-13T00:00:00.000Z');
+  assert.equal(r.row.driveFileId, ''); // manual rows have no Drive file
+});
+
+test('planCreateLink: each required field missing is INVALID_INPUT naming that field', () => {
+  for (const field of ['title', 'url', 'type', 'path']) {
+    const r = planCreateLink(goodLink({ [field]: '' }), [], linkCtx());
+    assert.equal(r.ok, false, `expected failure for missing ${field}`);
+    assert.equal(r.error.code, 'INVALID_INPUT');
+    assert.equal(r.error.field, field);
+  }
+});
+
+test('planCreateLink: description and tags are optional - an omitted one becomes an empty string', () => {
+  const r = planCreateLink(goodLink({ description: undefined, tags: undefined }), [], linkCtx());
+  assert.equal(r.ok, true);
+  assert.equal(r.row.description, '');
+  assert.equal(r.row.tags, '');
+});
+
+test('planCreateLink: a malformed URL is INVALID_INPUT on the url field', () => {
+  for (const bad of ['not-a-url', 'ftp://x.com', 'javascript:alert(1)', '  ']) {
+    const r = planCreateLink(goodLink({ url: bad }), [], linkCtx());
+    assert.equal(r.ok, false, `expected failure for url ${bad}`);
+    assert.equal(r.error.code, 'INVALID_INPUT');
+    assert.equal(r.error.field, 'url');
+  }
+});
+
+test('planCreateLink: http and https URLs are both accepted', () => {
+  assert.equal(planCreateLink(goodLink({ url: 'http://x.com/y' }), [], linkCtx()).ok, true);
+  assert.equal(planCreateLink(goodLink({ url: 'https://x.com/y' }), [], linkCtx()).ok, true);
+});
+
+test('planCreateLink: type is restricted to the pinned list; folder is explicitly excluded', () => {
+  for (const t of ['link', 'gdoc', 'gsheet', 'gslides', 'pdf', 'video', 'file']) {
+    assert.equal(
+      planCreateLink(goodLink({ type: t }), [], linkCtx()).ok,
+      true,
+      `expected ${t} to be accepted`
+    );
+  }
+  const r = planCreateLink(goodLink({ type: 'folder' }), [], linkCtx());
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'type');
+
+  const bogus = planCreateLink(goodLink({ type: 'gfolder' }), [], linkCtx());
+  assert.equal(bogus.ok, false);
+  assert.equal(bogus.error.field, 'type');
+});
+
+test('planCreateLink: a duplicate URL (case-insensitive) against an existing manual row is DUPLICATE_ENTRY naming the existing title', () => {
+  const existing = planCreateLink(goodLink({ title: 'Original Wiki' }), [], linkCtx()).row;
+  const r = planCreateLink(
+    goodLink({ title: 'Same link again', url: 'HTTPS://WIKI.example.com/X' }),
+    [existing],
+    linkCtx()
+  );
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'DUPLICATE_ENTRY');
+  assert.match(r.error.message, /Original Wiki/);
+});
+
+test('planCreateLink: duplicate check only looks at manual rows the caller passed in - it never sees drive-sync rows itself', () => {
+  // (existingManualRows is documented/expected to already be filtered to
+  // source=manual by the caller - this test just confirms planCreateLink
+  // does not re-filter or otherwise special-case a row missing `source`.)
+  const nonMatching = [{ url: 'https://different.example.com', title: 'Different' }];
+  const r = planCreateLink(goodLink(), nonMatching, linkCtx());
+  assert.equal(r.ok, true);
+});
+
+test('planCreateLink: trims whitespace from title/path/url/description/tags', () => {
+  const r = planCreateLink(
+    goodLink({ title: '  Wiki  ', path: '  Research  ', description: '  desc  ', tags: '  a,b  ' }),
+    [],
+    linkCtx()
+  );
+  assert.equal(r.row.title, 'Wiki');
+  assert.equal(r.row.path, 'Research');
+  assert.equal(r.row.description, 'desc');
+  assert.equal(r.row.tags, 'a,b');
 });

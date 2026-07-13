@@ -123,6 +123,28 @@ var DH_RENDER = (function () {
       'It may have been renamed, moved, or never published.</p>' +
       '<p><a href="?">Back to DesignHub</a></p></body></html>';
   }
+  // Branded fallback for doGet's B0 read-side ACL check (Knowledge Portal
+  // design, "Users and permissions") - a signed-in domain user without a
+  // Drive grant on the underlying file, requesting a doc that DOES resolve
+  // (dhResolveDoc_ succeeded). Deliberately distinct from notFoundHtml: the
+  // doc exists, the user just isn't allowed to see it - conflating the two
+  // would make an access denial look like a broken link. docPath is
+  // untrusted (see notFoundHtml's identical note) so it goes through esc().
+  // The escalation line is required verbatim (design doc, "Group-grant
+  // false denials"): group-only Drive grants are not resolvable without the
+  // Admin Directory API (documented limitation), so a real, entitled user
+  // CAN be wrongly denied here - this is how they self-report it instead of
+  // silently bouncing off a page that looks like a dead end.
+  function deniedHtml(docPath) {
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top">' +
+      '<title>DesignHub - access denied</title><style>body{max-width:640px;margin:4rem auto;' +
+      'font:16px/1.6 -apple-system,Segoe UI,sans-serif;color:#1a1a1a;padding:0 1rem}' +
+      'code{background:#f2f2f2;padding:1px 4px}</style></head><body>' +
+      '<h1>Access denied</h1><p>You do not have permission to view <code>' + esc(docPath) + '</code>. ' +
+      'Ask the document owner for access in Google Drive.</p>' +
+      '<p>If this document opens for you in Google Drive, this denial is an error - report it to the portal team.</p>' +
+      '<p><a href="?">Back to DesignHub</a></p></body></html>';
+  }
   function treeHtml(rows) {
     var active = rows.filter(function (r) { return r.status === 'active'; });
     var body;
@@ -150,6 +172,7 @@ var DH_RENDER = (function () {
       '</head><body><h1>DesignHub</h1>' + body + '</body></html>';
   }
   return { esc: esc, safeHref: safeHref, injectBase: injectBase, widgetTags: widgetTags,
-    serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml, notFoundHtml: notFoundHtml };
+    serveHtml: serveHtml, mdShell: mdShell, treeHtml: treeHtml, notFoundHtml: notFoundHtml,
+    deniedHtml: deniedHtml };
 })();
 if (typeof module !== 'undefined') module.exports = DH_RENDER;

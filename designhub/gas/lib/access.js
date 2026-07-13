@@ -92,6 +92,61 @@ var DH_ACCESS = (function () {
     return { allow: false, via: 'none' };
   }
 
-  return { decideRead: decideRead };
+  // Write-side ACL probe (Knowledge Portal design, "Users and permissions",
+  // Slice B1): same permission-list-walking shape as decideRead above, with
+  // two deliberate divergences. (1) A permission's ROLE now matters:
+  // decideRead allows via ANY role because any grant at all implies at
+  // least read access; decideWrite must not - a reader/commenter-only
+  // entry must never allow a write, even though decideRead would happily
+  // allow read through the very same entries. WRITE_ROLES mirrors Drive's
+  // own write-capable role set. type='group' is deliberately never
+  // resolved here either, for the identical reason decideRead excludes it
+  // (Admin Directory API not available) - see that function's comment; a
+  // group-only grant denies regardless of its role. (2) Same security fix
+  // as decideRead's (designhub commit 87e5e13, found in Task 1's own
+  // review): a domain-type permission's `domain` field must match the
+  // ACTOR's own email domain - this app being domain-restricted only
+  // proves the actor is in SOME accepted domain, not that this specific
+  // permission's domain is theirs. type='anyone' stays unconditional (on
+  // role only) - it is correctly domain-agnostic already.
+  var WRITE_ROLES = ['writer', 'organizer', 'fileOrganizer', 'owner'];
+
+  function decideWrite(permissions, actorEmail, fileOwnerEmail) {
+    var actor = normEmail_(actorEmail);
+    if (!actor) return { allow: false, via: 'none' };
+    var atIndex = actor.indexOf('@');
+    var actorDomain = atIndex === -1 ? '' : actor.slice(atIndex + 1);
+
+    if (fileOwnerEmail && normEmail_(fileOwnerEmail) === actor) {
+      return { allow: true, via: 'owner' };
+    }
+
+    var list = Array.isArray(permissions) ? permissions : [];
+
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      if (p && p.type === 'user' && WRITE_ROLES.indexOf(p.role) !== -1 && normEmail_(p.emailAddress) === actor) {
+        return { allow: true, via: 'direct' };
+      }
+    }
+    for (var j = 0; j < list.length; j++) {
+      var q = list[j];
+      if (q && q.type === 'anyone' && WRITE_ROLES.indexOf(q.role) !== -1) {
+        return { allow: true, via: 'domain' };
+      }
+      if (
+        q &&
+        q.type === 'domain' &&
+        WRITE_ROLES.indexOf(q.role) !== -1 &&
+        actorDomain &&
+        normEmail_(q.domain) === actorDomain
+      ) {
+        return { allow: true, via: 'domain' };
+      }
+    }
+    return { allow: false, via: 'none' };
+  }
+
+  return { decideRead: decideRead, decideWrite: decideWrite };
 })();
 if (typeof module !== 'undefined') module.exports = DH_ACCESS;

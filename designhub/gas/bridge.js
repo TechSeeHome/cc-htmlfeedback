@@ -333,7 +333,17 @@ function publishDesignDoc(input) {
   }
 
   var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
   try {
     // Re-resolve fresh now that the lock is held. The ACL probe above ran
     // BEFORE the lock (deliberately, to fail fast on a denial without ever
@@ -342,6 +352,23 @@ function publishDesignDoc(input) {
     // lock every other mutating bridge call already uses to pair its
     // decision with its write (refreshKnowledge, setStatus).
     target = dhResolveWriteTarget_(norm.repo, norm.featureDir, folderSegs, norm.fileName);
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(target.aclTarget),
+      actor,
+      dhOwnerEmail_(target.aclTarget)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            target.aclTarget.getName() +
+            '" in Drive - ask an editor of that folder to grant you access, then try again.',
+        },
+      };
+    }
     var now = new Date().toISOString();
     var contentString = Utilities.newBlob(
       Utilities.base64Decode(norm.contentBase64)
@@ -363,7 +390,14 @@ function publishDesignDoc(input) {
         });
       var companion = dhCompanionSheetEnsure_(target.parentFolder, norm.fileName);
       var count = dhTicketCountFor_(companion.ticketsSheet);
-      var ctx = Object.assign({}, norm, { url: url, now: now });
+      var ctx = Object.assign({}, norm, {
+        id: Utilities.getUuid(),
+        owner: actor,
+        driveFileId: target.aclTarget.getId(),
+        commentSheetId: companion.ss.getId(),
+        url: url,
+        now: now,
+      });
       plan = DH_INGEST.planPublish(ctx, matched, count);
       if (plan.action === 'needs_confirm') {
         return {

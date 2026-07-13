@@ -489,7 +489,17 @@ function createKnowledgeLink(input) {
   }
 
   var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
   try {
     var ss = dhKnowledgeSheetEnsure_();
     var sheet = ss.getSheetByName('links');

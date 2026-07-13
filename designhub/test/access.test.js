@@ -32,6 +32,18 @@ test('decideRead: a domain-type permission allows via "domain"', () => {
   assert.deepEqual(result, { allow: true, via: 'domain' });
 });
 
+test('decideRead: a domain-type permission scoped to a DIFFERENT domain than the actor does not grant access', () => {
+  const permissions = [{ type: 'domain', domain: 'othercompany.com', role: 'reader' }];
+  const result = decideRead(permissions, 'someone@example.com', '');
+  assert.deepEqual(result, { allow: false, via: 'none' });
+});
+
+test('decideRead: a domain-type permission still matches when the actor email is uppercase', () => {
+  const permissions = [{ type: 'domain', domain: 'example.com', role: 'reader' }];
+  const result = decideRead(permissions, 'Someone@EXAMPLE.com', '');
+  assert.deepEqual(result, { allow: true, via: 'domain' });
+});
+
 // This app is domain-restricted already (appsscript.json webapp.access:
 // DOMAIN), so an "anyone with the link" grant on a specific file still only
 // ever reaches authenticated domain users in practice - treating it as

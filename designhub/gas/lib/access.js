@@ -26,10 +26,13 @@ var DH_ACCESS = (function () {
   //    it needs no permissions array at all.
   //  - type='user' whose emailAddress case-insensitively equals actorEmail
   //    -> {allow:true, via:'direct'}.
-  //  - type='domain' -> {allow:true, via:'domain'}. This app is already
-  //    domain-restricted (appsscript.json webapp.access: DOMAIN), so a
-  //    domain-type grant on a specific file is still a real, meaningful
-  //    signal to check, not a no-op.
+  //  - type='domain' whose domain field case-insensitively equals the
+  //    actor's own email domain -> {allow:true, via:'domain'}. A domain-type
+  //    grant scoped to a DIFFERENT domain (Drive supports domain-to-domain
+  //    trusted sharing) must not grant access just because this app's web
+  //    app is domain-restricted (appsscript.json webapp.access: DOMAIN) -
+  //    that restriction only proves the actor is IN some domain the app
+  //    accepts, not that this specific permission's domain is theirs.
   //  - type='anyone' -> {allow:true, via:'domain'} (deliberately reported
   //    the same way as an explicit domain grant, not a distinct value). An
   //    "anyone with the link" grant on a file inside a domain-locked web app
@@ -62,6 +65,8 @@ var DH_ACCESS = (function () {
   function decideRead(permissions, actorEmail, fileOwnerEmail) {
     var actor = normEmail_(actorEmail);
     if (!actor) return { allow: false, via: 'none' };
+    var atIndex = actor.indexOf('@');
+    var actorDomain = atIndex === -1 ? '' : actor.slice(atIndex + 1);
 
     if (fileOwnerEmail && normEmail_(fileOwnerEmail) === actor) {
       return { allow: true, via: 'owner' };
@@ -77,7 +82,10 @@ var DH_ACCESS = (function () {
     }
     for (var j = 0; j < list.length; j++) {
       var q = list[j];
-      if (q && (q.type === 'domain' || q.type === 'anyone')) {
+      if (q && q.type === 'anyone') {
+        return { allow: true, via: 'domain' };
+      }
+      if (q && q.type === 'domain' && actorDomain && normEmail_(q.domain) === actorDomain) {
         return { allow: true, via: 'domain' };
       }
     }

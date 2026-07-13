@@ -471,3 +471,67 @@ function publishDesignDoc(input) {
     lock.releaseLock();
   }
 }
+
+// createKnowledgeLink(input): input is {title, url, type, path, description,
+// tags} from the Manage dialog's "Add external link" form. owner is NOT a
+// field - always server-stamped from Session.
+function createKnowledgeLink(input) {
+  var actor = Session.getActiveUser().getEmail();
+  if (!actor) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'actor',
+        message: 'Could not determine your signed-in identity - reload the page and try again.',
+      },
+    };
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = dhKnowledgeSheetEnsure_();
+    var sheet = ss.getSheetByName('links');
+    var existing = sheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (row) {
+        return DH_SCHEMA.rowToKnowledge(row);
+      });
+    // Design doc's "Bridge changes": "rejects duplicate URLs among
+    // source=manual rows" - drive-sync rows are filtered out here, before
+    // planCreateLink ever sees them, matching that exact scope.
+    var manualRows = existing.filter(function (r) {
+      return r.source === 'manual';
+    });
+    var now = new Date().toISOString();
+    var ctx = { id: Utilities.getUuid(), actorEmail: actor, nowIso: now };
+    var result = DH_INGEST.planCreateLink(input || {}, manualRows, ctx);
+    if (!result.ok) return { ok: false, error: result.error };
+
+    sheet.appendRow(DH_SCHEMA.knowledgeToRow(result.row));
+
+    // Audit append (D17(c)): same 6-blanks-then-publisher/publishedAt/note
+    // shape refreshKnowledge's own meta append already uses on this exact
+    // Sheet - there is no repo/pathInRepo/branch/commitSha/pr/jira context
+    // for a manual link, so those six columns stay blank, same as
+    // refreshKnowledge's own audit row.
+    ss.getSheetByName('meta').appendRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      actor,
+      now,
+      'createKnowledgeLink: ' + result.row.title,
+    ]);
+
+    return { ok: true, entry: result.row };
+  } finally {
+    lock.releaseLock();
+  }
+}

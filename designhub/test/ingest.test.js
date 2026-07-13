@@ -1,6 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { validatePublishInput, base64DecodedByteLength } = require('../gas/lib/ingest.js');
+const {
+  validatePublishInput,
+  planPublish,
+  base64DecodedByteLength,
+} = require('../gas/lib/ingest.js');
+const { INDEX_COLS, indexToRow, rowToIndex } = require('../gas/lib/schema.js');
 
 function goodInput(over) {
   return Object.assign(
@@ -165,4 +170,135 @@ test('validatePublishInput: featureDir sanitizes the feature the same way DH_PAT
   const r = validatePublishInput(goodInput({ feature: 'design/foo:bar' }));
   assert.equal(r.ok, true);
   assert.equal(r.normalized.featureDir, 'design--foo-bar');
+});
+
+// ---- planPublish ----
+
+function publishCtx(over) {
+  return Object.assign(
+    {
+      id: 'uuid-1',
+      type: 'md',
+      title: 'Design Doc',
+      repo: 'cc-htmlfeedback',
+      feature: 'design/foo',
+      jira: 'unassigned',
+      owner: 'me@example.com',
+      driveFileId: 'F1',
+      commentSheetId: 'C1',
+      url: 'https://exec/?doc=cc-htmlfeedback/design--foo/design.md',
+      now: '2026-07-13T00:00:00.000Z',
+      confirmUpdate: false,
+    },
+    over
+  );
+}
+
+test('planPublish: no existing row at this address -> create, with a full INDEX_COLS-shaped row', () => {
+  const r = planPublish(publishCtx(), [], 0);
+  assert.equal(r.action, 'create');
+  assert.deepEqual(Object.keys(r.row).sort(), [...INDEX_COLS].sort());
+  assert.equal(r.row.status, 'active');
+  assert.equal(r.row.tags, ''); // never set on create, matching newIndexRow's CLI shape
+  assert.equal(r.row.publishedAt, r.row.updatedAt);
+});
+
+test('planPublish: create row round-trips through DH_SCHEMA byte-identically to a Node-CLI-published row', () => {
+  const r = planPublish(publishCtx(), [], 0);
+  const arr = indexToRow(r.row);
+  assert.equal(arr.length, INDEX_COLS.length);
+  assert.deepEqual(rowToIndex(arr), r.row);
+});
+
+test('planPublish: a collision with 0 comments and confirmUpdate:false -> needs_confirm', () => {
+  const existingRow = rowToIndex(
+    indexToRow({
+      id: 'uuid-1',
+      type: 'md',
+      title: 'Old title',
+      repo: 'cc-htmlfeedback',
+      feature: 'design/foo',
+      jira: 'unassigned',
+      tags: '',
+      owner: 'me@example.com',
+      driveFileId: 'F1',
+      commentSheetId: 'C1',
+      url: 'https://exec/?doc=cc-htmlfeedback/design--foo/design.md',
+      status: 'active',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+  );
+  const r = planPublish(publishCtx({ confirmUpdate: false, title: 'New title' }), [existingRow], 0);
+  assert.deepEqual(r, { action: 'needs_confirm' });
+});
+
+test('planPublish: a collision with 0 comments and confirmUpdate:true -> update, patching only title/url/jira/commentSheetId/updatedAt', () => {
+  const existingRow = rowToIndex(
+    indexToRow({
+      id: 'uuid-1',
+      type: 'md',
+      title: 'Old title',
+      repo: 'cc-htmlfeedback',
+      feature: 'design/foo',
+      jira: 'unassigned',
+      tags: 'kept',
+      owner: 'original-owner@example.com',
+      driveFileId: 'F1',
+      commentSheetId: 'C1',
+      url: 'old-url',
+      status: 'active',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+  );
+  const r = planPublish(
+    publishCtx({ confirmUpdate: true, title: 'New title', jira: 'PROJ-9' }),
+    [existingRow],
+    0
+  );
+  assert.equal(r.action, 'update');
+  assert.equal(r.row.title, 'New title');
+  assert.equal(r.row.jira, 'PROJ-9');
+  assert.equal(r.row.updatedAt, publishCtx().now);
+  // Unchanged fields are PRESERVED from the existing row, not overwritten:
+  assert.equal(r.row.id, 'uuid-1');
+  assert.equal(r.row.driveFileId, 'F1');
+  assert.equal(r.row.tags, 'kept');
+  assert.equal(r.row.owner, 'original-owner@example.com');
+  assert.equal(r.row.publishedAt, '2026-01-01T00:00:00.000Z');
+});
+
+test('planPublish: a collision with comments (any count > 0) -> rejected/DOC_HAS_COMMENTS, regardless of confirmUpdate', () => {
+  const existingRow = rowToIndex(
+    indexToRow({
+      id: 'uuid-1',
+      type: 'md',
+      title: 'Old title',
+      repo: 'cc-htmlfeedback',
+      feature: 'design/foo',
+      jira: 'unassigned',
+      tags: '',
+      owner: 'me@example.com',
+      driveFileId: 'F1',
+      commentSheetId: 'C1',
+      url: 'old-url',
+      status: 'active',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+  );
+  const r = planPublish(publishCtx({ confirmUpdate: true }), [existingRow], 3);
+  assert.equal(r.action, 'rejected');
+  assert.equal(r.error.code, 'DOC_HAS_COMMENTS');
+  // Required verbatim dialog copy (design doc, "Upload design doc" > Outcomes):
+  assert.match(
+    r.error.message,
+    /This document already has feedback comments - updating it here would break their anchors\. Update it with \/publish-design, which re-anchors comments\./
+  );
+});
+
+test('planPublish: existingIndexRows defaults to [] and companionCommentCount defaults to 0 when omitted', () => {
+  const r = planPublish(publishCtx());
+  assert.equal(r.action, 'create');
 });

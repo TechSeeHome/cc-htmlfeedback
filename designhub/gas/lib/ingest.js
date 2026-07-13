@@ -109,9 +109,88 @@ var DH_INGEST = (function () {
     };
   }
 
+  // planPublish: input is validatePublishInput's normalized shape, enriched
+  // by the caller (bridge.js) with driveFileId/commentSheetId/url/owner/now
+  // (and, for a brand-new doc, id) once those are known from real Drive/
+  // Sheets I/O - see this task's own top-of-task design note for exactly
+  // when the caller has each of these available. existingIndexRows is
+  // either [] (no file at this address) or the single matched _index row
+  // object (DH_SCHEMA.INDEX_COLS-keyed) for the file that already exists
+  // there - the caller resolves this via a real Drive/Sheets lookup, since a
+  // pure function cannot do that lookup itself (D5).
+  function planPublish(input, existingIndexRows, companionCommentCount) {
+    existingIndexRows = existingIndexRows || [];
+    companionCommentCount = companionCommentCount || 0;
+
+    if (existingIndexRows.length === 0) {
+      // No collision: unconditional create, matching publish-lib.mjs's
+      // newIndexRow field set/order exactly (tags always '' on create - the
+      // CLI never sets it either) so a GAS-published row and a Node-CLI-
+      // published row are byte-identical once both pass through
+      // DH_SCHEMA.indexToRow.
+      return {
+        action: 'create',
+        row: {
+          id: input.id,
+          type: input.type,
+          title: input.title,
+          repo: input.repo,
+          feature: input.feature,
+          jira: input.jira,
+          tags: '',
+          owner: input.owner,
+          driveFileId: input.driveFileId,
+          commentSheetId: input.commentSheetId,
+          url: input.url,
+          status: 'active',
+          publishedAt: input.now,
+          updatedAt: input.now,
+        },
+      };
+    }
+
+    var existing = existingIndexRows[0];
+
+    // The one-deliberate-carve-out (design doc, "Upload design doc" >
+    // Outcomes): a doc with existing feedback comments never updates here,
+    // regardless of confirmUpdate - the comment re-anchor pass stays
+    // exclusive to /publish-design. Checked BEFORE the confirm gate so a
+    // confirmed update on a commented doc still rejects, rather than
+    // silently overwriting anchors.
+    if (companionCommentCount > 0) {
+      return {
+        action: 'rejected',
+        error: {
+          code: 'DOC_HAS_COMMENTS',
+          message:
+            'This document already has feedback comments - updating it here would break ' +
+            'their anchors. Update it with /publish-design, which re-anchors comments.',
+        },
+      };
+    }
+
+    if (!input.confirmUpdate) {
+      return { action: 'needs_confirm' };
+    }
+
+    // Update-in-place: patches exactly the fields publish-lib.mjs's
+    // patchIndexRow patches (title/url/jira/commentSheetId/updatedAt) -
+    // everything else (id, driveFileId, tags, owner, status, publishedAt)
+    // is PRESERVED from the existing row, never regenerated.
+    var row = Object.assign({}, existing, {
+      title: input.title,
+      url: input.url,
+      jira: input.jira,
+      commentSheetId: input.commentSheetId,
+      updatedAt: input.now,
+    });
+    return { action: 'update', row: row };
+  }
+
   return {
     base64DecodedByteLength: base64DecodedByteLength,
     validatePublishInput: validatePublishInput,
+    planPublish: planPublish,
   };
 })();
 if (typeof module !== 'undefined') module.exports = DH_INGEST;

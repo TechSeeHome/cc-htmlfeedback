@@ -456,6 +456,18 @@ test('featureFolderIndexInMissing: cold bootstrap with a deeper folderSeg also m
   assert.equal(featureFolderIndexInMissing(3, 3), 1);
 });
 
+test('featureFolderIndexInMissing: featureDir + one subfolder already exist, a second-level subfolder missing (totalNames >= 4 boundary)', () => {
+  // Models pathInRepo nesting 2 subfolders deep under the feature dir
+  // (e.g. "sub1/sub2/design.md"): totalNames = 2 (repo+featureDir) + 2
+  // folderSegs = 4. Only the deepest segment is missing (missing = 1),
+  // so startDepth = 4 - 1 = 3 - already past the feature folder (depth 2).
+  // Regression coverage for a mutation-testing gap: an earlier version of
+  // this suite only exercised totalNames <= 3, so a future boundary
+  // regression (e.g. `startDepth >= 2` accidentally changed to `>= 3`)
+  // would have shipped with all tests green.
+  assert.equal(featureFolderIndexInMissing(1, 4), -1);
+});
+
 test('publishDesignDoc-style folder chain creation never re-creates the feature folder (no duplicate tree)', () => {
   // A minimal fake Folder: createFolder records calls and returns a child
   // fake with the same shape, so we can assert exactly which folders got

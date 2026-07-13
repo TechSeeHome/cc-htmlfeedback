@@ -6,6 +6,7 @@ const {
   planSync,
   planRewriteRanges,
   planTabsEnsure,
+  planHeaderEnsure,
 } = require('../gas/lib/knowledge.js');
 
 function driveFile(over) {
@@ -19,6 +20,7 @@ function driveFile(over) {
       owner: 'a@example.com',
       modifiedTime: '2026-01-01T00:00:00.000Z',
       trashed: false,
+      description: '',
     },
     over
   );
@@ -40,6 +42,7 @@ function row(over) {
       syncedAt: '2026-01-01T00:00:00.000Z',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      description: '',
     },
     over
   );
@@ -260,6 +263,66 @@ test('planSync never touches source=manual rows - byte-identical output, no fiel
   assert.deepEqual(out, manual);
 });
 
+// K4 extension (Slice B1's description sync enhancement): a manual row's
+// OWN description must survive a sync pass byte-identically, even when a
+// drive-sync row sharing the SAME id (a contrived, defensive case - in
+// practice a manual row's driveFileId is always '', so this can't really
+// collide, but the guarantee must hold regardless) carries a totally
+// different description.
+test("planSync preserves a manual row's description across a sync pass, even when a same-id drive node has a different one", () => {
+  const manual = {
+    id: 'M1',
+    type: 'link',
+    title: 'Wiki',
+    path: 'Research',
+    url: 'https://wiki',
+    driveFileId: '',
+    owner: 'curator@example.com',
+    tags: 'onboarding',
+    source: 'manual',
+    status: 'active',
+    modifiedTime: '',
+    syncedAt: '',
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+    description: 'curator-written description',
+  };
+  const plan = planSync(
+    [manual, row()],
+    [driveFile({ description: 'a totally different drive description' })],
+    { now: NOW }
+  );
+  const out = plan.rows.find((r) => r.id === 'M1');
+  assert.deepEqual(out, manual);
+  assert.equal(out.description, 'curator-written description');
+});
+
+// Drive-sync rows DO pick up description (unlike manual rows above) - both
+// on create and on an existing row whose description changed.
+test("planSync: a new drive-sync row picks up the file's description", () => {
+  const plan = planSync([], [driveFile({ description: 'a helpful doc' })], { now: NOW });
+  assert.equal(plan.rows[0].description, 'a helpful doc');
+});
+
+test('planSync: a description-only change on an existing drive-sync row counts as updated', () => {
+  const existing = [row({ description: 'old description', updatedAt: '2026-01-15T00:00:00.000Z' })];
+  const plan = planSync(existing, [driveFile({ description: 'new description' })], { now: NOW });
+  assert.equal(plan.stats.updated, 1);
+  assert.equal(plan.rows[0].description, 'new description');
+  assert.equal(plan.rows[0].updatedAt, NOW);
+});
+
+test('planSync sanitizes a description starting with = so Sheets cannot parse it as a formula', () => {
+  const plan = planSync(
+    [],
+    [driveFile({ description: '=HYPERLINK("http://evil.example","click")' })],
+    {
+      now: NOW,
+    }
+  );
+  assert.equal(plan.rows[0].description, '\'=HYPERLINK("http://evil.example","click")');
+});
+
 test('planSync handles multiple files independently (create + update + stale in one run)', () => {
   const existing = [
     row({ id: 'F1', driveFileId: 'F1', title: 'Stays same' }),
@@ -410,4 +473,36 @@ test('planTabsEnsure: extra unrelated tabs do not confuse the check', () => {
 test('planTabsEnsure defaults missing/undefined sheet-name list to needing both tabs', () => {
   assert.deepEqual(planTabsEnsure(undefined), { needsLinks: true, needsMeta: true });
   assert.deepEqual(planTabsEnsure([]), { needsLinks: true, needsMeta: true });
+});
+
+// Header-migration guard for the description column (Slice B1) - same
+// production-drift shape planTabsEnsure already guards against, for a
+// column instead of a whole tab.
+test('planHeaderEnsure: an old (shorter) header needs updating to the full canonical column list', () => {
+  const { KNOWLEDGE_COLS } = require('../gas/lib/schema.js');
+  const oldHeader = KNOWLEDGE_COLS.slice(0, -1); // pre-description header
+  assert.deepEqual(planHeaderEnsure(oldHeader, KNOWLEDGE_COLS), {
+    needsUpdate: true,
+    header: KNOWLEDGE_COLS,
+  });
+});
+
+test('planHeaderEnsure: a header already at (or beyond) the canonical length needs no update', () => {
+  const { KNOWLEDGE_COLS } = require('../gas/lib/schema.js');
+  assert.deepEqual(planHeaderEnsure(KNOWLEDGE_COLS, KNOWLEDGE_COLS), {
+    needsUpdate: false,
+    header: KNOWLEDGE_COLS,
+  });
+});
+
+test('planHeaderEnsure: an empty/missing header needs the full canonical column list', () => {
+  const { KNOWLEDGE_COLS } = require('../gas/lib/schema.js');
+  assert.deepEqual(planHeaderEnsure([], KNOWLEDGE_COLS), {
+    needsUpdate: true,
+    header: KNOWLEDGE_COLS,
+  });
+  assert.deepEqual(planHeaderEnsure(undefined, KNOWLEDGE_COLS), {
+    needsUpdate: true,
+    header: KNOWLEDGE_COLS,
+  });
 });

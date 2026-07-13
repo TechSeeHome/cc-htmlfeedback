@@ -112,6 +112,7 @@ test('knowledge columns match the Knowledge Portal design (section 4.2) exactly'
     'syncedAt',
     'createdAt',
     'updatedAt',
+    'description',
   ]);
 });
 
@@ -131,6 +132,7 @@ test('rowToKnowledge and knowledgeToRow round-trip', () => {
     syncedAt: 't1',
     createdAt: 't2',
     updatedAt: 't3',
+    description: 'D',
   };
   assert.deepEqual(S.rowToKnowledge(S.knowledgeToRow(k)), k);
 });

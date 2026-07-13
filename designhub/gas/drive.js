@@ -442,6 +442,19 @@ function dhKnowledgeSheetEnsure_() {
     var links = isNew ? ss.getSheets()[0] : ss.insertSheet();
     links.setName('links');
     links.appendRow(DH_SCHEMA.KNOWLEDGE_COLS);
+  } else {
+    // Header-migration guard (Slice B1's `description` column): a `links`
+    // tab that already existed before this deploy has a header row written
+    // by older code, shorter than the CURRENT KNOWLEDGE_COLS - fix it up in
+    // place rather than leaving a silently-unlabeled trailing data column.
+    var linksSheet = ss.getSheetByName('links');
+    var headerRow = linksSheet
+      .getRange(1, 1, 1, Math.max(linksSheet.getLastColumn(), 1))
+      .getValues()[0];
+    var headerPlan = DH_KNOWLEDGE.planHeaderEnsure(headerRow, DH_SCHEMA.KNOWLEDGE_COLS);
+    if (headerPlan.needsUpdate) {
+      linksSheet.getRange(1, 1, 1, headerPlan.header.length).setValues([headerPlan.header]);
+    }
   }
   if (plan.needsMeta) {
     ss.insertSheet('meta').appendRow(DH_SCHEMA.META_COLS);
@@ -522,6 +535,14 @@ function dhDriveDescriptor_(item, parentPath, mimeType) {
     owner: owner,
     modifiedTime: item.getLastUpdated().toISOString(),
     trashed: item.isTrashed(),
+    // Sync enhancement (Slice B1): Drive's own description field, straight
+    // off DriveApp - both File and Folder expose getDescription() (no
+    // Advanced Service call needed, unlike this plan's write-side
+    // Permissions.list; this repo's walk already deliberately stays on
+    // plain DriveApp per this function's own file-level comment). Never
+    // null in practice, but guarded with `|| ''` anyway for parity with
+    // owner/url above.
+    description: item.getDescription() || '',
   };
 }
 

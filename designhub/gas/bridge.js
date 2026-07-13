@@ -375,7 +375,37 @@ function publishDesignDoc(input) {
     ).getDataAsString('UTF-8');
     var mimeType = norm.type === 'md' ? 'text/markdown' : 'text/html';
     var url = dhExecUrl_() + '?doc=' + norm.docPath.split('/').map(encodeURIComponent).join('/');
-    var featureFolder = dhFeatureFolder_(norm.repo, norm.featureDir);
+
+    // Single unified folder-resolution pass (see this task's design note on
+    // dhFeatureFolder_'s "throws before dhEnsureFolderChain_ ever runs" bug):
+    // the feature folder (always exactly repo/featureDir, needed for the
+    // feature's own _index) and the write folder (where the new file itself
+    // lands, possibly deeper if folderSegs is non-empty) must come from the
+    // SAME chain-creation walk, never two independent ones - a second
+    // independent walk that (re-)creates repo/featureDir would silently fork
+    // a duplicate Drive tree, since folder.createFolder() has no unique-name
+    // enforcement.
+    var featureFolder, writeFolder;
+    if (target.existingFile || target.missingFolderNames.length === 0) {
+      // The full repo/featureDir/...folderSegs chain already exists -
+      // dhFeatureFolder_'s walk is read-only here, so a second lookup is
+      // safe (nothing gets created, nothing can duplicate).
+      featureFolder = dhFeatureFolder_(norm.repo, norm.featureDir);
+      writeFolder = target.parentFolder; // unused when target.existingFile
+    } else {
+      var totalNames = 2 + folderSegs.length;
+      var featureIdx = DH_INGEST.featureFolderIndexInMissing(
+        target.missingFolderNames.length,
+        totalNames
+      );
+      var folder = target.parentFolder;
+      for (var fi = 0; fi < target.missingFolderNames.length; fi++) {
+        folder = folder.createFolder(target.missingFolderNames[fi]);
+        if (fi === featureIdx) featureFolder = folder;
+      }
+      if (featureIdx === -1) featureFolder = dhFeatureFolder_(norm.repo, norm.featureDir);
+      writeFolder = folder;
+    }
     var indexSheet = dhIndexSheetEnsure_(featureFolder);
     var indexRowsArr = indexSheet.getDataRange().getValues().slice(1);
     var plan;
@@ -413,7 +443,6 @@ function publishDesignDoc(input) {
       // url, and revision history.
       target.aclTarget.setContent(contentString);
     } else {
-      var writeFolder = dhEnsureFolderChain_(target.parentFolder, target.missingFolderNames);
       var newFile = writeFolder.createFile(norm.fileName, contentString, mimeType);
       var companion2 = dhCompanionSheetEnsure_(writeFolder, norm.fileName);
       var ctx2 = Object.assign({}, norm, {

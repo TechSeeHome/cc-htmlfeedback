@@ -270,11 +270,34 @@ var DH_INGEST = (function () {
     };
   }
 
+  // dhResolveWriteTarget_'s missingFolderNames is a suffix of the full
+  // [repo, featureDir, ...folderSegments] name chain (in creation order),
+  // starting wherever Drive's walk first found something missing. The
+  // feature folder is always exactly the 2nd entry in that full chain
+  // (index 1 - after repo, before any folderSegments). This function tells
+  // the caller whether the feature folder still needs to be created as
+  // part of THIS SAME chain-creation pass, and if so, at which index
+  // within missingFolderNames - so the caller can capture that exact
+  // folder object as it's created, rather than re-deriving it with an
+  // independent walk that could create a duplicate (see bridge.js's
+  // publishDesignDoc for why a duplicate walk is unsafe here).
+  // totalNames = 2 (repo, featureDir) + folderSegments.length.
+  // Returns -1 if the feature folder already exists (dhResolveWriteTarget_'s
+  // walk got past index 1 before finding anything missing) - the caller
+  // should look it up directly in that case. Otherwise returns the 0-based
+  // index into missingFolderNames whose created folder IS the feature folder.
+  function featureFolderIndexInMissing(missingFolderNamesLength, totalNames) {
+    var startDepth = totalNames - missingFolderNamesLength;
+    if (startDepth >= 2) return -1;
+    return 1 - startDepth;
+  }
+
   return {
     base64DecodedByteLength: base64DecodedByteLength,
     validatePublishInput: validatePublishInput,
     planPublish: planPublish,
     planCreateLink: planCreateLink,
+    featureFolderIndexInMissing: featureFolderIndexInMissing,
   };
 })();
 if (typeof module !== 'undefined') module.exports = DH_INGEST;

@@ -154,20 +154,6 @@ function dhIndexRows_(featureFolder) {
   });
 }
 
-// Creates each missing folder in `missingFolderNames`, in order, under
-// `parentFolder`. Returns the deepest (final) folder - the one the doc
-// itself, or its remaining path-in-repo subfolders, get created under. A
-// no-op (returns parentFolder unchanged) when missingFolderNames is empty -
-// the common case where dhResolveWriteTarget_ found the whole chain already
-// exists and only the file itself is new.
-function dhEnsureFolderChain_(parentFolder, missingFolderNames) {
-  var folder = parentFolder;
-  for (var i = 0; i < missingFolderNames.length; i++) {
-    folder = folder.createFolder(missingFolderNames[i]);
-  }
-  return folder;
-}
-
 // repo/featureDir -> the feature's own folder, by name from root - the same
 // two-level walk dhResolveDoc_ does internally, factored out because
 // publishDesignDoc (bridge.js) needs it independently of resolving any

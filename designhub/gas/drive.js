@@ -23,6 +23,54 @@ function dhResolveDoc_(path) {
   return { file: files.next(), featureFolder: featureFolder, parsed: p };
 }
 
+// Read-side ACL check (Knowledge Portal design, "Users and permissions",
+// Slice B0): before doGet() returns a resolved doc's bytes, verify the
+// REQUESTING user's real Drive permission on the underlying file. Drive
+// ACLs are the single permission authority (the standing ADR) - the
+// decision itself lives in the pure DH_ACCESS.decideRead (gas/lib/access.js);
+// this function only fetches what Drive says and hands it over.
+//
+// Cached per user+file via CacheService.getUserCache() (scoped to this
+// script + the CURRENT signed-in user, which is exactly the "per user+file"
+// scope the design doc calls for) with a 600-second (10-minute) TTL - so a
+// Drive un-share takes effect within minutes, not instantly (documented,
+// accepted limitation - see the design doc's read-side bullet). CacheService
+// only stores strings, so the boolean is stored as '1'/'0' and parsed back.
+//
+// Deliberately does NOT catch anything: if Drive.Permissions.list or
+// file.getOwner() itself throws (e.g. a transient API error), this
+// propagates up and doGet() fails closed (GAS's generic error page, no doc
+// served) rather than risk a bug in this check ever serving unauthorized
+// bytes. Only the AUDIT-LOG call in doGet() (dhLogReadDenial_, below) is
+// wrapped in a swallowing try/catch - logging failure must never turn into
+// an access bypass, but a failure in the check itself must never turn into
+// an access GRANT either.
+function dhCanRead_(file, actorEmail) {
+  var cache = CacheService.getUserCache();
+  var key = 'kp-read:' + file.getId();
+  var cached = cache.get(key);
+  if (cached !== null) return cached === '1';
+
+  var ownerEmail = null;
+  try {
+    var owner = file.getOwner();
+    if (owner) ownerEmail = owner.getEmail();
+  } catch (e) {
+    // Shared Drive files are drive-owned, not user-owned, and getOwner() can
+    // throw or return null here - same guard dhDriveDescriptor_ already uses
+    // for the identical case. Treated as "no owner match possible", not a
+    // crash - decideRead handles a null/empty owner safely.
+  }
+  var response = Drive.Permissions.list(file.getId(), {
+    supportsAllDrives: true,
+    fields: 'permissions(emailAddress,type,domain,role)',
+  });
+  var permissions = (response && response.permissions) || [];
+  var decision = DH_ACCESS.decideRead(permissions, actorEmail, ownerEmail);
+  cache.put(key, decision.allow ? '1' : '0', 600);
+  return decision.allow;
+}
+
 function dhIndexRows_(featureFolder) {
   var it = featureFolder.getFilesByName('_index');
   if (!it.hasNext())
@@ -44,6 +92,26 @@ function dhCommentsFor_(path) {
   if (!row || !row.commentSheetId)
     throw new Error('DesignHub: no index row / commentSheetId for ' + path);
   return { ss: SpreadsheetApp.openById(row.commentSheetId), indexRow: row, fileId: fileId };
+}
+
+// Denial audit log (Knowledge Portal design, read-side ACL - Slice B0): same
+// append-only meta-tab pattern setStatus (bridge.js) already uses on a doc's
+// companion comments Sheet (D17(c)), so a denial is visible in the same
+// place other per-doc activity is recorded. Every currently-resolvable doc
+// has a companion Sheet - the /publish-design pipeline's Step 4 ensures one
+// unconditionally on every publish - so dhCommentsFor_ should normally
+// succeed here too. If it (or the appendRow call) throws for any reason
+// (companion Sheet deleted after publish, _index row missing/stale, Sheets
+// transiently unavailable), this propagates up uncaught - the CALLER
+// (doGet(), Task 4) is what wraps this call in a swallowing try/catch, so a
+// logging failure degrades to "this one denial wasn't recorded," never to
+// "the doc got served anyway."
+function dhLogReadDenial_(docPath, actorEmail) {
+  var c = dhCommentsFor_(docPath);
+  var now = new Date().toISOString();
+  c.ss
+    .getSheetByName('meta')
+    .appendRow(['', '', '', '', '', '', actorEmail, now, 'access denied: ' + docPath]);
 }
 
 function dhPortalRows_() {

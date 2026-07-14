@@ -137,7 +137,12 @@ function refreshKnowledge() {
 // to board states, replies excluded (v1 widget shows top-level tickets only;
 // threads live in the Sheet and the agent docs).
 function listComments(docPath) {
-  var c = dhCommentsFor_(docPath);
+  // ACL-gated (P1 fix, review of PR #11): dhCommentsFor_ now denies this
+  // resolution for a docPath the ACTING user has no Drive read access to,
+  // same as doGet()'s own read-side gate (dhCanRead_, Slice B0) - closing the
+  // bypass where any signed-in domain user could read stored ticket data for
+  // a doc they cannot open.
+  var c = dhCommentsFor_(docPath, Session.getActiveUser().getEmail());
   var values = c.ss.getSheetByName('tickets').getDataRange().getValues().slice(1);
   // 'deleted' rows stay in the Sheet (setStatus's audit-tab log preserves who/when -
   // D17(c)) but never reach the widget for anyone - this is how the widget's
@@ -172,7 +177,9 @@ function listComments(docPath) {
 
 function submitComment(docPath, ticket) {
   ticket = ticket || {};
-  var c = dhCommentsFor_(docPath);
+  // ACL-gated (P1 fix, review of PR #11) - see listComments' comment above.
+  var actorEmail = Session.getActiveUser().getEmail();
+  var c = dhCommentsFor_(docPath, actorEmail);
   var now = new Date().toISOString();
   var t = {
     id: Utilities.getUuid(),
@@ -183,7 +190,7 @@ function submitComment(docPath, ticket) {
     context: DH_SCHEMA.sanitizeField(ticket.context),
     section: DH_SCHEMA.sanitizeField(ticket.section),
     note: DH_SCHEMA.sanitizeField(ticket.note),
-    authorEmail: Session.getActiveUser().getEmail(), // client-supplied identity ignored (D17)
+    authorEmail: actorEmail, // client-supplied identity ignored (D17)
     authorName: '',
     source: 'web',
     docVersion: String(c.indexRow.updatedAt || ''),
@@ -197,7 +204,9 @@ function submitComment(docPath, ticket) {
 }
 
 function reply(docPath, parentId, note) {
-  var c = dhCommentsFor_(docPath);
+  // ACL-gated (P1 fix, review of PR #11) - see listComments' comment above.
+  var actorEmail = Session.getActiveUser().getEmail();
+  var c = dhCommentsFor_(docPath, actorEmail);
   var now = new Date().toISOString();
   var t = {
     id: Utilities.getUuid(),
@@ -208,7 +217,7 @@ function reply(docPath, parentId, note) {
     context: '',
     section: '',
     note: DH_SCHEMA.sanitizeField(note),
-    authorEmail: Session.getActiveUser().getEmail(),
+    authorEmail: actorEmail,
     authorName: '',
     source: 'web',
     docVersion: '',
@@ -223,9 +232,10 @@ function reply(docPath, parentId, note) {
 
 function setStatus(docPath, id, status) {
   if (DH_SCHEMA.VALID_STATUSES.indexOf(status) === -1) throw new Error('invalid status: ' + status);
-  var c = dhCommentsFor_(docPath);
-  var sheet = c.ss.getSheetByName('tickets');
+  // ACL-gated (P1 fix, review of PR #11) - see listComments' comment above.
   var email = Session.getActiveUser().getEmail();
+  var c = dhCommentsFor_(docPath, email);
+  var sheet = c.ss.getSheetByName('tickets');
   var now = new Date().toISOString();
   var ID = DH_SCHEMA.TICKET_COLS.indexOf('id');
   var STATUS = DH_SCHEMA.TICKET_COLS.indexOf('status');
@@ -428,7 +438,12 @@ function publishDesignDoc(input) {
         url: url,
         now: now,
       });
-      plan = DH_INGEST.planPublish(ctx, matched, count);
+      // isExistingFile is always `true` here (this is the `target.existingFile`
+      // branch) - passed explicitly rather than inferred from `matched`'s
+      // length, so a stale/missing _index row (matched === []) still goes
+      // through the needs_confirm/DOC_HAS_COMMENTS gates instead of silently
+      // falling through to planPublish's create path (P2 fix, review of PR #11).
+      plan = DH_INGEST.planPublish(ctx, true, matched, count);
       if (plan.action === 'needs_confirm') {
         return {
           ok: false,
@@ -453,7 +468,7 @@ function publishDesignDoc(input) {
         url: url,
         now: now,
       });
-      plan = DH_INGEST.planPublish(ctx2, [], 0);
+      plan = DH_INGEST.planPublish(ctx2, false, [], 0);
     }
 
     // Upsert into the feature's own _index (D19 direct-upsert, same shape as
@@ -517,6 +532,31 @@ function createKnowledgeLink(input) {
     };
   }
 
+  // Write-side ACL probe (P2 fix, CodeRabbit/Codex review of PR #11): before
+  // this fix, the only gate on this write path was `actor` being non-empty -
+  // any identifiable domain user could write manual links to the deployer-
+  // owned `_knowledge-index` regardless of their actual Drive write
+  // permission on it. Same pre-lock-probe + post-lock-recheck pattern
+  // publishDesignDoc uses above (commit 413d3c4's post-lock ACL recheck
+  // fix): resolve the target - the existing `_knowledge-index` Sheet, or the
+  // DesignHub root folder it would be created under - and check the ACTING
+  // user's real Drive permission on it BEFORE taking the lock or writing
+  // anything. A denial fails fast and cheap; nothing is created.
+  var target = dhKnowledgeWriteTarget_();
+  var decision = DH_ACCESS.decideWrite(dhFilePermissions_(target), actor, dhOwnerEmail_(target));
+  if (!decision.allow) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_TARGET',
+        message:
+          'You do not have write access to "' +
+          target.getName() +
+          '" in Drive - ask an editor of that folder to grant you access, then try again.',
+      },
+    };
+  }
+
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
@@ -530,6 +570,30 @@ function createKnowledgeLink(input) {
     };
   }
   try {
+    // Re-resolve fresh now that the lock is held - closes the same TOCTOU
+    // window publishDesignDoc's post-lock recheck closes (commit 413d3c4):
+    // a concurrent write between the pre-lock probe and lock acquisition
+    // (e.g. someone creating `_knowledge-index` for the first time) could
+    // otherwise change what's actually being written to without the ACL
+    // decision ever being re-verified against it.
+    target = dhKnowledgeWriteTarget_();
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(target),
+      actor,
+      dhOwnerEmail_(target)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            target.getName() +
+            '" in Drive - ask an editor of that folder to grant you access, then try again.',
+        },
+      };
+    }
     var ss = dhKnowledgeSheetEnsure_();
     var sheet = ss.getSheetByName('links');
     var existing = sheet

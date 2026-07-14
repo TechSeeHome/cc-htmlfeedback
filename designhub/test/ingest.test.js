@@ -127,6 +127,56 @@ test('validatePublishInput: content decoding to exactly 10MB passes (boundary is
   assert.equal(r.ok, true);
 });
 
+// ---- validatePublishInput: malformed base64 (P2 fix, review of PR #11) ----
+// Before this fix, contentBase64 was only whitespace-stripped for the BYTE-
+// LENGTH measurement; the raw, unvalidated string still flowed through to
+// normalized.contentBase64 and on into bridge.js's real
+// Utilities.base64Decode() call, which throws GAS's generic "Could not
+// decode string" runtime error for malformed input instead of a clean
+// {ok:false, error:{code:'INVALID_INPUT', ...}}.
+
+test('validatePublishInput: base64 containing invalid characters is INVALID_INPUT on contentBase64', () => {
+  const r = validatePublishInput(goodInput({ contentBase64: 'not_valid!!base64@@' }));
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'contentBase64');
+  assert.match(r.error.message, /not valid base64/);
+});
+
+test('validatePublishInput: base64 whose length is not a multiple of 4 is INVALID_INPUT', () => {
+  const r = validatePublishInput(goodInput({ contentBase64: 'abcde' })); // 5 chars, no valid padding
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'contentBase64');
+});
+
+test('validatePublishInput: "=" padding in the middle of the string (not just the end) is INVALID_INPUT', () => {
+  // Length 8 (a multiple of 4) so this exercises the REGEX'S mid-string-
+  // padding rejection specifically, independent of the length%4 check.
+  const r = validatePublishInput(goodInput({ contentBase64: 'ab==cd==' }));
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'contentBase64');
+});
+
+test('validatePublishInput: well-formed base64 with internal whitespace is normalized (stripped) into normalized.contentBase64', () => {
+  const clean = Buffer.from('# Hello').toString('base64');
+  const withWhitespace = clean.slice(0, 2) + '\n ' + clean.slice(2);
+  const r = validatePublishInput(goodInput({ contentBase64: withWhitespace }));
+  assert.equal(r.ok, true);
+  assert.equal(
+    r.normalized.contentBase64,
+    clean,
+    'normalized.contentBase64 must be the whitespace-stripped string, not the raw input'
+  );
+});
+
+test('validatePublishInput: valid base64 with correct padding passes unchanged (aside from whitespace-stripping)', () => {
+  const r = validatePublishInput(goodInput({ contentBase64: 'YQ==' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.normalized.contentBase64, 'YQ==');
+});
+
 // ---- validatePublishInput: path segment rules, delegated to DH_PATHS ----
 
 test('validatePublishInput: a "." or ".." segment in pathInRepo is INVALID_INPUT (delegates to parseDocPath)', () => {
@@ -196,8 +246,8 @@ function publishCtx(over) {
   );
 }
 
-test('planPublish: no existing row at this address -> create, with a full INDEX_COLS-shaped row', () => {
-  const r = planPublish(publishCtx(), [], 0);
+test('planPublish: isExistingFile false -> create, with a full INDEX_COLS-shaped row', () => {
+  const r = planPublish(publishCtx(), false, [], 0);
   assert.equal(r.action, 'create');
   assert.deepEqual(Object.keys(r.row).sort(), [...INDEX_COLS].sort());
   assert.equal(r.row.status, 'active');
@@ -206,13 +256,13 @@ test('planPublish: no existing row at this address -> create, with a full INDEX_
 });
 
 test('planPublish: create row round-trips through DH_SCHEMA byte-identically to a Node-CLI-published row', () => {
-  const r = planPublish(publishCtx(), [], 0);
+  const r = planPublish(publishCtx(), false, [], 0);
   const arr = indexToRow(r.row);
   assert.equal(arr.length, INDEX_COLS.length);
   assert.deepEqual(rowToIndex(arr), r.row);
 });
 
-test('planPublish: a collision with 0 comments and confirmUpdate:false -> needs_confirm', () => {
+test('planPublish: isExistingFile true, 0 comments, confirmUpdate:false -> needs_confirm', () => {
   const existingRow = rowToIndex(
     indexToRow({
       id: 'uuid-1',
@@ -231,11 +281,16 @@ test('planPublish: a collision with 0 comments and confirmUpdate:false -> needs_
       updatedAt: '2026-01-01T00:00:00.000Z',
     })
   );
-  const r = planPublish(publishCtx({ confirmUpdate: false, title: 'New title' }), [existingRow], 0);
+  const r = planPublish(
+    publishCtx({ confirmUpdate: false, title: 'New title' }),
+    true,
+    [existingRow],
+    0
+  );
   assert.deepEqual(r, { action: 'needs_confirm' });
 });
 
-test('planPublish: a collision with 0 comments and confirmUpdate:true -> update, patching only title/url/jira/commentSheetId/updatedAt', () => {
+test('planPublish: isExistingFile true, 0 comments, confirmUpdate:true -> update, patching only title/url/jira/commentSheetId/updatedAt', () => {
   const existingRow = rowToIndex(
     indexToRow({
       id: 'uuid-1',
@@ -256,6 +311,7 @@ test('planPublish: a collision with 0 comments and confirmUpdate:true -> update,
   );
   const r = planPublish(
     publishCtx({ confirmUpdate: true, title: 'New title', jira: 'PROJ-9' }),
+    true,
     [existingRow],
     0
   );
@@ -271,7 +327,7 @@ test('planPublish: a collision with 0 comments and confirmUpdate:true -> update,
   assert.equal(r.row.publishedAt, '2026-01-01T00:00:00.000Z');
 });
 
-test('planPublish: a collision with comments (any count > 0) -> rejected/DOC_HAS_COMMENTS, regardless of confirmUpdate', () => {
+test('planPublish: isExistingFile true, a collision with comments (any count > 0) -> rejected/DOC_HAS_COMMENTS, regardless of confirmUpdate', () => {
   const existingRow = rowToIndex(
     indexToRow({
       id: 'uuid-1',
@@ -290,7 +346,7 @@ test('planPublish: a collision with comments (any count > 0) -> rejected/DOC_HAS
       updatedAt: '2026-01-01T00:00:00.000Z',
     })
   );
-  const r = planPublish(publishCtx({ confirmUpdate: true }), [existingRow], 3);
+  const r = planPublish(publishCtx({ confirmUpdate: true }), true, [existingRow], 3);
   assert.equal(r.action, 'rejected');
   assert.equal(r.error.code, 'DOC_HAS_COMMENTS');
   // Required verbatim dialog copy (design doc, "Upload design doc" > Outcomes):
@@ -300,9 +356,52 @@ test('planPublish: a collision with comments (any count > 0) -> rejected/DOC_HAS
   );
 });
 
-test('planPublish: existingIndexRows defaults to [] and companionCommentCount defaults to 0 when omitted', () => {
+test('planPublish: isExistingFile omitted (falsy) defaults to create even when existingIndexRows/companionCommentCount are also omitted', () => {
   const r = planPublish(publishCtx());
   assert.equal(r.action, 'create');
+});
+
+// ---- planPublish: P2 fix (CodeRabbit/Codex review of PR #11) - silent
+// overwrite when isExistingFile is true but existingIndexRows is EMPTY (a
+// missing/stale _index row for a file that genuinely already exists on
+// Drive). Before this fix, planPublish branched on existingIndexRows.length
+// instead of the caller's own isExistingFile signal, so this exact shape
+// silently fell through to the 'create' action and bridge.js's
+// publishDesignDoc overwrote the existing file via setContent with NO
+// confirmation and NO comment-count check at all.
+
+test('planPublish: isExistingFile true + EMPTY existingIndexRows + confirmUpdate:false -> still needs_confirm (not create)', () => {
+  const r = planPublish(publishCtx({ confirmUpdate: false }), true, [], 0);
+  assert.deepEqual(
+    r,
+    { action: 'needs_confirm' },
+    'a real Drive file with a lost/stale _index row must still require confirmation, never silently create/overwrite'
+  );
+});
+
+test('planPublish: isExistingFile true + EMPTY existingIndexRows + comments present -> still rejected/DOC_HAS_COMMENTS (not create)', () => {
+  const r = planPublish(publishCtx({ confirmUpdate: true }), true, [], 3);
+  assert.equal(r.action, 'rejected');
+  assert.equal(r.error.code, 'DOC_HAS_COMMENTS');
+});
+
+test('planPublish: isExistingFile true + EMPTY existingIndexRows + confirmUpdate:true -> update with a full, non-corrupted INDEX_COLS row', () => {
+  const r = planPublish(publishCtx({ confirmUpdate: true }), true, [], 0);
+  assert.equal(r.action, 'update');
+  // No field is left undefined/dropped just because there was no prior row
+  // to Object.assign onto - every INDEX_COLS key is present.
+  assert.deepEqual(Object.keys(r.row).sort(), [...INDEX_COLS].sort());
+  assert.equal(r.row.id, publishCtx().id);
+  assert.equal(r.row.driveFileId, publishCtx().driveFileId);
+  assert.equal(r.row.commentSheetId, publishCtx().commentSheetId);
+  assert.equal(r.row.owner, publishCtx().owner);
+  assert.equal(r.row.status, 'active');
+  assert.equal(r.row.tags, '');
+  assert.equal(r.row.publishedAt, publishCtx().now);
+  assert.equal(r.row.updatedAt, publishCtx().now);
+  // Round-trips cleanly through DH_SCHEMA just like the create path does.
+  const arr = indexToRow(r.row);
+  assert.deepEqual(rowToIndex(arr), r.row);
 });
 
 // ---- planCreateLink ----

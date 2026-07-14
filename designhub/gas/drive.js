@@ -109,36 +109,29 @@ function dhFilePermissions_(driveItem) {
 // accepted limitation - see the design doc's read-side bullet). CacheService
 // only stores strings, so the boolean is stored as '1'/'0' and parsed back.
 //
-// Deliberately does NOT catch anything: if Drive.Permissions.list or
-// file.getOwner() itself throws (e.g. a transient API error), this
+// Deliberately does NOT catch anything itself: if Drive.Permissions.list
+// (via dhFilePermissions_) throws (e.g. a transient API error), this
 // propagates up and doGet() fails closed (GAS's generic error page, no doc
 // served) rather than risk a bug in this check ever serving unauthorized
 // bytes. Only the AUDIT-LOG call in doGet() (dhLogReadDenial_, below) is
 // wrapped in a swallowing try/catch - logging failure must never turn into
 // an access bypass, but a failure in the check itself must never turn into
-// an access GRANT either.
+// an access GRANT either. (dhOwnerEmail_ still swallows ITS OWN lookup
+// failure internally - same "no owner match possible, not a crash" guard it
+// always had - so that part of the behavior is unchanged by this refactor.)
+//
+// Nitpick fix (review of PR #11): this used to re-implement the owner lookup
+// and the Drive.Permissions.list call inline, duplicating exactly what
+// dhOwnerEmail_/dhFilePermissions_ (Slice B1) already encapsulate. Delegating
+// to them keeps this one call site in sync with any future change to either
+// helper.
 function dhCanRead_(file, actorEmail) {
   var cache = CacheService.getUserCache();
   var key = 'kp-read:' + file.getId();
   var cached = cache.get(key);
   if (cached !== null) return cached === '1';
 
-  var ownerEmail = null;
-  try {
-    var owner = file.getOwner();
-    if (owner) ownerEmail = owner.getEmail();
-  } catch (e) {
-    // Shared Drive files are drive-owned, not user-owned, and getOwner() can
-    // throw or return null here - same guard dhDriveDescriptor_ already uses
-    // for the identical case. Treated as "no owner match possible", not a
-    // crash - decideRead handles a null/empty owner safely.
-  }
-  var response = Drive.Permissions.list(file.getId(), {
-    supportsAllDrives: true,
-    fields: 'permissions(emailAddress,type,domain,role)',
-  });
-  var permissions = (response && response.permissions) || [];
-  var decision = DH_ACCESS.decideRead(permissions, actorEmail, ownerEmail);
+  var decision = DH_ACCESS.decideRead(dhFilePermissions_(file), actorEmail, dhOwnerEmail_(file));
   cache.put(key, decision.allow ? '1' : '0', 600);
   return decision.allow;
 }
@@ -236,9 +229,47 @@ function dhTicketCountFor_(ticketsSheet) {
   }).length;
 }
 
-// path -> the doc's companion tickets spreadsheet (+ file id for audit rows)
-function dhCommentsFor_(path) {
+// path -> the doc's companion tickets spreadsheet (+ file id for audit rows).
+//
+// actorEmail (P1 security fix, review of PR #11): when provided, gates the
+// resolution behind the SAME read-ACL check doGet() already applies to
+// VIEWING a doc (dhCanRead_, Slice B0). Before this fix, listComments/
+// submitComment/reply/setStatus (bridge.js) all called this function with no
+// ACL check at all - any signed-in domain user who knew or guessed a
+// restricted docPath could read stored ticket quotes/notes and mutate the
+// ticket sheet for a doc they had no Drive access to, defeating B0's read-ACL
+// entirely for comment data. Centralized HERE (the single place all four RPCs
+// already resolve through) rather than duplicated at each of the 4 call
+// sites, so any future caller inherits the same gate automatically.
+//
+// actorEmail is deliberately OPTIONAL, not required: dhLogReadDenial_ (below)
+// is ALSO a caller of this function, and it runs exactly when the actor's
+// read access has already been denied by doGet() - gating it here too would
+// make the denial-audit-log call throw the very denial it's trying to
+// record, silently breaking every denial's audit trail. dhLogReadDenial_
+// intentionally omits actorEmail (calls dhCommentsFor_(docPath) with no 2nd
+// argument at all) to skip this gate; that is not a new bypass, since it
+// only appends one audit row and never returns ticket data to the denied
+// actor.
+//
+// "Optional" means the argument may be OMITTED (actorEmail === undefined) -
+// it does NOT mean an explicitly-passed falsy value should be treated the
+// same way (P1 fix, review of PR #12). Session.getActiveUser().getEmail()
+// can legitimately return '' in domain-restricted deployments where the
+// caller's identity isn't exposed to the script, and a bare
+// `actorEmail && !dhCanRead_(...)` truthy check let that explicit '' fall
+// through the exact same branch as the omitted-argument case - silently
+// bypassing dhCanRead_ for an unidentified caller, the same bug class the
+// P1-of-PR#11 fix above was meant to close, just triggered a different way.
+// The guard below therefore checks `actorEmail !== undefined` FIRST: only a
+// truly omitted argument (dhLogReadDenial_'s call) may skip the gate; an
+// explicitly-passed '' (or any other falsy value) must be denied, never
+// bypassed.
+function dhCommentsFor_(path, actorEmail) {
   var r = dhResolveDoc_(path);
+  if (actorEmail !== undefined && (!actorEmail || !dhCanRead_(r.file, actorEmail))) {
+    throw new Error('DesignHub: access denied for ' + path);
+  }
   var fileId = r.file.getId();
   var row = dhIndexRows_(r.featureFolder).filter(function (o) {
     return o.driveFileId === fileId;
@@ -373,6 +404,23 @@ function dhKnowledgeSheet_() {
   var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
   var it = root.getFilesByName('_knowledge-index');
   return it.hasNext() ? SpreadsheetApp.openById(it.next().getId()) : null;
+}
+
+// Write-side ACL probe target resolution for createKnowledgeLink (bridge.js),
+// same spirit as dhResolveWriteTarget_ above (P2 security fix, review of PR
+// #11): "the existing file when it's already there, the nearest existing
+// ancestor when it isn't" - applied to this single root-level target instead
+// of a full folder chain. `_knowledge-index` is a lone Sheet at the DesignHub
+// root, so there is no chain to walk: either the Sheet already exists (use
+// it, as a File - DriveApp.getFileById, so dhOwnerEmail_/dhFilePermissions_'s
+// "works identically for a File or a Folder" contract holds; SpreadsheetApp's
+// own Spreadsheet class exposes no getOwner()), or it doesn't yet (fall back
+// to the root folder it would be created under, dhKnowledgeSheetEnsure_'s own
+// creation parent).
+function dhKnowledgeWriteTarget_() {
+  var existing = dhKnowledgeSheet_();
+  if (existing) return DriveApp.getFileById(existing.getId());
+  return DriveApp.getFolderById(DH_CONFIG.rootFolderId);
 }
 
 function dhKnowledgeRows_() {

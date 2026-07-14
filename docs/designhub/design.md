@@ -45,6 +45,8 @@
 | D17 | Doc scripts vs the bridge | Published HTML runs its own scripts in the same HtmlService page as the widget, so doc code **can call the privileged `google.script.run` bridge**. **V1 contains rather than isolates**: (a) the bridge surface is comment-Sheet-rows only and must never grow broader capabilities; (b) every mutating call stamps `authorEmail` server-side from `Session.getActiveUser()` - client-supplied identity is ignored, so a doc script can only write rows attributed to the current viewer; (c) status changes are appended to the publish/audit history, making forged activity detectable and reversible; (d) v1 publishers are trusted domain developers (D11). **True isolation - doc content in a sandboxed iframe (`sandbox` without `allow-same-origin`), widget talking to it via `postMessage` - is a stated precondition for accepting content from beyond trusted repos**, and for the serving-layer graduation | A sandboxed content frame breaks the widget's direct selection/anchoring model - too costly for v1. Capping the bridge's blast radius + server-side attribution + audit keeps the worst case at "attributable comment noise from a doc a trusted colleague published", which is acceptable while publishing stays inside the domain |
 | D18 | Storage root & v1 access grants | **Shared Drive** as the DesignHub root (decided 2026-07-05). V1 access = **Shared Drive membership, not per-Sheet grants**: publishers are Content managers, each agent identity (first: the agent account recorded in `plans/environment.local.md`, local-only) is added once as Contributor, the serving account as Contributor too. The publish skill makes **no `permissions.create` calls**. D13's `designhub-publishers@`/`designhub-agents@` groups are **deferred**: they become the membership *targets* (one group added to the drive instead of N users) only when identity churn justifies admin-managed groups - the authorship model of D13 (publish as yourself, agents write as themselves) is unchanged. Whole-domain *read* (D11) on a Shared Drive has different sharing semantics than My Drive - verified as part of the publish-surface POC | Org-owned root survives offboarding and personal-quota entanglement; drive-level membership gives the join-once grant the groups were invented for, with zero Workspace-admin work for v1; fewer moving parts in the publish flow |
 | D19 | Rollup refresh mechanism | The publish skill **upserts the `_portal-index` row directly via Sheets REST** in the same flow as the feature-shard write (new keys via the atomic `values:append` - concurrent publishes of distinct docs cannot clobber each other); the periodic Apps Script trigger runs the **reconciler**: a full rebuild from `_index` shards implemented as pure JS (`node --test`-able per D5), which converges after any missed write, same-key race duplicate, or outright rollup corruption. **No skill→web-app call exists at all.** Reconciler interval: hourly to start, tune with usage | Validated in POC-5 against the real Shared Drive: idempotent upserts, parallel-publish safety, and clear-then-rebuild convergence all proven; the skill already holds Sheets creds and the exact row, while CLI→GAS-web-app auth is a project of its own - eliminating the call removes the whole problem; rebuild-from-shards keeps the rollup honest as a disposable cache (§4) |
+| D20 | Read-side Drive ACL enforcement (Knowledge Portal Slice B0, 2026-07-13) | `doGet()` now checks the requesting user's real Drive read access to a served doc's underlying file (`DH_ACCESS.decideRead`, `gas/lib/access.js`) before returning its bytes - closing the gap where whole-domain sharing (D11) meant any domain user could read any published doc through the exec URL regardless of the file's own Drive sharing. Decision cached per user+file for 10 minutes via `CacheService` (a Drive un-share takes effect within minutes, not instantly - documented, accepted limitation). Denial renders `DH_RENDER.deniedHtml`, with escalation copy for the one known false-negative case: `type=group` Drive grants can't be resolved without the Admin Directory API, so a group-only grant denies strictly rather than risk a false allow, and the denial page tells a wrongly-denied real member to report it. Fails closed on check errors (no try/catch around the check itself); fails open only on the best-effort denial-audit-log append. | Same "the web app serves as its own account, native Drive ACLs don't reach it" problem D11 already named as future work - this is that work, once the Knowledge Portal's own read surface made it worth doing. A 10-minute cache keeps `doGet` fast without a Permissions.list call on every request; fail-closed-on-error keeps a bug in the check from ever turning into a silent bypass. |
+| D21 | Write-side bridge functions + their ACL model (Knowledge Portal Slice B1, 2026-07-13 - hardened 2026-07-14) | Two new bridge functions, `publishDesignDoc(input)` and `createKnowledgeLink(input)`, let the Knowledge Portal's Manage dialog upload `.md`/`.html` docs and register external links directly through the bridge, without the `/publish-design` skill. Both are thin adapters (identity → read the target's real Drive permissions → `DH_ACCESS.decideWrite` → `LockService`-serialized write → audit) over a new pure `gas/lib/ingest.js` (`validatePublishInput`, `planPublish`, `planCreateLink`) - same D5 split as everything else in `lib/`. `decideWrite`'s probe target is "the existing file when updating, the nearest existing ancestor folder when creating" (never the whole Drive tree), checked once before the script lock (fail fast on `FORBIDDEN_TARGET`, no lock contention on a denial) and again immediately after the lock is acquired (closes the TOCTOU window between the two). **Two real gaps were shipped in the initial PR (#11, merged with the bot reviews' findings still unaddressed - the process failure that produced the "never merge without explicit approval + enumerate individual review comments first" rule) and fixed the next day in PR #12**: (a) `listComments`/`submitComment`/`reply`/`setStatus` resolved a doc's companion Sheet via `dhCommentsFor_` with no ACL check at all - D17's "bridge surface is comment-Sheet-rows only" contract held, but D20's new read gate didn't yet cover this second path to the same data; now `dhCommentsFor_` takes an optional `actorEmail` and denies via the same `dhCanRead_` D20 already established, and (b) `createKnowledgeLink` shipped with no `decideWrite` check at all (`publishDesignDoc` had one, its sibling didn't) - now both run the identical pre-lock-probe/post-lock-recheck pattern. | Reuses D20's read-ACL machinery for the write side instead of inventing a second permission model; the probe-before-lock ordering mirrors D17's existing lock-wrapped mutating calls. The two post-merge gaps are recorded here (not silently fixed and forgotten) because D-numbered entries are this doc's audit trail of what the system's ACL model actually covers, and an entry that undersold its own completeness would be worse than no entry. |
 
 ## 3. Architecture (v1)
 
@@ -242,11 +244,20 @@ Note: in v1 `getDoc` is not a bridge function - doc retrieval IS `doGet(?doc=pat
 (a bridge `getDoc` has no consumer until a client-side router exists).
 
 **Knowledge Portal extension (K9/Option B, 2026-07-12):** the Knowledge Portal
-sub-app (`apps/knowledge-portal` in `home-rnd-productivity-v2`) adds two functions
-to this same bridge - `listKnowledge()` (`GET /knowledge`, reads `_knowledge-index`,
-mirrors `listCatalog`) and `refreshKnowledge()` (`POST /knowledge/refresh`, server-side
-Drive re-sync, D17-stamped identity). Same containment model, same file
-(`bridge.js`); see that design doc's K9 for the rationale.
+sub-app (`apps/knowledge-portal` in `home-rnd-productivity-v2`) adds these functions
+to this same bridge, all now live (Slice B0/B1, D20/D21):
+
+| bridge (Apps Script) | future REST | notes |
+|---|---|---|
+| `listKnowledge()` | `GET /knowledge` | reads `_knowledge-index`, mirrors `listCatalog` |
+| `refreshKnowledge()` | `POST /knowledge/refresh` | server-side Drive re-sync, D17-stamped identity |
+| `getIdentity(clientClaim)` | `GET /identity` | returns `{server: Session.getActiveUser().getEmail(), clientClaim}` - the portal footer's "signed in as" |
+| `publishDesignDoc(input)` | `POST /docs` | upload/update a `.md`/`.html` doc; D21's write-ACL model |
+| `createKnowledgeLink(input)` | `POST /knowledge` | register a manual (non-Drive-sourced) link; D21's write-ACL model |
+
+Same containment model, same file (`bridge.js`); see the Knowledge Portal design
+doc's K9 for the read-path rationale and this doc's D20/D21 for the ACL model
+these write functions and the underlying `doGet` read-gate both use.
 
 Every mutating call carries the doc `path`: with one companion Sheet per doc, the
 bridge resolves the target Sheet directly from the path - via the feature `_index`
@@ -323,10 +334,27 @@ truth.
 - Multi-file docs: publish relative assets alongside the doc and rewrite their URLs
   (Drive-hosted or inlined at publish time) - lifts the v1 self-contained-only contract
 
-### Phase 3 - the knowledge portal
-- Register existing Docs/Slides/Sheets into the catalog (bulk importer)
-- Tag/team/epic navigation facets, search
-- Portal home replacing the v1 tree UI
+### Phase 3 - the knowledge portal (in progress, largely shipped 2026-07-13/14)
+Built as `apps/knowledge-portal` in `home-rnd-productivity-v2`, not this repo - its
+committed design doc (`apps/knowledge-portal/docs/design.md`, decisions K1-K9) and
+curation guide (`apps/knowledge-portal/CONTEXT.md`) live there. What actually
+shipped, for anyone reading this repo's own history without that context:
+- Drive-mirror tree (bulk importer, scheduled + on-demand sync) + DesignHub's own
+  `_portal-index` docs, merged into one searchable catalog - **done**.
+- Read-side Drive ACL enforcement on served docs (D20) - **done**.
+- A Manage dialog: upload a `.md`/`.html` doc or register an external link,
+  directly from the portal, ACL-gated (D21) - **done**. This is the "register
+  existing content" need this phase originally named, solved as "curate at the
+  source" (Drive itself is the single source of truth for anything Drive-shaped;
+  the dialog exists only for the two sourceless types - uploaded design docs and
+  external links) rather than a bulk one-time importer.
+- Search, tag-free relevance ordering, stale-link flagging - **done**.
+- Portal home replacing DesignHub's v1 tree UI, richer facets (tags/team/epic),
+  lifecycle/archive states, roles/capability matrices, optimistic concurrency
+  (`expectedVersion`/`CONFLICT_VERSION`), PDF/multi-file upload - **not started**,
+  deliberately deferred as unnecessary at current scale (single-digit technical
+  curators, ~160 catalog rows; `LockService` already serializes the few writes
+  that exist, and operations are naturally idempotent or confirm-guarded).
 
 ## 8. Open questions (comment here!)
 

@@ -236,9 +236,32 @@ function dhTicketCountFor_(ticketsSheet) {
   }).length;
 }
 
-// path -> the doc's companion tickets spreadsheet (+ file id for audit rows)
-function dhCommentsFor_(path) {
+// path -> the doc's companion tickets spreadsheet (+ file id for audit rows).
+//
+// actorEmail (P1 security fix, review of PR #11): when provided, gates the
+// resolution behind the SAME read-ACL check doGet() already applies to
+// VIEWING a doc (dhCanRead_, Slice B0). Before this fix, listComments/
+// submitComment/reply/setStatus (bridge.js) all called this function with no
+// ACL check at all - any signed-in domain user who knew or guessed a
+// restricted docPath could read stored ticket quotes/notes and mutate the
+// ticket sheet for a doc they had no Drive access to, defeating B0's read-ACL
+// entirely for comment data. Centralized HERE (the single place all four RPCs
+// already resolve through) rather than duplicated at each of the 4 call
+// sites, so any future caller inherits the same gate automatically.
+//
+// actorEmail is deliberately OPTIONAL, not required: dhLogReadDenial_ (below)
+// is ALSO a caller of this function, and it runs exactly when the actor's
+// read access has already been denied by doGet() - gating it here too would
+// make the denial-audit-log call throw the very denial it's trying to
+// record, silently breaking every denial's audit trail. dhLogReadDenial_
+// intentionally omits actorEmail to skip this gate; that is not a new
+// bypass, since it only appends one audit row and never returns ticket data
+// to the denied actor.
+function dhCommentsFor_(path, actorEmail) {
   var r = dhResolveDoc_(path);
+  if (actorEmail && !dhCanRead_(r.file, actorEmail)) {
+    throw new Error('DesignHub: access denied for ' + path);
+  }
   var fileId = r.file.getId();
   var row = dhIndexRows_(r.featureFolder).filter(function (o) {
     return o.driveFileId === fileId;

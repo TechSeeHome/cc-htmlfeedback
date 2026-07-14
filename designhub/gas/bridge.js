@@ -137,7 +137,12 @@ function refreshKnowledge() {
 // to board states, replies excluded (v1 widget shows top-level tickets only;
 // threads live in the Sheet and the agent docs).
 function listComments(docPath) {
-  var c = dhCommentsFor_(docPath);
+  // ACL-gated (P1 fix, review of PR #11): dhCommentsFor_ now denies this
+  // resolution for a docPath the ACTING user has no Drive read access to,
+  // same as doGet()'s own read-side gate (dhCanRead_, Slice B0) - closing the
+  // bypass where any signed-in domain user could read stored ticket data for
+  // a doc they cannot open.
+  var c = dhCommentsFor_(docPath, Session.getActiveUser().getEmail());
   var values = c.ss.getSheetByName('tickets').getDataRange().getValues().slice(1);
   // 'deleted' rows stay in the Sheet (setStatus's audit-tab log preserves who/when -
   // D17(c)) but never reach the widget for anyone - this is how the widget's
@@ -172,7 +177,9 @@ function listComments(docPath) {
 
 function submitComment(docPath, ticket) {
   ticket = ticket || {};
-  var c = dhCommentsFor_(docPath);
+  // ACL-gated (P1 fix, review of PR #11) - see listComments' comment above.
+  var actorEmail = Session.getActiveUser().getEmail();
+  var c = dhCommentsFor_(docPath, actorEmail);
   var now = new Date().toISOString();
   var t = {
     id: Utilities.getUuid(),
@@ -183,7 +190,7 @@ function submitComment(docPath, ticket) {
     context: DH_SCHEMA.sanitizeField(ticket.context),
     section: DH_SCHEMA.sanitizeField(ticket.section),
     note: DH_SCHEMA.sanitizeField(ticket.note),
-    authorEmail: Session.getActiveUser().getEmail(), // client-supplied identity ignored (D17)
+    authorEmail: actorEmail, // client-supplied identity ignored (D17)
     authorName: '',
     source: 'web',
     docVersion: String(c.indexRow.updatedAt || ''),
@@ -197,7 +204,9 @@ function submitComment(docPath, ticket) {
 }
 
 function reply(docPath, parentId, note) {
-  var c = dhCommentsFor_(docPath);
+  // ACL-gated (P1 fix, review of PR #11) - see listComments' comment above.
+  var actorEmail = Session.getActiveUser().getEmail();
+  var c = dhCommentsFor_(docPath, actorEmail);
   var now = new Date().toISOString();
   var t = {
     id: Utilities.getUuid(),
@@ -208,7 +217,7 @@ function reply(docPath, parentId, note) {
     context: '',
     section: '',
     note: DH_SCHEMA.sanitizeField(note),
-    authorEmail: Session.getActiveUser().getEmail(),
+    authorEmail: actorEmail,
     authorName: '',
     source: 'web',
     docVersion: '',
@@ -223,9 +232,10 @@ function reply(docPath, parentId, note) {
 
 function setStatus(docPath, id, status) {
   if (DH_SCHEMA.VALID_STATUSES.indexOf(status) === -1) throw new Error('invalid status: ' + status);
-  var c = dhCommentsFor_(docPath);
-  var sheet = c.ss.getSheetByName('tickets');
+  // ACL-gated (P1 fix, review of PR #11) - see listComments' comment above.
   var email = Session.getActiveUser().getEmail();
+  var c = dhCommentsFor_(docPath, email);
+  var sheet = c.ss.getSheetByName('tickets');
   var now = new Date().toISOString();
   var ID = DH_SCHEMA.TICKET_COLS.indexOf('id');
   var STATUS = DH_SCHEMA.TICKET_COLS.indexOf('status');

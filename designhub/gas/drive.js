@@ -398,6 +398,23 @@ function dhKnowledgeSheet_() {
   return it.hasNext() ? SpreadsheetApp.openById(it.next().getId()) : null;
 }
 
+// Write-side ACL probe target resolution for createKnowledgeLink (bridge.js),
+// same spirit as dhResolveWriteTarget_ above (P2 security fix, review of PR
+// #11): "the existing file when it's already there, the nearest existing
+// ancestor when it isn't" - applied to this single root-level target instead
+// of a full folder chain. `_knowledge-index` is a lone Sheet at the DesignHub
+// root, so there is no chain to walk: either the Sheet already exists (use
+// it, as a File - DriveApp.getFileById, so dhOwnerEmail_/dhFilePermissions_'s
+// "works identically for a File or a Folder" contract holds; SpreadsheetApp's
+// own Spreadsheet class exposes no getOwner()), or it doesn't yet (fall back
+// to the root folder it would be created under, dhKnowledgeSheetEnsure_'s own
+// creation parent).
+function dhKnowledgeWriteTarget_() {
+  var existing = dhKnowledgeSheet_();
+  if (existing) return DriveApp.getFileById(existing.getId());
+  return DriveApp.getFolderById(DH_CONFIG.rootFolderId);
+}
+
 function dhKnowledgeRows_() {
   var ss = dhKnowledgeSheet_();
   var sheet = ss && ss.getSheetByName('links');

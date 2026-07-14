@@ -532,6 +532,31 @@ function createKnowledgeLink(input) {
     };
   }
 
+  // Write-side ACL probe (P2 fix, CodeRabbit/Codex review of PR #11): before
+  // this fix, the only gate on this write path was `actor` being non-empty -
+  // any identifiable domain user could write manual links to the deployer-
+  // owned `_knowledge-index` regardless of their actual Drive write
+  // permission on it. Same pre-lock-probe + post-lock-recheck pattern
+  // publishDesignDoc uses above (commit 413d3c4's post-lock ACL recheck
+  // fix): resolve the target - the existing `_knowledge-index` Sheet, or the
+  // DesignHub root folder it would be created under - and check the ACTING
+  // user's real Drive permission on it BEFORE taking the lock or writing
+  // anything. A denial fails fast and cheap; nothing is created.
+  var target = dhKnowledgeWriteTarget_();
+  var decision = DH_ACCESS.decideWrite(dhFilePermissions_(target), actor, dhOwnerEmail_(target));
+  if (!decision.allow) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_TARGET',
+        message:
+          'You do not have write access to "' +
+          target.getName() +
+          '" in Drive - ask an editor of that folder to grant you access, then try again.',
+      },
+    };
+  }
+
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
@@ -545,6 +570,30 @@ function createKnowledgeLink(input) {
     };
   }
   try {
+    // Re-resolve fresh now that the lock is held - closes the same TOCTOU
+    // window publishDesignDoc's post-lock recheck closes (commit 413d3c4):
+    // a concurrent write between the pre-lock probe and lock acquisition
+    // (e.g. someone creating `_knowledge-index` for the first time) could
+    // otherwise change what's actually being written to without the ACL
+    // decision ever being re-verified against it.
+    target = dhKnowledgeWriteTarget_();
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(target),
+      actor,
+      dhOwnerEmail_(target)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            target.getName() +
+            '" in Drive - ask an editor of that folder to grant you access, then try again.',
+        },
+      };
+    }
     var ss = dhKnowledgeSheetEnsure_();
     var sheet = ss.getSheetByName('links');
     var existing = sheet

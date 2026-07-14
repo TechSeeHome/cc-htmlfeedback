@@ -50,8 +50,32 @@ test('dhCommentsFor_ (drive.js) gates its resolution on actorEmail via dhCanRead
   const body = functionBody(driveSrc, 'dhCommentsFor_');
   assert.match(
     body,
+    /if\s*\(\s*actorEmail\s*!==\s*undefined\s*&&\s*\(\s*!actorEmail\s*\|\|\s*!dhCanRead_\(/,
+    'dhCommentsFor_ must deny the resolution when actorEmail is omitted-or-blank-or-unreadable'
+  );
+});
+
+// P1 finding from PR #12's review (chatgpt-codex-connector): the guard above
+// used to be a bare `actorEmail && !dhCanRead_(...)` truthy check, which
+// treats an explicitly-passed blank actorEmail ('' - a value
+// Session.getActiveUser().getEmail() can legitimately return in
+// domain-restricted deployments) identically to the omitted-argument case
+// dhLogReadDenial_ relies on, letting an unidentified caller bypass
+// dhCanRead_ entirely. Only a truly OMITTED argument
+// (actorEmail === undefined) may skip the gate; this pins that the guard
+// distinguishes the two rather than collapsing them back into one truthy
+// check.
+test('dhCommentsFor_ denies a blank/falsy actorEmail rather than bypassing the gate (P1 fix, review of PR #12)', () => {
+  const body = functionBody(driveSrc, 'dhCommentsFor_');
+  assert.doesNotMatch(
+    body,
     /if\s*\(\s*actorEmail\s*&&\s*!dhCanRead_\(/,
-    'dhCommentsFor_ must deny the resolution when actorEmail is supplied and dhCanRead_ returns false'
+    "dhCommentsFor_ must not use a bare `actorEmail && ...` truthy check - an explicitly-passed falsy actorEmail (e.g. '') must be denied, not bypassed alongside the omitted-argument case"
+  );
+  assert.match(
+    body,
+    /actorEmail\s*!==\s*undefined/,
+    "dhCommentsFor_'s guard must explicitly test `actorEmail !== undefined` so only a truly omitted argument (dhLogReadDenial_'s call) skips the ACL gate"
   );
 });
 

@@ -247,12 +247,27 @@ function dhTicketCountFor_(ticketsSheet) {
 // read access has already been denied by doGet() - gating it here too would
 // make the denial-audit-log call throw the very denial it's trying to
 // record, silently breaking every denial's audit trail. dhLogReadDenial_
-// intentionally omits actorEmail to skip this gate; that is not a new
-// bypass, since it only appends one audit row and never returns ticket data
-// to the denied actor.
+// intentionally omits actorEmail (calls dhCommentsFor_(docPath) with no 2nd
+// argument at all) to skip this gate; that is not a new bypass, since it
+// only appends one audit row and never returns ticket data to the denied
+// actor.
+//
+// "Optional" means the argument may be OMITTED (actorEmail === undefined) -
+// it does NOT mean an explicitly-passed falsy value should be treated the
+// same way (P1 fix, review of PR #12). Session.getActiveUser().getEmail()
+// can legitimately return '' in domain-restricted deployments where the
+// caller's identity isn't exposed to the script, and a bare
+// `actorEmail && !dhCanRead_(...)` truthy check let that explicit '' fall
+// through the exact same branch as the omitted-argument case - silently
+// bypassing dhCanRead_ for an unidentified caller, the same bug class the
+// P1-of-PR#11 fix above was meant to close, just triggered a different way.
+// The guard below therefore checks `actorEmail !== undefined` FIRST: only a
+// truly omitted argument (dhLogReadDenial_'s call) may skip the gate; an
+// explicitly-passed '' (or any other falsy value) must be denied, never
+// bypassed.
 function dhCommentsFor_(path, actorEmail) {
   var r = dhResolveDoc_(path);
-  if (actorEmail && !dhCanRead_(r.file, actorEmail)) {
+  if (actorEmail !== undefined && (!actorEmail || !dhCanRead_(r.file, actorEmail))) {
     throw new Error('DesignHub: access denied for ' + path);
   }
   var fileId = r.file.getId();

@@ -17,7 +17,7 @@ var DH_SCHEMA = (function () {
   // never contend on the same rows (K4).
   var KNOWLEDGE_COLS = ['id', 'type', 'title', 'path', 'url', 'driveFileId',
     'owner', 'tags', 'source', 'status', 'modifiedTime', 'syncedAt',
-    'createdAt', 'updatedAt'];
+    'createdAt', 'updatedAt', 'description'];
   var VALID_STATUSES = ['open', 'in-progress', 'resolved', 'declined', 'anchor-lost', 'deleted'];
   var WIDGET_STATUS = { open: 'todo', 'in-progress': 'in-progress',
     resolved: 'done', declined: 'error', 'anchor-lost': 'error' };

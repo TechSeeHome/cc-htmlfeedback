@@ -56,6 +56,31 @@ function doGet(e) {
       .setTitle('DesignHub - not found')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
+  // B0 (Knowledge Portal design, "Users and permissions"): Drive ACLs are
+  // the single permission authority (the standing ADR) - verify the
+  // REQUESTING user's real read access to the resolved file before either
+  // serve branch below touches its bytes. dhCanRead_ caches its answer per
+  // user+file for 10 minutes, so a Drive un-share takes effect within
+  // minutes, not instantly (documented, accepted limitation). This
+  // deliberately does NOT wrap dhCanRead_ itself in a try/catch: if the
+  // check throws, doGet fails closed (GAS's generic error page, no doc
+  // served) rather than risk a bug in the check ever serving unauthorized
+  // bytes.
+  var actorEmail = Session.getActiveUser().getEmail();
+  if (!dhCanRead_(r.file, actorEmail)) {
+    // Denial audit log is best-effort only (D17(c) pattern). If logging
+    // itself throws - e.g. the doc's companion comments Sheet is
+    // transiently unavailable - swallow it and still return the denial
+    // below. Audit-log flakiness must never turn into an access bypass.
+    try {
+      dhLogReadDenial_(p.doc, actorEmail);
+    } catch (logErr) {
+      /* best-effort audit log - see comment above */
+    }
+    return HtmlService.createHtmlOutput(DH_RENDER.deniedHtml(p.doc))
+      .setTitle('DesignHub - access denied')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   var out;
   if (/\.md$/i.test(r.parsed.fileName)) {
     var md = r.file.getBlob().getDataAsString('UTF-8');

@@ -94,15 +94,22 @@ var DH_KNOWLEDGE = (function () {
       modifiedTime: file.modifiedTime || '',
       syncedAt: now,
       createdAt: prev ? prev.createdAt : now,
-      updatedAt: now
+      updatedAt: now,
+      // Sync enhancement (Slice B1): Drive's own file/folder description,
+      // sanitized the same way title/path/owner already are (P2 review's
+      // formula-injection defense - a description is free text a team-drive
+      // editor controls, same threat model as a file name).
+      description: sanitize_(file.description || '')
     };
   }
 
   // Fields that make a row "the same" for updatedAt-bump purposes. tags is
   // deliberately excluded: it is the v2 curation hook (design section 4.2) and
   // is never written by the walk, only preserved (driveFileToRow above) - it
-  // can never be the reason a drive-sync row changed.
-  var DIFF_FIELDS = ['type', 'title', 'path', 'url', 'owner', 'status', 'modifiedTime'];
+  // can never be the reason a drive-sync row changed. description IS
+  // included: a description-only edit in Drive is real, sync-worthy
+  // curation, unlike tags (which the walk never writes at all).
+  var DIFF_FIELDS = ['type', 'title', 'path', 'url', 'owner', 'status', 'modifiedTime', 'description'];
   function rowsDiffer(a, b) {
     return DIFF_FIELDS.some(function (f) { return (a[f] || '') !== (b[f] || ''); });
   }
@@ -224,7 +231,27 @@ var DH_KNOWLEDGE = (function () {
     };
   }
 
+  // Header-migration decision for dhKnowledgeSheetEnsure_ (drive.js), added
+  // alongside the `description` column: a production `links` tab written by
+  // OLDER code has a header row shorter than the CURRENT KNOWLEDGE_COLS -
+  // same production-drift shape as planTabsEnsure's `meta`-tab gap above,
+  // just for a column instead of a whole tab. KNOWLEDGE_COLS only ever
+  // grows by APPENDING a new column at the end (never inserted/reordered),
+  // specifically so an old header row is always a safe, unambiguous PREFIX
+  // of the current one - this function trusts that invariant rather than
+  // re-deriving it, so it only needs a length comparison, not a per-column
+  // diff.
+  function planHeaderEnsure(existingHeaderRow, canonicalCols) {
+    existingHeaderRow = existingHeaderRow || [];
+    canonicalCols = canonicalCols || [];
+    if (existingHeaderRow.length >= canonicalCols.length) {
+      return { needsUpdate: false, header: existingHeaderRow };
+    }
+    return { needsUpdate: true, header: canonicalCols.slice() };
+  }
+
   return { childPath: childPath, mimeToType: mimeToType, planSync: planSync,
-    planRewriteRanges: planRewriteRanges, planTabsEnsure: planTabsEnsure };
+    planRewriteRanges: planRewriteRanges, planTabsEnsure: planTabsEnsure,
+    planHeaderEnsure: planHeaderEnsure };
 })();
 if (typeof module !== 'undefined') module.exports = DH_KNOWLEDGE;

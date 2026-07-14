@@ -131,6 +131,18 @@ test('notFoundHtml renders a branded fallback and escapes the untrusted docPath'
   assert.match(out, /<a href="\?">Back to DesignHub<\/a>/);
 });
 
+test('deniedHtml renders an access-denied page, escapes the untrusted docPath, and carries the required escalation copy', () => {
+  const out = R.deniedHtml('repo/feat/<img src=x>.html');
+  assert.match(out, /Access denied/);
+  assert.doesNotMatch(out, /<img src=x>/);
+  assert.match(out, /&lt;img/);
+  assert.match(
+    out,
+    /If this document opens for you in Google Drive, this denial is an error - report it to the portal team\./
+  );
+  assert.match(out, /<a href="\?">Back to DesignHub<\/a>/);
+});
+
 test('safeHref allowlists http(s) and scheme-less refs, rejects other schemes', () => {
   assert.equal(R.safeHref('https://example.com/x'), 'https://example.com/x');
   assert.equal(R.safeHref('http://example.com/x'), 'http://example.com/x');

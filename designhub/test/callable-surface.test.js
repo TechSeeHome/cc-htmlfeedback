@@ -26,6 +26,9 @@ const ALLOWED_PUBLIC = new Set([
   // Knowledge Portal (K9/Option B) bridge extension - see bridge.js.
   'listKnowledge',
   'refreshKnowledge',
+  // Knowledge Portal ingestion (Slice B1) - see bridge.js.
+  'publishDesignDoc',
+  'createKnowledgeLink',
 ]);
 
 test('exactly the documented functions are google.script.run-reachable (no trailing underscore)', () => {

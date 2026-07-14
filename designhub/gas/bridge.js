@@ -270,3 +270,307 @@ function setStatus(docPath, id, status) {
     lock.releaseLock();
   }
 }
+
+// --- Knowledge Portal ingestion (Slice B1) --------------------------------
+// Two new write paths (Knowledge Portal ingestion design, "Bridge changes
+// (fork repo - Slice B1)"). Each is a thin adapter - identity -> read ->
+// pure decision -> locked write -> audit append - exactly like every bridge
+// function above; all decision logic lives in DH_INGEST/DH_ACCESS
+// (gas/lib/), never here (D5/D17(a)).
+
+// publishDesignDoc(input): input is {fileName, contentBase64, title, repo,
+// feature, pathInRepo, jira?, confirmUpdate?} from the Manage dialog's
+// "Upload design doc" form.
+function publishDesignDoc(input) {
+  var actor = Session.getActiveUser().getEmail();
+  // D17: client-supplied identity is never trusted for WHO is acting - but
+  // an empty actor means Session itself couldn't identify anyone at all.
+  // Reused as INVALID_INPUT rather than growing the design doc's closed
+  // error-code list (INVALID_INPUT/UPLOAD_REJECTED/DUPLICATE_ENTRY/
+  // NEEDS_CONFIRM_UPDATE/DOC_HAS_COMMENTS/FORBIDDEN_TARGET/
+  // RETRYABLE_UNAVAILABLE) with an 8th code for what should be an
+  // unreachable edge case on this DOMAIN-access web app.
+  if (!actor) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'actor',
+        message: 'Could not determine your signed-in identity - reload the page and try again.',
+      },
+    };
+  }
+
+  var validated = DH_INGEST.validatePublishInput(input || {});
+  if (!validated.ok) return { ok: false, error: validated.error };
+  var norm = validated.normalized;
+  var segs = norm.pathInRepo.split('/');
+  var folderSegs = segs.slice(0, -1);
+
+  // Write-side ACL probe (design doc, "Users and permissions"): resolve the
+  // target - the existing file when this will be an update, else the
+  // nearest EXISTING ancestor folder walking up toward the configured
+  // DesignHub root - and check the ACTING user's real Drive permission on
+  // it BEFORE taking the lock or writing anything. A denial fails fast and
+  // cheap; nothing is created.
+  var target = dhResolveWriteTarget_(norm.repo, norm.featureDir, folderSegs, norm.fileName);
+  var decision = DH_ACCESS.decideWrite(
+    dhFilePermissions_(target.aclTarget),
+    actor,
+    dhOwnerEmail_(target.aclTarget)
+  );
+  if (!decision.allow) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_TARGET',
+        message:
+          'You do not have write access to "' +
+          target.aclTarget.getName() +
+          '" in Drive - ask an editor of that folder to grant you access, then try again.',
+      },
+    };
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
+  try {
+    // Re-resolve fresh now that the lock is held. The ACL probe above ran
+    // BEFORE the lock (deliberately, to fail fast on a denial without ever
+    // contending for the script-wide lock), so re-resolving here closes the
+    // small window between that read and this write under the same single
+    // lock every other mutating bridge call already uses to pair its
+    // decision with its write (refreshKnowledge, setStatus).
+    target = dhResolveWriteTarget_(norm.repo, norm.featureDir, folderSegs, norm.fileName);
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(target.aclTarget),
+      actor,
+      dhOwnerEmail_(target.aclTarget)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            target.aclTarget.getName() +
+            '" in Drive - ask an editor of that folder to grant you access, then try again.',
+        },
+      };
+    }
+    var now = new Date().toISOString();
+    var contentString = Utilities.newBlob(
+      Utilities.base64Decode(norm.contentBase64)
+    ).getDataAsString('UTF-8');
+    var mimeType = norm.type === 'md' ? 'text/markdown' : 'text/html';
+    var url = dhExecUrl_() + '?doc=' + norm.docPath.split('/').map(encodeURIComponent).join('/');
+
+    // Single unified folder-resolution pass (see this task's design note on
+    // dhFeatureFolder_'s "throws before dhEnsureFolderChain_ ever runs" bug):
+    // the feature folder (always exactly repo/featureDir, needed for the
+    // feature's own _index) and the write folder (where the new file itself
+    // lands, possibly deeper if folderSegs is non-empty) must come from the
+    // SAME chain-creation walk, never two independent ones - a second
+    // independent walk that (re-)creates repo/featureDir would silently fork
+    // a duplicate Drive tree, since folder.createFolder() has no unique-name
+    // enforcement.
+    var featureFolder, writeFolder;
+    if (target.existingFile || target.missingFolderNames.length === 0) {
+      // The full repo/featureDir/...folderSegs chain already exists -
+      // dhFeatureFolder_'s walk is read-only here, so a second lookup is
+      // safe (nothing gets created, nothing can duplicate).
+      featureFolder = dhFeatureFolder_(norm.repo, norm.featureDir);
+      writeFolder = target.parentFolder; // unused when target.existingFile
+    } else {
+      var totalNames = 2 + folderSegs.length;
+      var featureIdx = DH_INGEST.featureFolderIndexInMissing(
+        target.missingFolderNames.length,
+        totalNames
+      );
+      var folder = target.parentFolder;
+      for (var fi = 0; fi < target.missingFolderNames.length; fi++) {
+        folder = folder.createFolder(target.missingFolderNames[fi]);
+        if (fi === featureIdx) featureFolder = folder;
+      }
+      if (featureIdx === -1) featureFolder = dhFeatureFolder_(norm.repo, norm.featureDir);
+      writeFolder = folder;
+    }
+    var indexSheet = dhIndexSheetEnsure_(featureFolder);
+    var indexRowsArr = indexSheet.getDataRange().getValues().slice(1);
+    var plan;
+
+    if (target.existingFile) {
+      var matched = indexRowsArr
+        .map(function (r) {
+          return DH_SCHEMA.rowToIndex(r);
+        })
+        .filter(function (r) {
+          return r.driveFileId === target.aclTarget.getId();
+        });
+      var companion = dhCompanionSheetEnsure_(target.parentFolder, norm.fileName);
+      var count = dhTicketCountFor_(companion.ticketsSheet);
+      var ctx = Object.assign({}, norm, {
+        id: Utilities.getUuid(),
+        owner: actor,
+        driveFileId: target.aclTarget.getId(),
+        commentSheetId: companion.ss.getId(),
+        url: url,
+        now: now,
+      });
+      plan = DH_INGEST.planPublish(ctx, matched, count);
+      if (plan.action === 'needs_confirm') {
+        return {
+          ok: false,
+          error: {
+            code: 'NEEDS_CONFIRM_UPDATE',
+            message: 'A document already exists at this address. Update it in place?',
+          },
+        };
+      }
+      if (plan.action === 'rejected') return { ok: false, error: plan.error };
+      // Update-in-place (never delete+recreate) - preserves the file's id,
+      // url, and revision history.
+      target.aclTarget.setContent(contentString);
+    } else {
+      var newFile = writeFolder.createFile(norm.fileName, contentString, mimeType);
+      var companion2 = dhCompanionSheetEnsure_(writeFolder, norm.fileName);
+      var ctx2 = Object.assign({}, norm, {
+        id: Utilities.getUuid(),
+        owner: actor,
+        driveFileId: newFile.getId(),
+        commentSheetId: companion2.ss.getId(),
+        url: url,
+        now: now,
+      });
+      plan = DH_INGEST.planPublish(ctx2, [], 0);
+    }
+
+    // Upsert into the feature's own _index (D19 direct-upsert, same shape as
+    // publish.mjs's Step 6) - DH_ROLLUP.upsertRow is the GAS-side sibling of
+    // publish-lib.mjs's upsertRowIndex, reused directly since this side of
+    // the fork can import gas/lib/ (unlike the self-contained skill).
+    var rowArr = DH_SCHEMA.indexToRow(plan.row);
+    var upserted = DH_ROLLUP.upsertRow(indexRowsArr, rowArr);
+    indexSheet
+      .getRange(2, 1, upserted.rows.length, DH_SCHEMA.INDEX_COLS.length)
+      .setValues(upserted.rows);
+
+    // Same row, same upsert-by-driveFileId decision, into the root-level
+    // _portal-index (D19, same shape as publish.mjs's Step 7 - the
+    // reconciler heals any miss, so this direct upsert is a latency
+    // optimization, not the only path to correctness).
+    var portalSheet = dhPortalIndexSheetEnsure_();
+    var portalRows = portalSheet.getDataRange().getValues().slice(1);
+    var portalUpserted = DH_ROLLUP.upsertRow(portalRows, rowArr);
+    portalSheet
+      .getRange(2, 1, portalUpserted.rows.length, DH_SCHEMA.INDEX_COLS.length)
+      .setValues(portalUpserted.rows);
+
+    // Audit append (D17(c)): same companion-Sheet meta-tab shape publish.mjs's
+    // own Step 4 append uses, so a bridge-published doc's history reads
+    // identically to a CLI-published one. commitSha/pr stay blank - there is
+    // no git commit or PR behind a browser upload.
+    SpreadsheetApp.openById(plan.row.commentSheetId)
+      .getSheetByName('meta')
+      .appendRow([
+        norm.repo,
+        norm.pathInRepo,
+        norm.feature,
+        '',
+        '',
+        norm.jira,
+        actor,
+        now,
+        'publishDesignDoc: ' + (target.existingFile ? 'update' : 'create'),
+      ]);
+
+    return { ok: true, url: url };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// createKnowledgeLink(input): input is {title, url, type, path, description,
+// tags} from the Manage dialog's "Add external link" form. owner is NOT a
+// field - always server-stamped from Session.
+function createKnowledgeLink(input) {
+  var actor = Session.getActiveUser().getEmail();
+  if (!actor) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'actor',
+        message: 'Could not determine your signed-in identity - reload the page and try again.',
+      },
+    };
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
+  try {
+    var ss = dhKnowledgeSheetEnsure_();
+    var sheet = ss.getSheetByName('links');
+    var existing = sheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (row) {
+        return DH_SCHEMA.rowToKnowledge(row);
+      });
+    // Design doc's "Bridge changes": "rejects duplicate URLs among
+    // source=manual rows" - drive-sync rows are filtered out here, before
+    // planCreateLink ever sees them, matching that exact scope.
+    var manualRows = existing.filter(function (r) {
+      return r.source === 'manual';
+    });
+    var now = new Date().toISOString();
+    var ctx = { id: Utilities.getUuid(), actorEmail: actor, nowIso: now };
+    var result = DH_INGEST.planCreateLink(input || {}, manualRows, ctx);
+    if (!result.ok) return { ok: false, error: result.error };
+
+    sheet.appendRow(DH_SCHEMA.knowledgeToRow(result.row));
+
+    // Audit append (D17(c)): same 6-blanks-then-publisher/publishedAt/note
+    // shape refreshKnowledge's own meta append already uses on this exact
+    // Sheet - there is no repo/pathInRepo/branch/commitSha/pr/jira context
+    // for a manual link, so those six columns stay blank, same as
+    // refreshKnowledge's own audit row.
+    ss.getSheetByName('meta').appendRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      actor,
+      now,
+      'createKnowledgeLink: ' + result.row.title,
+    ]);
+
+    return { ok: true, entry: result.row };
+  } finally {
+    lock.releaseLock();
+  }
+}

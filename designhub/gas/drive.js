@@ -23,6 +23,126 @@ function dhResolveDoc_(path) {
   return { file: files.next(), featureFolder: featureFolder, parsed: p };
 }
 
+// Write-side ACL probe target resolution (Knowledge Portal design, "Users
+// and permissions", Slice B1): mirrors dhResolveDoc_'s exact folder walk,
+// but PERMISSIVE instead of throwing - it walks as far as Drive already has
+// and stops there, so publishDesignDoc (bridge.js) can run the write-ACL
+// check against whichever object actually exists ("the existing file when
+// updating, the nearest existing ancestor folder when creating a new folder
+// chain... the outermost boundary is the DesignHub root folder"), before
+// creating anything. Returns:
+//  - {aclTarget: <existing File>, existingFile: true, parentFolder: <its
+//    folder>, missingFolderNames: []} - the full chain AND the file exist
+//    (an update).
+//  - {aclTarget: <the deepest existing Folder>, existingFile: false,
+//    parentFolder: <same folder>, missingFolderNames: []} - the full folder
+//    chain exists but the file itself does not yet (a create with no
+//    folders to make).
+//  - {aclTarget: <the deepest existing Folder>, existingFile: false,
+//    parentFolder: <same folder>, missingFolderNames: [<names still
+//    needed>]} - some folder in the chain is missing; aclTarget is the
+//    nearest existing ancestor per the design doc's wording.
+function dhResolveWriteTarget_(repo, featureDir, folderSegments, fileName) {
+  var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
+  var names = [repo, featureDir].concat(folderSegments);
+  var folder = root;
+  for (var i = 0; i < names.length; i++) {
+    var it = folder.getFoldersByName(names[i]);
+    if (!it.hasNext()) {
+      return {
+        aclTarget: folder,
+        existingFile: false,
+        parentFolder: folder,
+        missingFolderNames: names.slice(i),
+      };
+    }
+    folder = it.next();
+  }
+  var files = folder.getFilesByName(fileName);
+  if (files.hasNext()) {
+    return {
+      aclTarget: files.next(),
+      existingFile: true,
+      parentFolder: folder,
+      missingFolderNames: [],
+    };
+  }
+  return { aclTarget: folder, existingFile: false, parentFolder: folder, missingFolderNames: [] };
+}
+
+// Best-effort owner lookup - same guard dhDriveDescriptor_ already uses:
+// Shared Drive items are drive-owned, not user-owned, and getOwner() can
+// throw or return null. '' is fine; DH_ACCESS.decideWrite treats a falsy
+// fileOwnerEmail as "no owner match possible", never a crash. Works
+// identically for a File or a Folder target (both expose getOwner()).
+function dhOwnerEmail_(driveItem) {
+  try {
+    var o = driveItem.getOwner();
+    return o ? o.getEmail() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+// The one live Drive.Permissions.list call the write-side ACL probe needs -
+// same Advanced Drive Service (v3) B0's dhCanRead_ already depends on, same
+// {supportsAllDrives, fields} call shape.
+function dhFilePermissions_(driveItem) {
+  var response = Drive.Permissions.list(driveItem.getId(), {
+    supportsAllDrives: true,
+    fields: 'permissions(emailAddress,type,domain,role)',
+  });
+  return (response && response.permissions) || [];
+}
+
+// Read-side ACL check (Knowledge Portal design, "Users and permissions",
+// Slice B0): before doGet() returns a resolved doc's bytes, verify the
+// REQUESTING user's real Drive permission on the underlying file. Drive
+// ACLs are the single permission authority (the standing ADR) - the
+// decision itself lives in the pure DH_ACCESS.decideRead (gas/lib/access.js);
+// this function only fetches what Drive says and hands it over.
+//
+// Cached per user+file via CacheService.getUserCache() (scoped to this
+// script + the CURRENT signed-in user, which is exactly the "per user+file"
+// scope the design doc calls for) with a 600-second (10-minute) TTL - so a
+// Drive un-share takes effect within minutes, not instantly (documented,
+// accepted limitation - see the design doc's read-side bullet). CacheService
+// only stores strings, so the boolean is stored as '1'/'0' and parsed back.
+//
+// Deliberately does NOT catch anything: if Drive.Permissions.list or
+// file.getOwner() itself throws (e.g. a transient API error), this
+// propagates up and doGet() fails closed (GAS's generic error page, no doc
+// served) rather than risk a bug in this check ever serving unauthorized
+// bytes. Only the AUDIT-LOG call in doGet() (dhLogReadDenial_, below) is
+// wrapped in a swallowing try/catch - logging failure must never turn into
+// an access bypass, but a failure in the check itself must never turn into
+// an access GRANT either.
+function dhCanRead_(file, actorEmail) {
+  var cache = CacheService.getUserCache();
+  var key = 'kp-read:' + file.getId();
+  var cached = cache.get(key);
+  if (cached !== null) return cached === '1';
+
+  var ownerEmail = null;
+  try {
+    var owner = file.getOwner();
+    if (owner) ownerEmail = owner.getEmail();
+  } catch (e) {
+    // Shared Drive files are drive-owned, not user-owned, and getOwner() can
+    // throw or return null here - same guard dhDriveDescriptor_ already uses
+    // for the identical case. Treated as "no owner match possible", not a
+    // crash - decideRead handles a null/empty owner safely.
+  }
+  var response = Drive.Permissions.list(file.getId(), {
+    supportsAllDrives: true,
+    fields: 'permissions(emailAddress,type,domain,role)',
+  });
+  var permissions = (response && response.permissions) || [];
+  var decision = DH_ACCESS.decideRead(permissions, actorEmail, ownerEmail);
+  cache.put(key, decision.allow ? '1' : '0', 600);
+  return decision.allow;
+}
+
 function dhIndexRows_(featureFolder) {
   var it = featureFolder.getFilesByName('_index');
   if (!it.hasNext())
@@ -32,6 +152,88 @@ function dhIndexRows_(featureFolder) {
   return values.slice(1).map(function (row) {
     return DH_SCHEMA.rowToIndex(row);
   });
+}
+
+// repo/featureDir -> the feature's own folder, by name from root - the same
+// two-level walk dhResolveDoc_ does internally, factored out because
+// publishDesignDoc (bridge.js) needs it independently of resolving any
+// particular doc path (it needs the FEATURE folder specifically, to
+// ensure/read that feature's _index, regardless of how deep path-in-repo's
+// own subfolders go under it).
+function dhFeatureFolder_(repo, featureDir) {
+  return dhChildFolder_(
+    dhChildFolder_(DriveApp.getFolderById(DH_CONFIG.rootFolderId), repo),
+    featureDir
+  );
+}
+
+// Idempotent-ensure for a feature's `_index` companion Sheet - mirrors
+// dhKnowledgeSheetEnsure_'s create-if-missing idiom. publish.mjs's Step 2
+// does the REST-API equivalent when the Node CLI publishes a feature's
+// first doc ever; publishDesignDoc needs the identical bootstrap for a
+// feature nobody has published to yet, whether via the CLI or this bridge.
+function dhIndexSheetEnsure_(featureFolder) {
+  var it = featureFolder.getFilesByName('_index');
+  var ss;
+  if (it.hasNext()) {
+    ss = SpreadsheetApp.openById(it.next().getId());
+  } else {
+    ss = SpreadsheetApp.create('_index');
+    var file = DriveApp.getFileById(ss.getId());
+    featureFolder.addFile(file);
+    DriveApp.getRootFolder().removeFile(file);
+  }
+  var sheet = ss.getSheetByName('index');
+  if (!sheet) {
+    sheet = ss.getSheets()[0];
+    sheet.setName('index');
+    sheet.appendRow(DH_SCHEMA.INDEX_COLS);
+  }
+  return sheet;
+}
+
+// Idempotent-ensure for a doc's companion comments Sheet - same 'tickets' +
+// 'meta' tab/header shape publish.mjs's Step 4 creates over REST, same
+// naming convention (DH_PATHS.companionName). Returns both the spreadsheet
+// and its 'tickets' sheet, since callers need both (the id for the _index
+// row, the sheet for dhTicketCountFor_ below).
+function dhCompanionSheetEnsure_(folder, fileName) {
+  var companionName = DH_PATHS.companionName(fileName);
+  var it = folder.getFilesByName(companionName);
+  var ss;
+  if (it.hasNext()) {
+    ss = SpreadsheetApp.openById(it.next().getId());
+  } else {
+    ss = SpreadsheetApp.create(companionName);
+    var file = DriveApp.getFileById(ss.getId());
+    folder.addFile(file);
+    DriveApp.getRootFolder().removeFile(file);
+  }
+  var tickets = ss.getSheetByName('tickets');
+  if (!tickets) {
+    tickets = ss.getSheets()[0];
+    tickets.setName('tickets');
+    tickets.appendRow(DH_SCHEMA.TICKET_COLS);
+  }
+  if (!ss.getSheetByName('meta')) {
+    ss.insertSheet('meta').appendRow(DH_SCHEMA.META_COLS);
+  }
+  return { ss: ss, ticketsSheet: tickets };
+}
+
+// "Has feedback comments" for the Manage dialog's collision outcomes
+// (design doc, "Upload design doc" > Outcomes): counts top-level, non-
+// deleted ticket rows - the same visibility filter listComments (bridge.js)
+// already applies. Deleted rows stay in the Sheet per D17(c) but the user
+// already discarded them, so they must not block a re-upload; a reply has
+// no anchor of its own to break, only its parent ticket does.
+function dhTicketCountFor_(ticketsSheet) {
+  var values = ticketsSheet.getDataRange().getValues().slice(1);
+  var PARENT = DH_SCHEMA.TICKET_COLS.indexOf('parentId');
+  var STATUS = DH_SCHEMA.TICKET_COLS.indexOf('status');
+  return values.filter(function (row) {
+    return !row[PARENT] && row[STATUS] !== 'deleted';
+  }).length;
 }
 
 // path -> the doc's companion tickets spreadsheet (+ file id for audit rows)
@@ -44,6 +246,26 @@ function dhCommentsFor_(path) {
   if (!row || !row.commentSheetId)
     throw new Error('DesignHub: no index row / commentSheetId for ' + path);
   return { ss: SpreadsheetApp.openById(row.commentSheetId), indexRow: row, fileId: fileId };
+}
+
+// Denial audit log (Knowledge Portal design, read-side ACL - Slice B0): same
+// append-only meta-tab pattern setStatus (bridge.js) already uses on a doc's
+// companion comments Sheet (D17(c)), so a denial is visible in the same
+// place other per-doc activity is recorded. Every currently-resolvable doc
+// has a companion Sheet - the /publish-design pipeline's Step 4 ensures one
+// unconditionally on every publish - so dhCommentsFor_ should normally
+// succeed here too. If it (or the appendRow call) throws for any reason
+// (companion Sheet deleted after publish, _index row missing/stale, Sheets
+// transiently unavailable), this propagates up uncaught - the CALLER
+// (doGet(), Task 4) is what wraps this call in a swallowing try/catch, so a
+// logging failure degrades to "this one denial wasn't recorded," never to
+// "the doc got served anyway."
+function dhLogReadDenial_(docPath, actorEmail) {
+  var c = dhCommentsFor_(docPath);
+  var now = new Date().toISOString();
+  c.ss
+    .getSheetByName('meta')
+    .appendRow(['', '', '', '', '', '', actorEmail, now, 'access denied: ' + docPath]);
 }
 
 function dhPortalRows_() {
@@ -83,6 +305,23 @@ function dhPortalRows_() {
 // effect: reinstalling this trigger after a rename needs a temporary
 // non-underscore wrapper function pushed, run once via the UI, then removed -
 // see 00-overview.md.
+// Idempotent-ensure for `_portal-index`'s Sheet + header row - factored out
+// of dhReconcile_ (behavior unchanged) so publishDesignDoc's own direct
+// upsert (Task 6, D19's "direct-upsert" path) can reuse the exact same
+// bootstrap instead of duplicating it.
+function dhPortalIndexSheetEnsure_() {
+  var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
+  var it = root.getFilesByName('_portal-index');
+  if (it.hasNext()) return SpreadsheetApp.openById(it.next().getId()).getSheets()[0];
+  var newSs = SpreadsheetApp.create('_portal-index');
+  var newFile = DriveApp.getFileById(newSs.getId());
+  root.addFile(newFile);
+  DriveApp.getRootFolder().removeFile(newFile);
+  var sheet = newSs.getSheets()[0];
+  sheet.appendRow(DH_SCHEMA.INDEX_COLS);
+  return sheet;
+}
+
 function dhReconcile_() {
   var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
   var shards = [];
@@ -109,19 +348,7 @@ function dhReconcile_() {
       return s.rows;
     })
   );
-  var it = root.getFilesByName('_portal-index');
-  var sheet;
-  if (!it.hasNext()) {
-    // _portal-index doesn't exist yet - create it with the header row
-    var newSs = SpreadsheetApp.create('_portal-index');
-    var newFile = DriveApp.getFileById(newSs.getId());
-    root.addFile(newFile);
-    DriveApp.getRootFolder().removeFile(newFile);
-    sheet = newSs.getSheets()[0];
-    sheet.appendRow(DH_SCHEMA.INDEX_COLS);
-  } else {
-    sheet = SpreadsheetApp.openById(it.next().getId()).getSheets()[0];
-  }
+  var sheet = dhPortalIndexSheetEnsure_();
   // Clear existing data rows (keeping the header) using the actual sheet extent
   var lastRow = Math.max(sheet.getLastRow() - 1, 0);
   if (lastRow > 0) {
@@ -201,6 +428,19 @@ function dhKnowledgeSheetEnsure_() {
     var links = isNew ? ss.getSheets()[0] : ss.insertSheet();
     links.setName('links');
     links.appendRow(DH_SCHEMA.KNOWLEDGE_COLS);
+  } else {
+    // Header-migration guard (Slice B1's `description` column): a `links`
+    // tab that already existed before this deploy has a header row written
+    // by older code, shorter than the CURRENT KNOWLEDGE_COLS - fix it up in
+    // place rather than leaving a silently-unlabeled trailing data column.
+    var linksSheet = ss.getSheetByName('links');
+    var headerRow = linksSheet
+      .getRange(1, 1, 1, Math.max(linksSheet.getLastColumn(), 1))
+      .getValues()[0];
+    var headerPlan = DH_KNOWLEDGE.planHeaderEnsure(headerRow, DH_SCHEMA.KNOWLEDGE_COLS);
+    if (headerPlan.needsUpdate) {
+      linksSheet.getRange(1, 1, 1, headerPlan.header.length).setValues([headerPlan.header]);
+    }
   }
   if (plan.needsMeta) {
     ss.insertSheet('meta').appendRow(DH_SCHEMA.META_COLS);
@@ -281,6 +521,14 @@ function dhDriveDescriptor_(item, parentPath, mimeType) {
     owner: owner,
     modifiedTime: item.getLastUpdated().toISOString(),
     trashed: item.isTrashed(),
+    // Sync enhancement (Slice B1): Drive's own description field, straight
+    // off DriveApp - both File and Folder expose getDescription() (no
+    // Advanced Service call needed, unlike this plan's write-side
+    // Permissions.list; this repo's walk already deliberately stays on
+    // plain DriveApp per this function's own file-level comment). Never
+    // null in practice, but guarded with `|| ''` anyway for parity with
+    // owner/url above.
+    description: item.getDescription() || '',
   };
 }
 

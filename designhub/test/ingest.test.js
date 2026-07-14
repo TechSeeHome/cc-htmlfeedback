@@ -127,6 +127,56 @@ test('validatePublishInput: content decoding to exactly 10MB passes (boundary is
   assert.equal(r.ok, true);
 });
 
+// ---- validatePublishInput: malformed base64 (P2 fix, review of PR #11) ----
+// Before this fix, contentBase64 was only whitespace-stripped for the BYTE-
+// LENGTH measurement; the raw, unvalidated string still flowed through to
+// normalized.contentBase64 and on into bridge.js's real
+// Utilities.base64Decode() call, which throws GAS's generic "Could not
+// decode string" runtime error for malformed input instead of a clean
+// {ok:false, error:{code:'INVALID_INPUT', ...}}.
+
+test('validatePublishInput: base64 containing invalid characters is INVALID_INPUT on contentBase64', () => {
+  const r = validatePublishInput(goodInput({ contentBase64: 'not_valid!!base64@@' }));
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'contentBase64');
+  assert.match(r.error.message, /not valid base64/);
+});
+
+test('validatePublishInput: base64 whose length is not a multiple of 4 is INVALID_INPUT', () => {
+  const r = validatePublishInput(goodInput({ contentBase64: 'abcde' })); // 5 chars, no valid padding
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'contentBase64');
+});
+
+test('validatePublishInput: "=" padding in the middle of the string (not just the end) is INVALID_INPUT', () => {
+  // Length 8 (a multiple of 4) so this exercises the REGEX'S mid-string-
+  // padding rejection specifically, independent of the length%4 check.
+  const r = validatePublishInput(goodInput({ contentBase64: 'ab==cd==' }));
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'contentBase64');
+});
+
+test('validatePublishInput: well-formed base64 with internal whitespace is normalized (stripped) into normalized.contentBase64', () => {
+  const clean = Buffer.from('# Hello').toString('base64');
+  const withWhitespace = clean.slice(0, 2) + '\n ' + clean.slice(2);
+  const r = validatePublishInput(goodInput({ contentBase64: withWhitespace }));
+  assert.equal(r.ok, true);
+  assert.equal(
+    r.normalized.contentBase64,
+    clean,
+    'normalized.contentBase64 must be the whitespace-stripped string, not the raw input'
+  );
+});
+
+test('validatePublishInput: valid base64 with correct padding passes unchanged (aside from whitespace-stripping)', () => {
+  const r = validatePublishInput(goodInput({ contentBase64: 'YQ==' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.normalized.contentBase64, 'YQ==');
+});
+
 // ---- validatePublishInput: path segment rules, delegated to DH_PATHS ----
 
 test('validatePublishInput: a "." or ".." segment in pathInRepo is INVALID_INPUT (delegates to parseDocPath)', () => {

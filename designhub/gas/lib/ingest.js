@@ -30,6 +30,31 @@ var DH_INGEST = (function () {
     return Math.floor((len * 3) / 4) - padding;
   }
 
+  // Whitespace-stripped once, reused for both the byte-length measurement AND
+  // the value that actually flows downstream (P2 fix, review of PR #11):
+  // before this fix, only the MEASUREMENT was taken on a stripped copy -
+  // normalized.contentBase64 forwarded the caller's ORIGINAL, unvalidated
+  // string, so a malformed payload reached bridge.js's real
+  // Utilities.base64Decode() call and threw GAS's generic "Could not decode
+  // string" runtime error instead of a clean {ok:false, error:{code:
+  // 'INVALID_INPUT', ...}}.
+  function normalizeBase64_(b64) {
+    return String(b64 || '').replace(/\s/g, '');
+  }
+
+  // GAS's V8 runtime has no dedicated base64-validity check, so this is a
+  // portable regex: standard base64 alphabet, with 0-2 '=' padding chars
+  // allowed ONLY at the very end (the ={0,2}$ anchor rejects '=' anywhere
+  // else), and a length that is a multiple of 4 (every valid padded base64
+  // string's length is). An empty string is intentionally treated as valid
+  // here - REQUIRED_FIELDS already rejects a blank/whitespace-only
+  // contentBase64 before this check ever runs, so this only needs to guard
+  // against a genuinely malformed non-empty payload.
+  var BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
+  function isValidBase64_(s) {
+    return s.length % 4 === 0 && BASE64_RE.test(s);
+  }
+
   function extOf_(fileName) {
     var m = /\.([a-zA-Z0-9]+)$/.exec(String(fileName || ''));
     return m ? m[1].toLowerCase() : '';
@@ -59,7 +84,15 @@ var DH_INGEST = (function () {
     if (ALLOWED_EXT.indexOf(ext) === -1) {
       return rejected_('file', 'Only .md and .html files are supported (got .' + (ext || '?') + ')');
     }
-    var bytes = base64DecodedByteLength(input.contentBase64);
+
+    var normalizedBase64 = normalizeBase64_(input.contentBase64);
+    if (!isValidBase64_(normalizedBase64)) {
+      return invalid_(
+        'contentBase64',
+        'The uploaded file content is not valid base64 data - re-upload the file and try again.'
+      );
+    }
+    var bytes = base64DecodedByteLength(normalizedBase64);
     if (bytes > MAX_BYTES) {
       return rejected_('file', 'File is too large (' + bytes + ' bytes) - the limit is 10MB');
     }
@@ -95,7 +128,7 @@ var DH_INGEST = (function () {
       ok: true,
       normalized: {
         fileName: String(input.fileName).trim(),
-        contentBase64: input.contentBase64,
+        contentBase64: normalizedBase64, // normalized + validated, never the raw input
         title: String(input.title).trim(),
         repo: String(input.repo).trim(),
         feature: String(input.feature).trim(),

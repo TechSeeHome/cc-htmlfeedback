@@ -109,36 +109,29 @@ function dhFilePermissions_(driveItem) {
 // accepted limitation - see the design doc's read-side bullet). CacheService
 // only stores strings, so the boolean is stored as '1'/'0' and parsed back.
 //
-// Deliberately does NOT catch anything: if Drive.Permissions.list or
-// file.getOwner() itself throws (e.g. a transient API error), this
+// Deliberately does NOT catch anything itself: if Drive.Permissions.list
+// (via dhFilePermissions_) throws (e.g. a transient API error), this
 // propagates up and doGet() fails closed (GAS's generic error page, no doc
 // served) rather than risk a bug in this check ever serving unauthorized
 // bytes. Only the AUDIT-LOG call in doGet() (dhLogReadDenial_, below) is
 // wrapped in a swallowing try/catch - logging failure must never turn into
 // an access bypass, but a failure in the check itself must never turn into
-// an access GRANT either.
+// an access GRANT either. (dhOwnerEmail_ still swallows ITS OWN lookup
+// failure internally - same "no owner match possible, not a crash" guard it
+// always had - so that part of the behavior is unchanged by this refactor.)
+//
+// Nitpick fix (review of PR #11): this used to re-implement the owner lookup
+// and the Drive.Permissions.list call inline, duplicating exactly what
+// dhOwnerEmail_/dhFilePermissions_ (Slice B1) already encapsulate. Delegating
+// to them keeps this one call site in sync with any future change to either
+// helper.
 function dhCanRead_(file, actorEmail) {
   var cache = CacheService.getUserCache();
   var key = 'kp-read:' + file.getId();
   var cached = cache.get(key);
   if (cached !== null) return cached === '1';
 
-  var ownerEmail = null;
-  try {
-    var owner = file.getOwner();
-    if (owner) ownerEmail = owner.getEmail();
-  } catch (e) {
-    // Shared Drive files are drive-owned, not user-owned, and getOwner() can
-    // throw or return null here - same guard dhDriveDescriptor_ already uses
-    // for the identical case. Treated as "no owner match possible", not a
-    // crash - decideRead handles a null/empty owner safely.
-  }
-  var response = Drive.Permissions.list(file.getId(), {
-    supportsAllDrives: true,
-    fields: 'permissions(emailAddress,type,domain,role)',
-  });
-  var permissions = (response && response.permissions) || [];
-  var decision = DH_ACCESS.decideRead(permissions, actorEmail, ownerEmail);
+  var decision = DH_ACCESS.decideRead(dhFilePermissions_(file), actorEmail, dhOwnerEmail_(file));
   cache.put(key, decision.allow ? '1' : '0', 600);
   return decision.allow;
 }

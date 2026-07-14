@@ -113,16 +113,21 @@ var DH_INGEST = (function () {
   // by the caller (bridge.js) with driveFileId/commentSheetId/url/owner/now
   // (and, for a brand-new doc, id) once those are known from real Drive/
   // Sheets I/O - see this task's own top-of-task design note for exactly
-  // when the caller has each of these available. existingIndexRows is
-  // either [] (no file at this address) or the single matched _index row
-  // object (DH_SCHEMA.INDEX_COLS-keyed) for the file that already exists
-  // there - the caller resolves this via a real Drive/Sheets lookup, since a
-  // pure function cannot do that lookup itself (D5).
-  function planPublish(input, existingIndexRows, companionCommentCount) {
+  // when the caller has each of these available. isExistingFile is the
+  // caller's own Drive-truth signal for "does a file already exist at this
+  // address" (bridge.js's target.existingFile, from dhResolveWriteTarget_) -
+  // the ONLY thing this function trusts to distinguish create from
+  // update/collision (see the P2 CodeRabbit/Codex fix below for why).
+  // existingIndexRows is either [] (no _index row found for that file, which
+  // can legitimately happen even when isExistingFile is true - see below) or
+  // the single matched _index row object (DH_SCHEMA.INDEX_COLS-keyed) - the
+  // caller resolves this via a real Drive/Sheets lookup, since a pure
+  // function cannot do that lookup itself (D5).
+  function planPublish(input, isExistingFile, existingIndexRows, companionCommentCount) {
     existingIndexRows = existingIndexRows || [];
     companionCommentCount = companionCommentCount || 0;
 
-    if (existingIndexRows.length === 0) {
+    if (!isExistingFile) {
       // No collision: unconditional create, matching publish-lib.mjs's
       // newIndexRow field set/order exactly (tags always '' on create - the
       // CLI never sets it either) so a GAS-published row and a Node-CLI-
@@ -149,7 +154,16 @@ var DH_INGEST = (function () {
       };
     }
 
-    var existing = existingIndexRows[0];
+    // P2 fix (CodeRabbit/Codex review of PR #11): gate strictly on
+    // isExistingFile, NEVER on existingIndexRows.length. Before this fix, an
+    // existing Drive file whose _index row was missing or stale (deleted/
+    // corrupted row - matched-by-driveFileId came back empty even though the
+    // file itself is real) fell all the way through to the 'create' branch
+    // above and got silently overwritten via setContent, with zero
+    // confirmation and zero comment-count check. isExistingFile is a direct
+    // Drive-truth signal (bridge.js resolved it from dhResolveWriteTarget_'s
+    // own walk), so it can't be fooled by a stale/missing index row the way
+    // "was a matching row found" could.
 
     // The one-deliberate-carve-out (design doc, "Upload design doc" >
     // Outcomes): a doc with existing feedback comments never updates here,
@@ -173,17 +187,45 @@ var DH_INGEST = (function () {
       return { action: 'needs_confirm' };
     }
 
-    // Update-in-place: patches exactly the fields publish-lib.mjs's
-    // patchIndexRow patches (title/url/jira/commentSheetId/updatedAt) -
-    // everything else (id, driveFileId, tags, owner, status, publishedAt)
-    // is PRESERVED from the existing row, never regenerated.
-    var row = Object.assign({}, existing, {
-      title: input.title,
-      url: input.url,
-      jira: input.jira,
-      commentSheetId: input.commentSheetId,
-      updatedAt: input.now,
-    });
+    var existing = existingIndexRows[0];
+    var row = existing
+      ? // Update-in-place: patches exactly the fields publish-lib.mjs's
+        // patchIndexRow patches (title/url/jira/commentSheetId/updatedAt) -
+        // everything else (id, driveFileId, tags, owner, status,
+        // publishedAt) is PRESERVED from the existing row, never
+        // regenerated.
+        Object.assign({}, existing, {
+          title: input.title,
+          url: input.url,
+          jira: input.jira,
+          commentSheetId: input.commentSheetId,
+          updatedAt: input.now,
+        })
+      : // existing is missing (the exact stale/corrupted-row case this fix
+        // guards): there is no prior row to patch, so rebuild a COMPLETE row
+        // from what THIS publish call actually knows, rather than
+        // Object.assign-ing onto undefined (which would silently drop
+        // id/repo/feature/driveFileId/etc. and write a malformed row).
+        // tags/publishedAt/owner are not recoverable from a lost row - they
+        // fall back to the same defaults a fresh `create` would use (empty
+        // tags, current actor/time), since there is no better source of
+        // truth for a row this stale.
+        {
+          id: input.id,
+          type: input.type,
+          title: input.title,
+          repo: input.repo,
+          feature: input.feature,
+          jira: input.jira,
+          tags: '',
+          owner: input.owner,
+          driveFileId: input.driveFileId,
+          commentSheetId: input.commentSheetId,
+          url: input.url,
+          status: 'active',
+          publishedAt: input.now,
+          updatedAt: input.now,
+        };
     return { action: 'update', row: row };
   }
 

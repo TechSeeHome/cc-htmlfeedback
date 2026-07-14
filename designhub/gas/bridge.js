@@ -438,7 +438,12 @@ function publishDesignDoc(input) {
         url: url,
         now: now,
       });
-      plan = DH_INGEST.planPublish(ctx, matched, count);
+      // isExistingFile is always `true` here (this is the `target.existingFile`
+      // branch) - passed explicitly rather than inferred from `matched`'s
+      // length, so a stale/missing _index row (matched === []) still goes
+      // through the needs_confirm/DOC_HAS_COMMENTS gates instead of silently
+      // falling through to planPublish's create path (P2 fix, review of PR #11).
+      plan = DH_INGEST.planPublish(ctx, true, matched, count);
       if (plan.action === 'needs_confirm') {
         return {
           ok: false,
@@ -463,7 +468,7 @@ function publishDesignDoc(input) {
         url: url,
         now: now,
       });
-      plan = DH_INGEST.planPublish(ctx2, [], 0);
+      plan = DH_INGEST.planPublish(ctx2, false, [], 0);
     }
 
     // Upsert into the feature's own _index (D19 direct-upsert, same shape as

@@ -27,6 +27,26 @@ Resolution order used by the tooling:
   Credentials -> Create credentials -> OAuth client ID -> **Desktop app** ->
   Download JSON.
 
+### Minimal file (only two keys are needed)
+
+The tooling reads only `client_id` and `client_secret` - every OAuth endpoint
+(auth URL, token URL, localhost redirect) is built into the code. The extra
+fields a downloaded client JSON carries (`project_id`, `auth_uri`, `token_uri`,
+`redirect_uris`, `auth_provider_x509_cert_url`) are ignored, so the shared vault
+entry can be trimmed to just:
+
+```json
+{
+  "installed": {
+    "client_id": "<YOUR_CLIENT_ID>",
+    "client_secret": "<YOUR_CLIENT_SECRET>"
+  }
+}
+```
+
+Keep the `installed` wrapper (the code also accepts `web`). Nothing else is
+required, and there is no token in this file.
+
 ### Place it
 
 ```bash

@@ -9,7 +9,7 @@ A zero-dependency, in-page feedback tool. **Highlight text on the page to leave 
 > **DesignHub plugin has moved.** The `designhub` publish plugin is now maintained in the
 > [`TechSeeHome/home-rnd-productivity`](https://github.com/TechSeeHome/home-rnd-productivity) marketplace.
 > Install it from there:
-> ```
+> ```text
 > /plugin marketplace add TechSeeHome/home-rnd-productivity
 > /plugin install designhub@home-rnd-productivity
 > ```

@@ -6,6 +6,9 @@ const {
   planCreateLink,
   base64DecodedByteLength,
   featureFolderIndexInMissing,
+  validateDeleteDocPath,
+  findIndexRowByDriveFileId,
+  planDeleteLink,
 } = require('../gas/lib/ingest.js');
 const { INDEX_COLS, indexToRow, rowToIndex } = require('../gas/lib/schema.js');
 
@@ -611,4 +614,73 @@ test('publishDesignDoc-style folder chain creation never re-creates the feature 
     'newfeature',
     'the final (write) folder for this case is the feature folder itself - no folderSegs beyond it'
   );
+});
+
+// ---- delete planners (portal per-row delete spec, 2026-07-21) ----
+
+test('validateDeleteDocPath: empty / whitespace docPath is INVALID_INPUT', () => {
+  for (const bad of [undefined, null, '', '   ']) {
+    const r = validateDeleteDocPath(bad);
+    assert.equal(r.ok, false);
+    assert.equal(r.error.code, 'INVALID_INPUT');
+    assert.equal(r.error.field, 'docPath');
+  }
+});
+
+test('validateDeleteDocPath: a path parseDocPath rejects is INVALID_INPUT', () => {
+  const r = validateDeleteDocPath('repo/feature/../escape.html');
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+});
+
+test('validateDeleteDocPath: a valid doc path is returned trimmed', () => {
+  const r = validateDeleteDocPath('  repo/feat--x/design.html  ');
+  assert.equal(r.ok, true);
+  assert.equal(r.docPath, 'repo/feat--x/design.html');
+});
+
+test('findIndexRowByDriveFileId: returns the sheet rowNumber (data index + 2) and the row', () => {
+  const rows = [
+    { driveFileId: 'A', title: 'first' },
+    { driveFileId: 'B', title: 'second' },
+  ];
+  const hit = findIndexRowByDriveFileId(rows, 'B');
+  assert.equal(hit.rowNumber, 3);
+  assert.equal(hit.row.title, 'second');
+});
+
+test('findIndexRowByDriveFileId: null when absent, and never throws on empty input', () => {
+  assert.equal(findIndexRowByDriveFileId([], 'X'), null);
+  assert.equal(findIndexRowByDriveFileId(undefined, 'X'), null);
+});
+
+test('planDeleteLink: missing id is INVALID_INPUT', () => {
+  const r = planDeleteLink('', []);
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.equal(r.error.field, 'id');
+});
+
+test('planDeleteLink: unknown id reports "may already be deleted"', () => {
+  const r = planDeleteLink('nope', [{ id: 'x', source: 'manual' }]);
+  assert.equal(r.ok, false);
+  assert.match(r.error.message, /already be deleted/i);
+});
+
+test('planDeleteLink: drive-sync rows are rejected with the delete-in-Drive message', () => {
+  const r = planDeleteLink('d1', [{ id: 'd1', source: 'drive-sync', title: 'T' }]);
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'INVALID_INPUT');
+  assert.match(r.error.message, /delete the file in Drive/i);
+});
+
+test('planDeleteLink: a manual row resolves with its sheet rowNumber', () => {
+  const rows = [
+    { id: 'a', source: 'drive-sync' },
+    { id: 'b', source: 'manual', title: 'Grafana', url: 'https://g' },
+  ];
+  const r = planDeleteLink('b', rows);
+  assert.equal(r.ok, true);
+  assert.equal(r.rowNumber, 3);
+  assert.equal(r.row.title, 'Grafana');
 });

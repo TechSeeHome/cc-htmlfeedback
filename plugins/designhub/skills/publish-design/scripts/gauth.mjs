@@ -3,7 +3,7 @@
 // Client secret: an installed-app OAuth client JSON, resolved via a fallback
 // chain (see resolveClientSecretFile): DH_CLIENT_SECRET_FILE env override ->
 // ~/.claude/designhub/client_secret.json (canonical) -> the deprecated
-// gdoc-md-sync path (warns once). See docs/designhub/CREDENTIALS-SETUP.md.
+// gdoc-md-sync path (warns once). See CREDENTIALS-SETUP.md (bundled with this plugin).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,7 +24,7 @@ function noClientSecretError(expectedPath) {
     `No Google OAuth client secret found.\n` +
       `  Expected it at: ${expectedPath}\n` +
       `  Set DH_CLIENT_SECRET_FILE to override the location.\n` +
-      `  How to create/obtain it: docs/designhub/CREDENTIALS-SETUP.md`
+      `  How to create/obtain it: CREDENTIALS-SETUP.md (bundled with this plugin)`
   );
 }
 
@@ -43,7 +43,7 @@ export function resolveClientSecretFile({ env = process.env, exists = fs.existsS
     throw new Error(
       `DH_CLIENT_SECRET_FILE is set to ${override} but no file exists there.\n` +
         `  Point it at your installed-app client_secret.json, or unset it to fall back to\n` +
-        `  ${NEUTRAL_CLIENT_FILE()}. See docs/designhub/CREDENTIALS-SETUP.md`
+        `  ${NEUTRAL_CLIENT_FILE()}. See CREDENTIALS-SETUP.md (bundled with this plugin)`
     );
   }
   const neutral = NEUTRAL_CLIENT_FILE();
@@ -52,7 +52,7 @@ export function resolveClientSecretFile({ env = process.env, exists = fs.existsS
   if (exists(legacy)) {
     const msg =
       `[designhub] Using the DEPRECATED client secret at ${legacy}. ` +
-      `Move it to ${neutral} - see docs/designhub/CREDENTIALS-SETUP.md.`;
+      `Move it to ${neutral} - see CREDENTIALS-SETUP.md (bundled with this plugin).`;
     if (warn) warn(msg);
     else if (!_legacyWarned) {
       _legacyWarned = true;

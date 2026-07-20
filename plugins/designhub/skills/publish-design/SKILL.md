@@ -51,7 +51,7 @@ TOOLING = ${CLAUDE_PLUGIN_ROOT}/skills/publish-design/scripts
   secret found", place your installed-app `client_secret.json` at
   `~/.claude/designhub/client_secret.json` (or set `DH_CLIENT_SECRET_FILE`).
   Full instructions - including how to create the client - are in
-  `docs/designhub/CREDENTIALS-SETUP.md`.
+  `${CLAUDE_PLUGIN_ROOT}/CREDENTIALS-SETUP.md` (bundled with this plugin).
 - One-time machine setup: if publish.mjs exits complaining that
   `designhub.config.local.json` is missing, copy the plugin's
   `designhub.config.json` to `designhub.config.local.json` (same directory) and

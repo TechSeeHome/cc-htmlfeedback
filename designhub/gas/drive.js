@@ -185,6 +185,21 @@ function dhIndexSheetEnsure_(featureFolder) {
   return sheet;
 }
 
+// Idempotent-ensure for a feature _index spreadsheet's 'meta' (audit) tab -
+// same append-only META_COLS shape the companion comment Sheets use
+// (D17(c)). deleteDesignDoc's audit row cannot live on the doc's companion
+// Sheet (that Sheet is itself being trashed by the delete), so it lands
+// here, on the surviving feature _index.
+function dhIndexMetaEnsure_(indexSheet) {
+  var ss = indexSheet.getParent();
+  var meta = ss.getSheetByName('meta');
+  if (!meta) {
+    meta = ss.insertSheet('meta');
+    meta.appendRow(DH_SCHEMA.META_COLS);
+  }
+  return meta;
+}
+
 // Idempotent-ensure for a doc's companion comments Sheet - same 'tickets' +
 // 'meta' tab/header shape publish.mjs's Step 4 creates over REST, same
 // naming convention (DH_PATHS.companionName). Returns both the spreadsheet

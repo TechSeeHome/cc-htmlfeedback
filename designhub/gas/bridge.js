@@ -638,3 +638,252 @@ function createKnowledgeLink(input) {
     lock.releaseLock();
   }
 }
+
+// --- Portal per-row delete (spec 2026-07-21) -------------------------------
+// Two hard-delete write paths, same adapter shape as publishDesignDoc/
+// createKnowledgeLink: identity -> validate -> pre-lock ACL probe -> lock ->
+// re-resolve + re-check (TOCTOU) -> write -> audit. Error codes reuse the
+// existing closed list (INVALID_INPUT/FORBIDDEN_TARGET/RETRYABLE_UNAVAILABLE).
+
+// deleteDesignDoc(docPath): trash the published Drive file + its companion
+// comments Sheet, remove the feature _index row (authoritative - the D19
+// reconciler rebuilds _portal-index from feature shards, so this is what
+// makes the deletion stick) and the _portal-index row (latency optimization,
+// reconciler heals a miss). Audit lands on the feature _index's meta tab
+// (dhIndexMetaEnsure_) since the companion Sheet is itself trashed.
+function deleteDesignDoc(docPath) {
+  var actor = Session.getActiveUser().getEmail();
+  if (!actor) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'actor',
+        message: 'Could not determine your signed-in identity - reload the page and try again.',
+      },
+    };
+  }
+  var validated = DH_INGEST.validateDeleteDocPath(docPath);
+  if (!validated.ok) return { ok: false, error: validated.error };
+
+  var resolved;
+  try {
+    resolved = dhResolveDoc_(validated.docPath);
+  } catch (e) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'docPath',
+        message: 'Doc not found - it may already be deleted. Refresh the portal.',
+      },
+    };
+  }
+  var decision = DH_ACCESS.decideWrite(
+    dhFilePermissions_(resolved.file),
+    actor,
+    dhOwnerEmail_(resolved.file)
+  );
+  if (!decision.allow) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_TARGET',
+        message:
+          'You do not have write access to "' +
+          resolved.file.getName() +
+          '" in Drive - ask an editor of that file to grant you access.',
+      },
+    };
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
+  try {
+    // Re-resolve + re-check under the lock (same TOCTOU close as
+    // publishDesignDoc): the file could have been deleted or re-ACLed
+    // between the pre-lock probe and lock acquisition.
+    try {
+      resolved = dhResolveDoc_(validated.docPath);
+    } catch (e) {
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_INPUT',
+          field: 'docPath',
+          message: 'Doc not found - it may already be deleted. Refresh the portal.',
+        },
+      };
+    }
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(resolved.file),
+      actor,
+      dhOwnerEmail_(resolved.file)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            resolved.file.getName() +
+            '" in Drive - ask an editor of that file to grant you access.',
+        },
+      };
+    }
+
+    var fileId = resolved.file.getId();
+    var indexSheet = dhIndexSheetEnsure_(resolved.featureFolder);
+    var indexRows = indexSheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (r) {
+        return DH_SCHEMA.rowToIndex(r);
+      });
+    var matched = DH_INGEST.findIndexRowByDriveFileId(indexRows, fileId);
+
+    resolved.file.setTrashed(true);
+    if (matched && matched.row.commentSheetId) {
+      // Companion comments Sheet rides along into Drive trash. A missing or
+      // already-trashed companion is not an error - the doc itself is what
+      // the user asked to delete.
+      try {
+        DriveApp.getFileById(matched.row.commentSheetId).setTrashed(true);
+      } catch (e) {
+        /* companion already gone - proceed */
+      }
+    }
+    if (matched) indexSheet.deleteRow(matched.rowNumber);
+
+    var portalSheet = dhPortalIndexSheetEnsure_();
+    var portalRows = portalSheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (r) {
+        return DH_SCHEMA.rowToIndex(r);
+      });
+    var portalMatched = DH_INGEST.findIndexRowByDriveFileId(portalRows, fileId);
+    if (portalMatched) portalSheet.deleteRow(portalMatched.rowNumber);
+
+    dhIndexMetaEnsure_(indexSheet).appendRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      actor,
+      new Date().toISOString(),
+      'deleteDesignDoc: ' + validated.docPath + ' (driveFileId=' + fileId + ')',
+    ]);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// deleteKnowledgeLink(id): remove a source=manual row from `_knowledge-index`
+// (spec decision 2 - drive-sync rows are never deletable here; the sync owns
+// them). ACL target is the `_knowledge-index` Sheet itself, exactly like
+// createKnowledgeLink's write probe.
+function deleteKnowledgeLink(id) {
+  var actor = Session.getActiveUser().getEmail();
+  if (!actor) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'actor',
+        message: 'Could not determine your signed-in identity - reload the page and try again.',
+      },
+    };
+  }
+  var target = dhKnowledgeWriteTarget_();
+  var decision = DH_ACCESS.decideWrite(dhFilePermissions_(target), actor, dhOwnerEmail_(target));
+  if (!decision.allow) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_TARGET',
+        message:
+          'You do not have write access to "' +
+          target.getName() +
+          '" in Drive - ask an editor of that folder to grant you access, then try again.',
+      },
+    };
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
+  try {
+    // Same post-lock ACL re-check as createKnowledgeLink (TOCTOU close).
+    target = dhKnowledgeWriteTarget_();
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(target),
+      actor,
+      dhOwnerEmail_(target)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            target.getName() +
+            '" in Drive - ask an editor of that folder to grant you access, then try again.',
+        },
+      };
+    }
+    var ss = dhKnowledgeSheetEnsure_();
+    var sheet = ss.getSheetByName('links');
+    var rows = sheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (row) {
+        return DH_SCHEMA.rowToKnowledge(row);
+      });
+    var plan = DH_INGEST.planDeleteLink(id, rows);
+    if (!plan.ok) return { ok: false, error: plan.error };
+
+    sheet.deleteRow(plan.rowNumber);
+    ss.getSheetByName('meta').appendRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      actor,
+      new Date().toISOString(),
+      'deleteKnowledgeLink: ' + plan.row.title + ' (' + plan.row.url + ')',
+    ]);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}

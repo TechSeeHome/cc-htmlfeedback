@@ -148,11 +148,16 @@ async function consent() {
 
 export async function accessToken() {
   if (fs.existsSync(TOKEN_FILE)) {
+    // Best-effort tighten permissions on tokens written by prior releases
+    // under a permissive umask: writeFileSync's `mode` only applies at
+    // creation, so an existing file's mode never self-heals otherwise.
+    try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
     return refresh(JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')).refresh_token);
   }
   // machine-local fallback: reuse the gdoc-md-sync token if present
   const legacy = path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'token.json');
   if (fs.existsSync(legacy)) {
+    try { fs.chmodSync(legacy, 0o600); } catch {}
     return refresh(JSON.parse(fs.readFileSync(legacy, 'utf8')).refresh_token);
   }
   return consent();

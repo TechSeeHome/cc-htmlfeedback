@@ -31,6 +31,7 @@ Resolution order used by the tooling:
 
 ```bash
 mkdir -p ~/.claude/designhub
+chmod 700 ~/.claude/designhub
 cp /path/to/downloaded/client_secret.json ~/.claude/designhub/client_secret.json
 chmod 600 ~/.claude/designhub/client_secret.json
 ```
@@ -38,22 +39,37 @@ chmod 600 ~/.claude/designhub/client_secret.json
 ## 2. The token (per-developer, sensitive)
 
 On first publish/import the tooling opens a browser for you to authorize, then
-caches a **refresh token** at `~/.claude/designhub/token.json`. This file grants
-access as you - treat it as a real secret:
+caches a **refresh token** at `~/.claude/designhub/token.json` (default) or, if
+the `DH_TOKEN_FILE` environment variable is set, at that path instead - useful
+if you want the token stored somewhere other than the default location. This
+file grants access as you - treat it as a real secret:
 
 ```bash
 chmod 600 ~/.claude/designhub/token.json
 ```
+
+Note: the `chmod 600` above applies to whichever path is actually in use - the
+default `~/.claude/designhub/token.json`, or your `DH_TOKEN_FILE` override.
+The tooling also best-effort tightens an existing token file's permissions to
+0600 on every use, to self-heal tokens created by older releases under a
+permissive umask.
 
 The token is cached at a shared path, so once the Knowledge Portal importer
 adopts this setup a single consent will cover both.
 
 ## Troubleshooting
 
-- **"No Google OAuth client secret found"** - no client secret resolved:
-  either you have not placed `client_secret.json` at the canonical path (and
-  `DH_CLIENT_SECRET_FILE` is unset), or your `DH_CLIENT_SECRET_FILE` override
-  points to a missing file. The error message names the exact path it expected
-  - check that path. Follow section 1.
+These are two distinct errors - check which one you actually got, since they
+point at different problems:
+
+- **"No Google OAuth client secret found"** - `DH_CLIENT_SECRET_FILE` is
+  unset AND nothing exists at the canonical path,
+  `~/.claude/designhub/client_secret.json` (and no legacy
+  `gdoc-md-sync/client_secret.json` either). The error names the exact
+  canonical path it expected - place the file there. Follow section 1.
+- **"DH_CLIENT_SECRET_FILE is set to ... but no file exists there"** - your
+  `DH_CLIENT_SECRET_FILE` override is set, but points at a path that does not
+  exist. Either fix the path or unset the variable to fall back to the
+  canonical path. The error names the exact override path it checked.
 - **"Using the DEPRECATED client secret ..."** - you are on the legacy
   `gdoc-md-sync` path; move the file to `~/.claude/designhub/` to silence it.

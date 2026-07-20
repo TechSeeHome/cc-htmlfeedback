@@ -39,5 +39,10 @@ designhub/gas/config.js
 designhub/gas/.clasp.json
 plugins/designhub/designhub.config.local.json
 
+# Defensive: OAuth secrets live under ~/.claude/designhub/ (outside any repo);
+# these guard against a stray in-repo copy ever being staged.
+**/client_secret.json
+**/token.json
+
 # c8 coverage output
 coverage/

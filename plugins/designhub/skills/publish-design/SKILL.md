@@ -47,6 +47,11 @@ TOOLING = ${CLAUDE_PLUGIN_ROOT}/skills/publish-design/scripts
 
 ## Notes
 
+- One-time credential setup: if publish.mjs exits with "No Google OAuth client
+  secret found", place your installed-app `client_secret.json` at
+  `~/.claude/designhub/client_secret.json` (or set `DH_CLIENT_SECRET_FILE`).
+  Full instructions - including how to create the client - are in
+  `docs/designhub/CREDENTIALS-SETUP.md`.
 - One-time machine setup: if publish.mjs exits complaining that
   `designhub.config.local.json` is missing, copy the plugin's
   `designhub.config.json` to `designhub.config.local.json` (same directory) and

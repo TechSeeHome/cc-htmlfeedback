@@ -76,7 +76,15 @@ async function refresh(refreshToken) {
     body: new URLSearchParams({ client_id: id, client_secret: secret,
       refresh_token: refreshToken, grant_type: 'refresh_token' }),
   });
-  if (!r.ok) throw new Error('token refresh failed: ' + await r.text());
+  if (!r.ok) {
+    const body = await r.text();
+    // invalid_grant means this refresh token is no longer usable with the
+    // current client (e.g. a legacy token refreshed against a newly created
+    // or overridden client - Google refresh tokens are client-bound) or the
+    // grant was revoked. Return null so the caller falls through to consent().
+    if (r.status === 400 && /invalid_grant/.test(body)) return null;
+    throw new Error('token refresh failed: ' + body);
+  }
   return (await r.json()).access_token;
 }
 
@@ -152,13 +160,13 @@ export async function accessToken() {
     // under a permissive umask: writeFileSync's `mode` only applies at
     // creation, so an existing file's mode never self-heals otherwise.
     try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
-    return refresh(JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')).refresh_token);
+    return (await refresh(JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')).refresh_token)) ?? consent();
   }
   // machine-local fallback: reuse the gdoc-md-sync token if present
   const legacy = path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'token.json');
   if (fs.existsSync(legacy)) {
     try { fs.chmodSync(legacy, 0o600); } catch {}
-    return refresh(JSON.parse(fs.readFileSync(legacy, 'utf8')).refresh_token);
+    return (await refresh(JSON.parse(fs.readFileSync(legacy, 'utf8')).refresh_token)) ?? consent();
   }
   return consent();
 }

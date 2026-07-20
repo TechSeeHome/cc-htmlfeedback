@@ -1,7 +1,9 @@
 // OAuth for the publish skill. Publishers publish as THEMSELVES (D13):
 // per-developer token cached at ~/.claude/designhub/token.json.
-// Client secret: an installed-app OAuth client JSON; default reuses the
-// gdoc-md-sync client on this machine, override with DH_CLIENT_SECRET_FILE.
+// Client secret: an installed-app OAuth client JSON, resolved via a fallback
+// chain (see resolveClientSecretFile): DH_CLIENT_SECRET_FILE env override ->
+// ~/.claude/designhub/client_secret.json (canonical) -> the deprecated
+// gdoc-md-sync path (warns once). See docs/designhub/CREDENTIALS-SETUP.md.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,12 +12,59 @@ import { spawn } from 'node:child_process';
 
 const TOKEN_FILE = process.env.DH_TOKEN_FILE ||
   path.join(os.homedir(), '.claude', 'designhub', 'token.json');
-const CLIENT_FILE = process.env.DH_CLIENT_SECRET_FILE ||
-  path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'client_secret.json');
 const SCOPE = 'https://www.googleapis.com/auth/drive';
 
+const NEUTRAL_CLIENT_FILE = () =>
+  path.join(os.homedir(), '.claude', 'designhub', 'client_secret.json');
+const LEGACY_CLIENT_FILE = () =>
+  path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'client_secret.json');
+
+function noClientSecretError(expectedPath) {
+  return new Error(
+    `No Google OAuth client secret found.\n` +
+      `  Expected it at: ${expectedPath}\n` +
+      `  Set DH_CLIENT_SECRET_FILE to override the location.\n` +
+      `  How to create/obtain it: docs/designhub/CREDENTIALS-SETUP.md`
+  );
+}
+
+// Resolve the installed-app OAuth client secret via a backward-compatible
+// fallback chain, so a machine that never installed the gdoc-md-sync skill can
+// still authenticate. `env`/`exists`/`warn` are injectable so the chain is
+// unit-testable without touching the real environment or filesystem. In
+// production the legacy-deprecation warning fires at most once per process.
+let _legacyWarned = false;
+export function resolveClientSecretFile({ env = process.env, exists = fs.existsSync, warn } = {}) {
+  const override = env.DH_CLIENT_SECRET_FILE;
+  if (override) {
+    // A set-but-missing override must fail with the actionable error naming it
+    // (G4) - never a raw ENOENT, the very failure this whole change fixes.
+    if (exists(override)) return override;
+    throw new Error(
+      `DH_CLIENT_SECRET_FILE is set to ${override} but no file exists there.\n` +
+        `  Point it at your installed-app client_secret.json, or unset it to fall back to\n` +
+        `  ${NEUTRAL_CLIENT_FILE()}. See docs/designhub/CREDENTIALS-SETUP.md`
+    );
+  }
+  const neutral = NEUTRAL_CLIENT_FILE();
+  if (exists(neutral)) return neutral;
+  const legacy = LEGACY_CLIENT_FILE();
+  if (exists(legacy)) {
+    const msg =
+      `[designhub] Using the DEPRECATED client secret at ${legacy}. ` +
+      `Move it to ${neutral} - see docs/designhub/CREDENTIALS-SETUP.md.`;
+    if (warn) warn(msg);
+    else if (!_legacyWarned) {
+      _legacyWarned = true;
+      console.warn(msg);
+    }
+    return legacy;
+  }
+  throw noClientSecretError(neutral);
+}
+
 function clientCreds() {
-  const c = JSON.parse(fs.readFileSync(CLIENT_FILE, 'utf8'));
+  const c = JSON.parse(fs.readFileSync(resolveClientSecretFile(), 'utf8'));
   const k = c.installed || c.web;
   return { id: k.client_id, secret: k.client_secret };
 }
@@ -92,8 +141,8 @@ async function consent() {
   });
   if (!r.ok) throw new Error('code exchange failed: ' + await r.text());
   const tok = await r.json();
-  fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
-  fs.writeFileSync(TOKEN_FILE, JSON.stringify({ refresh_token: tok.refresh_token }, null, 2));
+  fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(TOKEN_FILE, JSON.stringify({ refresh_token: tok.refresh_token }, null, 2), { mode: 0o600 });
   return tok.access_token;
 }
 

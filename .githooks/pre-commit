@@ -60,7 +60,7 @@ fi
 lint_files=()
 for file in "${staged_files[@]}"; do
   case "$file" in
-    server.js | build.js | lib/*.js | test/*.js | designhub/*.js | designhub/*/*.js | designhub/*/*/*.js)
+    server.js | build.js | lib/*.js | test/*.js)
       lint_files+=("$file")
       ;;
   esac

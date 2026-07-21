@@ -13,9 +13,8 @@ npm run format:check --silent
 
 echo "pre-push: build drift"
 node build.js --check
-node designhub/build-designhub.js --check
 
 echo "pre-push: tests"
-npm run test:all --silent
+npm test --silent
 
 echo "pre-push: all gates passed"

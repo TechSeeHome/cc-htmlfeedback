@@ -22,7 +22,6 @@
     "docs/",
     "README.md",
     "CLAUDE.md",
-    "coverage/",
-    "designhub/gas/widget.js"
+    "coverage/"
   ]
 }

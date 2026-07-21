@@ -754,17 +754,25 @@ function deleteDesignDoc(docPath) {
       });
     var matched = DH_INGEST.findIndexRowByDriveFileId(indexRows, fileId);
 
-    resolved.file.setTrashed(true);
+    // Companion comments Sheet goes to Drive trash FIRST: at this point
+    // nothing has been mutated yet, so a real setTrashed failure (transient
+    // Drive error, permissions) propagates and fails the whole call cleanly
+    // for a retry - it must NOT be swallowed as "already gone", or the
+    // comments/audit data would silently outlive a doc we then trash while
+    // reporting ok (Codex review of PR #16). Only the LOOKUP is tolerant: a
+    // missing companion (getFileById throws) is a legitimate stale-index
+    // state, and setTrashed on an already-trashed file is an idempotent
+    // no-op, so both benign cases still proceed.
+    var companionFile = null;
     if (matched && matched.row.commentSheetId) {
-      // Companion comments Sheet rides along into Drive trash. A missing or
-      // already-trashed companion is not an error - the doc itself is what
-      // the user asked to delete.
       try {
-        DriveApp.getFileById(matched.row.commentSheetId).setTrashed(true);
+        companionFile = DriveApp.getFileById(matched.row.commentSheetId);
       } catch (e) {
-        /* companion already gone - proceed */
+        /* companion already gone - the doc is what the user asked to delete */
       }
     }
+    if (companionFile) companionFile.setTrashed(true);
+    resolved.file.setTrashed(true);
     if (matched) indexSheet.deleteRow(matched.rowNumber);
 
     var portalSheet = dhPortalIndexSheetEnsure_();
@@ -778,10 +786,14 @@ function deleteDesignDoc(docPath) {
     var portalMatched = DH_INGEST.findIndexRowByDriveFileId(portalRows, fileId);
     if (portalMatched) portalSheet.deleteRow(portalMatched.rowNumber);
 
+    // repo/pathInRepo/branch filled from the resolved doc path (CodeRabbit
+    // review of PR #16) so delete rows filter/query alongside publish rows
+    // in the same meta sheet; commitSha/pr/jira stay blank - there is no git
+    // context behind a portal delete.
     dhIndexMetaEnsure_(indexSheet).appendRow([
-      '',
-      '',
-      '',
+      resolved.parsed.repo,
+      resolved.parsed.segments.join('/'),
+      resolved.parsed.featureDir,
       '',
       '',
       '',

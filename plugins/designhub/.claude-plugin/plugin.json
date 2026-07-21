@@ -1,6 +1,6 @@
 {
   "name": "designhub",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Publish design docs to DesignHub (Google-login-gated hub with in-page comments) and work with their comment Sheets.",
   "author": { "name": "<DH_ORG_NAME>" }
 }

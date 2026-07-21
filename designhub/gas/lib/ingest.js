@@ -367,12 +367,67 @@ var DH_INGEST = (function () {
     return 1 - startDepth;
   }
 
+  // --- Delete/unpublish (portal per-row delete, 2026-07-21): hard delete of
+  // a published design doc or a manually-added knowledge link, initiated from
+  // the Knowledge Portal UI. Same D5 split as everything above: bridge.js's
+  // deleteDesignDoc/deleteKnowledgeLink stay thin adapters, every decidable
+  // rule lives here.
+
+  function validateDeleteDocPath(docPath) {
+    if (!docPath || !String(docPath).trim()) return invalid_('docPath', 'docPath is required');
+    var trimmed = String(docPath).trim();
+    try {
+      paths_().parseDocPath(trimmed);
+    } catch (e) {
+      return invalid_('docPath', e.message);
+    }
+    return { ok: true, docPath: trimmed };
+  }
+
+  // rows: DH_SCHEMA.rowToIndex-shaped objects (a feature _index's or
+  // _portal-index's data rows, header excluded). rowNumber is the 1-based
+  // SHEET row (data index + 2, accounting for the header) so the caller can
+  // sheet.deleteRow(rowNumber) directly. null when nothing matches - a
+  // legitimate stale-index case for deleteDesignDoc (the file is still
+  // real and still gets trashed), not an error.
+  function findIndexRowByDriveFileId(rows, driveFileId) {
+    rows = rows || [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].driveFileId === driveFileId) return { rowNumber: i + 2, row: rows[i] };
+    }
+    return null;
+  }
+
+  // rows: DH_SCHEMA.rowToKnowledge-shaped objects. Only source=manual rows
+  // are deletable from the portal (spec decision 2) - drive-sync rows mirror
+  // Drive and are healed/staled by the sync, so deleting them here would
+  // just resurrect confusion on the next refreshKnowledge run.
+  function planDeleteLink(id, rows) {
+    rows = rows || [];
+    if (!id || !String(id).trim()) return invalid_('id', 'id is required');
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].id === id) {
+        if (rows[i].source !== 'manual') {
+          return invalid_(
+            'id',
+            'drive-synced rows are managed by the Drive sync - delete the file in Drive instead'
+          );
+        }
+        return { ok: true, row: rows[i], rowNumber: i + 2 };
+      }
+    }
+    return invalid_('id', 'link not found - it may already be deleted');
+  }
+
   return {
     base64DecodedByteLength: base64DecodedByteLength,
     validatePublishInput: validatePublishInput,
     planPublish: planPublish,
     planCreateLink: planCreateLink,
     featureFolderIndexInMissing: featureFolderIndexInMissing,
+    validateDeleteDocPath: validateDeleteDocPath,
+    findIndexRowByDriveFileId: findIndexRowByDriveFileId,
+    planDeleteLink: planDeleteLink,
   };
 })();
 if (typeof module !== 'undefined') module.exports = DH_INGEST;

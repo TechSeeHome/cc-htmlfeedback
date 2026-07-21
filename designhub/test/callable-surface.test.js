@@ -29,6 +29,10 @@ const ALLOWED_PUBLIC = new Set([
   // Knowledge Portal ingestion (Slice B1) - see bridge.js.
   'publishDesignDoc',
   'createKnowledgeLink',
+  // Knowledge Portal per-row delete (2026-07-21) - deliberate bridge-surface
+  // extension, same containment as publishDesignDoc/createKnowledgeLink.
+  'deleteDesignDoc',
+  'deleteKnowledgeLink',
 ]);
 
 test('exactly the documented functions are google.script.run-reachable (no trailing underscore)', () => {

@@ -185,6 +185,21 @@ function dhIndexSheetEnsure_(featureFolder) {
   return sheet;
 }
 
+// Idempotent-ensure for a feature _index spreadsheet's 'meta' (audit) tab -
+// same append-only META_COLS shape the companion comment Sheets use
+// (D17(c)). deleteDesignDoc's audit row cannot live on the doc's companion
+// Sheet (that Sheet is itself being trashed by the delete), so it lands
+// here, on the surviving feature _index.
+function dhIndexMetaEnsure_(indexSheet) {
+  var ss = indexSheet.getParent();
+  var meta = ss.getSheetByName('meta');
+  if (!meta) {
+    meta = ss.insertSheet('meta');
+    meta.appendRow(DH_SCHEMA.META_COLS);
+  }
+  return meta;
+}
+
 // Idempotent-ensure for a doc's companion comments Sheet - same 'tickets' +
 // 'meta' tab/header shape publish.mjs's Step 4 creates over REST, same
 // naming convention (DH_PATHS.companionName). Returns both the spreadsheet
@@ -354,39 +369,52 @@ function dhPortalIndexSheetEnsure_() {
 }
 
 function dhReconcile_() {
-  var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
-  var shards = [];
-  var queue = [{ folder: root, path: '' }];
-  while (queue.length) {
-    var entry = queue.shift();
-    var folder = entry.folder;
-    var subs = folder.getFolders();
-    while (subs.hasNext()) {
-      var sub = subs.next();
-      queue.push({ folder: sub, path: entry.path + '/' + sub.getName() });
+  // Serialized with the bridge's mutating calls via the same script lock
+  // (Codex review of PR #16): without it, a reconcile that snapshots the
+  // feature _index shards BEFORE a delete (or publish) commits can finish
+  // AFTER it and rewrite _portal-index from the stale snapshot -
+  // resurrecting a just-deleted row (or dropping a just-published one)
+  // until the next hourly run. 30s wait: this runs from a time trigger, so
+  // a longer patience than the bridge's 10s is fine and beats skipping.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var root = DriveApp.getFolderById(DH_CONFIG.rootFolderId);
+    var shards = [];
+    var queue = [{ folder: root, path: '' }];
+    while (queue.length) {
+      var entry = queue.shift();
+      var folder = entry.folder;
+      var subs = folder.getFolders();
+      while (subs.hasNext()) {
+        var sub = subs.next();
+        queue.push({ folder: sub, path: entry.path + '/' + sub.getName() });
+      }
+      var files = folder.getFilesByName('_index');
+      while (files.hasNext()) {
+        var ss = SpreadsheetApp.openById(files.next().getId()).getSheetByName('index');
+        if (ss) shards.push({ path: entry.path, rows: ss.getDataRange().getValues().slice(1) });
+      }
     }
-    var files = folder.getFilesByName('_index');
-    while (files.hasNext()) {
-      var ss = SpreadsheetApp.openById(files.next().getId()).getSheetByName('index');
-      if (ss) shards.push({ path: entry.path, rows: ss.getDataRange().getValues().slice(1) });
+    shards.sort(function (a, b) {
+      return a.path.localeCompare(b.path);
+    });
+    var rows = DH_ROLLUP.buildRollup(
+      shards.map(function (s) {
+        return s.rows;
+      })
+    );
+    var sheet = dhPortalIndexSheetEnsure_();
+    // Clear existing data rows (keeping the header) using the actual sheet extent
+    var lastRow = Math.max(sheet.getLastRow() - 1, 0);
+    if (lastRow > 0) {
+      sheet.getRange(2, 1, lastRow, DH_SCHEMA.INDEX_COLS.length).clearContent();
     }
+    if (rows.length) sheet.getRange(2, 1, rows.length, DH_SCHEMA.INDEX_COLS.length).setValues(rows);
+    return rows.length;
+  } finally {
+    lock.releaseLock();
   }
-  shards.sort(function (a, b) {
-    return a.path.localeCompare(b.path);
-  });
-  var rows = DH_ROLLUP.buildRollup(
-    shards.map(function (s) {
-      return s.rows;
-    })
-  );
-  var sheet = dhPortalIndexSheetEnsure_();
-  // Clear existing data rows (keeping the header) using the actual sheet extent
-  var lastRow = Math.max(sheet.getLastRow() - 1, 0);
-  if (lastRow > 0) {
-    sheet.getRange(2, 1, lastRow, DH_SCHEMA.INDEX_COLS.length).clearContent();
-  }
-  if (rows.length) sheet.getRange(2, 1, rows.length, DH_SCHEMA.INDEX_COLS.length).setValues(rows);
-  return rows.length;
 }
 
 // --- Knowledge Portal (K9/Option B) --------------------------------------

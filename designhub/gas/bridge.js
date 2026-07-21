@@ -638,3 +638,310 @@ function createKnowledgeLink(input) {
     lock.releaseLock();
   }
 }
+
+// --- Knowledge Portal per-row delete (2026-07-21) --------------------------
+// Two hard-delete write paths, same adapter shape as publishDesignDoc/
+// createKnowledgeLink: identity -> validate -> pre-lock ACL probe -> lock ->
+// re-resolve + re-check (TOCTOU) -> write -> audit. Error codes reuse the
+// existing closed list (INVALID_INPUT/FORBIDDEN_TARGET/RETRYABLE_UNAVAILABLE).
+
+// deleteDesignDoc(docPath): trash the published Drive file + its companion
+// comments Sheet, remove the feature _index row (authoritative - the D19
+// reconciler rebuilds _portal-index from feature shards, so this is what
+// makes the deletion stick) and the _portal-index row (latency optimization,
+// reconciler heals a miss). Audit lands on the feature _index's meta tab
+// (dhIndexMetaEnsure_) since the companion Sheet is itself trashed.
+function deleteDesignDoc(docPath) {
+  var actor = Session.getActiveUser().getEmail();
+  if (!actor) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'actor',
+        message: 'Could not determine your signed-in identity - reload the page and try again.',
+      },
+    };
+  }
+  var validated = DH_INGEST.validateDeleteDocPath(docPath);
+  if (!validated.ok) return { ok: false, error: validated.error };
+
+  var resolved;
+  try {
+    resolved = dhResolveDoc_(validated.docPath);
+  } catch (e) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'docPath',
+        message: 'Doc not found - it may already be deleted. Refresh the portal.',
+      },
+    };
+  }
+  var decision = DH_ACCESS.decideWrite(
+    dhFilePermissions_(resolved.file),
+    actor,
+    dhOwnerEmail_(resolved.file)
+  );
+  if (!decision.allow) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_TARGET',
+        message:
+          'You do not have write access to "' +
+          resolved.file.getName() +
+          '" in Drive - ask an editor of that file to grant you access.',
+      },
+    };
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
+  try {
+    // Re-resolve + re-check under the lock (same TOCTOU close as
+    // publishDesignDoc): the file could have been deleted or re-ACLed
+    // between the pre-lock probe and lock acquisition.
+    try {
+      resolved = dhResolveDoc_(validated.docPath);
+    } catch (e) {
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_INPUT',
+          field: 'docPath',
+          message: 'Doc not found - it may already be deleted. Refresh the portal.',
+        },
+      };
+    }
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(resolved.file),
+      actor,
+      dhOwnerEmail_(resolved.file)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            resolved.file.getName() +
+            '" in Drive - ask an editor of that file to grant you access.',
+        },
+      };
+    }
+
+    var fileId = resolved.file.getId();
+    var indexSheet = dhIndexSheetEnsure_(resolved.featureFolder);
+    var indexRows = indexSheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (r) {
+        return DH_SCHEMA.rowToIndex(r);
+      });
+    var matched = DH_INGEST.findIndexRowByDriveFileId(indexRows, fileId);
+
+    // Write ordering is chosen so EVERY partial failure leaves a state a
+    // simple retry of deleteDesignDoc heals (Codex reviews of PR #16):
+    // companion Sheet -> index rows -> audit -> the doc file LAST. The doc
+    // file is what dhResolveDoc_ resolves by, so as long as it is still
+    // live, a retry re-enters this function; trashing it first would make a
+    // failure in any later step unretryable ("Doc not found") while leaving
+    // stale index rows behind for the reconciler to resurrect. Each step is
+    // idempotent on retry: setTrashed on an already-trashed file is a no-op,
+    // a deleted row just fails to match (matched === null is legitimate),
+    // and a duplicate audit append is harmless (append-only log).
+    //
+    // A real failure touching the COMPANION - a transient Drive error on
+    // either the getFileById LOOKUP or the setTrashed - propagates and fails
+    // the call cleanly; it must NOT be swallowed as "already gone", or the
+    // comments/audit data would silently outlive the doc while we report ok.
+    // The lookup tolerates ONLY a confirmed missing/inaccessible id (a
+    // legitimate stale-index state) and proceeds.
+    var companionFile = null;
+    if (matched && matched.row.commentSheetId) {
+      try {
+        companionFile = DriveApp.getFileById(matched.row.commentSheetId);
+      } catch (e) {
+        // Only a confirmed missing/inaccessible id is the stale-index state we
+        // tolerate. Any OTHER getFileById failure (a transient Drive/service
+        // error) must propagate: swallowing it would trash the doc + index row
+        // while the comments Sheet stays live, and because the doc is trashed
+        // LAST, a retry could no longer re-enter to clean up. GAS reports a
+        // missing-or-inaccessible id with a fixed message; anything else
+        // re-throws so the caller can retry.
+        if (!/No item with the given ID could be found/i.test(String((e && e.message) || e))) {
+          throw e;
+        }
+        /* companion already gone - proceed with the delete the user asked for */
+      }
+    }
+    if (companionFile) companionFile.setTrashed(true);
+    if (matched) indexSheet.deleteRow(matched.rowNumber);
+
+    var portalSheet = dhPortalIndexSheetEnsure_();
+    var portalRows = portalSheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (r) {
+        return DH_SCHEMA.rowToIndex(r);
+      });
+    var portalMatched = DH_INGEST.findIndexRowByDriveFileId(portalRows, fileId);
+    if (portalMatched) portalSheet.deleteRow(portalMatched.rowNumber);
+
+    // repo/pathInRepo/branch filled from the resolved doc path (CodeRabbit
+    // review of PR #16) so delete rows filter/query alongside publish rows
+    // in the same meta sheet; commitSha/pr/jira stay blank - there is no git
+    // context behind a portal delete. The path-derived cells pass through
+    // sanitizeField (Codex review of PR #16): publish validation permits
+    // segment names starting with =/+/-/@, and appendRow parses a leading
+    // one of those as a live formula.
+    dhIndexMetaEnsure_(indexSheet).appendRow([
+      DH_SCHEMA.sanitizeField(resolved.parsed.repo),
+      DH_SCHEMA.sanitizeField(resolved.parsed.segments.join('/')),
+      DH_SCHEMA.sanitizeField(resolved.parsed.featureDir),
+      '',
+      '',
+      '',
+      actor,
+      new Date().toISOString(),
+      'deleteDesignDoc: ' + validated.docPath + ' (driveFileId=' + fileId + ')',
+    ]);
+
+    // The doc file goes LAST (see the ordering comment above).
+    resolved.file.setTrashed(true);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// deleteKnowledgeLink(id): remove a source=manual row from `_knowledge-index`
+// (spec decision 2 - drive-sync rows are never deletable here; the sync owns
+// them). ACL target is the `_knowledge-index` Sheet itself, exactly like
+// createKnowledgeLink's write probe.
+function deleteKnowledgeLink(id) {
+  var actor = Session.getActiveUser().getEmail();
+  if (!actor) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INPUT',
+        field: 'actor',
+        message: 'Could not determine your signed-in identity - reload the page and try again.',
+      },
+    };
+  }
+  var target = dhKnowledgeWriteTarget_();
+  var decision = DH_ACCESS.decideWrite(dhFilePermissions_(target), actor, dhOwnerEmail_(target));
+  if (!decision.allow) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_TARGET',
+        message:
+          'You do not have write access to "' +
+          target.getName() +
+          '" in Drive - ask an editor of that folder to grant you access, then try again.',
+      },
+    };
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (lockErr) {
+    return {
+      ok: false,
+      error: {
+        code: 'RETRYABLE_UNAVAILABLE',
+        message: 'The system is busy - please try again in a moment.',
+      },
+    };
+  }
+  try {
+    // Same post-lock ACL re-check as createKnowledgeLink (TOCTOU close).
+    target = dhKnowledgeWriteTarget_();
+    var freshDecision = DH_ACCESS.decideWrite(
+      dhFilePermissions_(target),
+      actor,
+      dhOwnerEmail_(target)
+    );
+    if (!freshDecision.allow) {
+      return {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN_TARGET',
+          message:
+            'You do not have write access to "' +
+            target.getName() +
+            '" in Drive - ask an editor of that folder to grant you access, then try again.',
+        },
+      };
+    }
+    // Read-only lookup, NOT dhKnowledgeSheetEnsure_ (Codex review of PR
+    // #16): a delete must never CREATE the `_knowledge-index` spreadsheet or
+    // its tabs - when nothing has ever synced or been added, there is no row
+    // to delete and the request just fails as not-found, leaving Drive
+    // untouched.
+    var ss = dhKnowledgeSheet_();
+    var sheet = ss && ss.getSheetByName('links');
+    if (!sheet) {
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_INPUT',
+          field: 'id',
+          message: 'link not found - it may already be deleted',
+        },
+      };
+    }
+    var rows = sheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map(function (row) {
+        return DH_SCHEMA.rowToKnowledge(row);
+      });
+    var plan = DH_INGEST.planDeleteLink(id, rows);
+    if (!plan.ok) return { ok: false, error: plan.error };
+
+    sheet.deleteRow(plan.rowNumber);
+    // The meta (audit) tab can be absent on an importer-created spreadsheet -
+    // ensure it only HERE, after a real mutation happened, never on the
+    // failure paths above.
+    var metaSheet = ss.getSheetByName('meta');
+    if (!metaSheet) {
+      metaSheet = ss.insertSheet('meta');
+      metaSheet.appendRow(DH_SCHEMA.META_COLS);
+    }
+    metaSheet.appendRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      actor,
+      new Date().toISOString(),
+      'deleteKnowledgeLink: ' + plan.row.title + ' (' + plan.row.url + ')',
+    ]);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}

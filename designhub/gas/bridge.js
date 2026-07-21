@@ -754,15 +754,23 @@ function deleteDesignDoc(docPath) {
       });
     var matched = DH_INGEST.findIndexRowByDriveFileId(indexRows, fileId);
 
-    // Companion comments Sheet goes to Drive trash FIRST: at this point
-    // nothing has been mutated yet, so a real setTrashed failure (transient
-    // Drive error, permissions) propagates and fails the whole call cleanly
-    // for a retry - it must NOT be swallowed as "already gone", or the
-    // comments/audit data would silently outlive a doc we then trash while
-    // reporting ok (Codex review of PR #16). Only the LOOKUP is tolerant: a
+    // Write ordering is chosen so EVERY partial failure leaves a state a
+    // simple retry of deleteDesignDoc heals (Codex reviews of PR #16):
+    // companion Sheet -> index rows -> audit -> the doc file LAST. The doc
+    // file is what dhResolveDoc_ resolves by, so as long as it is still
+    // live, a retry re-enters this function; trashing it first would make a
+    // failure in any later step unretryable ("Doc not found") while leaving
+    // stale index rows behind for the reconciler to resurrect. Each step is
+    // idempotent on retry: setTrashed on an already-trashed file is a no-op,
+    // a deleted row just fails to match (matched === null is legitimate),
+    // and a duplicate audit append is harmless (append-only log).
+    //
+    // A real setTrashed failure on the COMPANION (transient Drive error,
+    // permissions) propagates and fails the call cleanly - it must NOT be
+    // swallowed as "already gone", or the comments/audit data would silently
+    // outlive the doc while we report ok. Only the LOOKUP is tolerant: a
     // missing companion (getFileById throws) is a legitimate stale-index
-    // state, and setTrashed on an already-trashed file is an idempotent
-    // no-op, so both benign cases still proceed.
+    // state and proceeds.
     var companionFile = null;
     if (matched && matched.row.commentSheetId) {
       try {
@@ -772,7 +780,6 @@ function deleteDesignDoc(docPath) {
       }
     }
     if (companionFile) companionFile.setTrashed(true);
-    resolved.file.setTrashed(true);
     if (matched) indexSheet.deleteRow(matched.rowNumber);
 
     var portalSheet = dhPortalIndexSheetEnsure_();
@@ -801,6 +808,9 @@ function deleteDesignDoc(docPath) {
       new Date().toISOString(),
       'deleteDesignDoc: ' + validated.docPath + ' (driveFileId=' + fileId + ')',
     ]);
+
+    // The doc file goes LAST (see the ordering comment above).
+    resolved.file.setTrashed(true);
     return { ok: true };
   } finally {
     lock.releaseLock();

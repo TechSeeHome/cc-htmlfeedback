@@ -1,9 +1,9 @@
 // OAuth for the publish skill. Publishers publish as THEMSELVES (D13):
 // per-developer token cached at ~/.claude/designhub/token.json.
-// Client secret: an installed-app OAuth client JSON, resolved via a fallback
-// chain (see resolveClientSecretFile): DH_CLIENT_SECRET_FILE env override ->
-// ~/.claude/designhub/client_secret.json (canonical) -> the deprecated
-// gdoc-md-sync path (warns once). See CREDENTIALS-SETUP.md (bundled with this plugin).
+// Client secret: an installed-app OAuth client JSON, resolved via
+// resolveClientSecretFile: DH_CLIENT_SECRET_FILE env override ->
+// ~/.claude/designhub/client_secret.json (canonical). See CREDENTIALS-SETUP.md
+// (bundled with this plugin).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,8 +16,6 @@ const SCOPE = 'https://www.googleapis.com/auth/drive';
 
 const NEUTRAL_CLIENT_FILE = () =>
   path.join(os.homedir(), '.claude', 'designhub', 'client_secret.json');
-const LEGACY_CLIENT_FILE = () =>
-  path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'client_secret.json');
 
 function noClientSecretError(expectedPath) {
   return new Error(
@@ -28,13 +26,11 @@ function noClientSecretError(expectedPath) {
   );
 }
 
-// Resolve the installed-app OAuth client secret via a backward-compatible
-// fallback chain, so a machine that never installed the gdoc-md-sync skill can
-// still authenticate. `env`/`exists`/`warn` are injectable so the chain is
-// unit-testable without touching the real environment or filesystem. In
-// production the legacy-deprecation warning fires at most once per process.
-let _legacyWarned = false;
-export function resolveClientSecretFile({ env = process.env, exists = fs.existsSync, warn } = {}) {
+// Resolve the installed-app OAuth client secret: an explicit
+// DH_CLIENT_SECRET_FILE override wins, otherwise the canonical path.
+// `env`/`exists` are injectable so the resolution is unit-testable without
+// touching the real environment or filesystem.
+export function resolveClientSecretFile({ env = process.env, exists = fs.existsSync } = {}) {
   const override = env.DH_CLIENT_SECRET_FILE;
   if (override) {
     // A set-but-missing override must fail with the actionable error naming it
@@ -48,18 +44,6 @@ export function resolveClientSecretFile({ env = process.env, exists = fs.existsS
   }
   const neutral = NEUTRAL_CLIENT_FILE();
   if (exists(neutral)) return neutral;
-  const legacy = LEGACY_CLIENT_FILE();
-  if (exists(legacy)) {
-    const msg =
-      `[designhub] Using the DEPRECATED client secret at ${legacy}. ` +
-      `Move it to ${neutral} - see CREDENTIALS-SETUP.md (bundled with this plugin).`;
-    if (warn) warn(msg);
-    else if (!_legacyWarned) {
-      _legacyWarned = true;
-      console.warn(msg);
-    }
-    return legacy;
-  }
   throw noClientSecretError(neutral);
 }
 
@@ -79,9 +63,9 @@ async function refresh(refreshToken) {
   if (!r.ok) {
     const body = await r.text();
     // invalid_grant means this refresh token is no longer usable with the
-    // current client (e.g. a legacy token refreshed against a newly created
-    // or overridden client - Google refresh tokens are client-bound) or the
-    // grant was revoked. Return null so the caller falls through to consent().
+    // current client (Google refresh tokens are client-bound, so a token
+    // minted under a different client_secret fails here) or the grant was
+    // revoked. Return null so the caller falls through to consent().
     if (r.status === 400 && /invalid_grant/.test(body)) return null;
     throw new Error('token refresh failed: ' + body);
   }
@@ -161,12 +145,6 @@ export async function accessToken() {
     // creation, so an existing file's mode never self-heals otherwise.
     try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
     return (await refresh(JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')).refresh_token)) ?? consent();
-  }
-  // machine-local fallback: reuse the gdoc-md-sync token if present
-  const legacy = path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'token.json');
-  if (fs.existsSync(legacy)) {
-    try { fs.chmodSync(legacy, 0o600); } catch {}
-    return (await refresh(JSON.parse(fs.readFileSync(legacy, 'utf8')).refresh_token)) ?? consent();
   }
   return consent();
 }

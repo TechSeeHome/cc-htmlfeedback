@@ -1,6 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const mod = () => import('../../plugins/designhub/skills/publish-design/scripts/gauth.mjs');
 
 // waitForCode is gauth.mjs's local OAuth callback listener (Task 10 review):
@@ -121,4 +123,60 @@ test('api() passes through a response with no nextPageToken unchanged', async ()
   } finally {
     srv.close();
   }
+});
+
+const NEUTRAL = path.join(os.homedir(), '.claude', 'designhub', 'client_secret.json');
+
+test('resolveClientSecretFile: DH_CLIENT_SECRET_FILE env override wins when it exists', async () => {
+  const { resolveClientSecretFile } = await mod();
+  const out = resolveClientSecretFile({
+    env: { DH_CLIENT_SECRET_FILE: '/tmp/custom.json' },
+    exists: (p) => p === '/tmp/custom.json',
+  });
+  assert.equal(out, '/tmp/custom.json');
+});
+
+test('resolveClientSecretFile: DH_CLIENT_SECRET_FILE set but missing throws an actionable error naming that path (G4)', async () => {
+  const { resolveClientSecretFile } = await mod();
+  assert.throws(
+    () =>
+      resolveClientSecretFile({
+        env: { DH_CLIENT_SECRET_FILE: '/tmp/nope.json' },
+        exists: () => false,
+      }),
+    (err) => {
+      assert.match(err.message, /\/tmp\/nope\.json/);
+      assert.match(err.message, /DH_CLIENT_SECRET_FILE/);
+      return true;
+    }
+  );
+});
+
+test('resolveClientSecretFile: uses the neutral ~/.claude/designhub path when it exists', async () => {
+  const { resolveClientSecretFile } = await mod();
+  const out = resolveClientSecretFile({ env: {}, exists: (p) => p === NEUTRAL });
+  assert.equal(out, NEUTRAL);
+});
+
+test('resolveClientSecretFile: throws an actionable error naming the path, env var, and doc when nothing resolves', async () => {
+  const { resolveClientSecretFile } = await mod();
+  assert.throws(
+    () => resolveClientSecretFile({ env: {}, exists: () => false }),
+    (err) => {
+      assert.match(err.message, /client_secret\.json/);
+      assert.match(err.message, /designhub/);
+      assert.match(err.message, /DH_CLIENT_SECRET_FILE/);
+      assert.match(err.message, /CREDENTIALS-SETUP/);
+      return true;
+    }
+  );
+});
+
+test('resolveClientSecretFile: env override wins even when the canonical path also exists', async () => {
+  const { resolveClientSecretFile } = await mod();
+  const out = resolveClientSecretFile({
+    env: { DH_CLIENT_SECRET_FILE: '/tmp/custom.json' },
+    exists: () => true,
+  });
+  assert.equal(out, '/tmp/custom.json');
 });

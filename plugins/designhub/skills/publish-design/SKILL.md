@@ -29,7 +29,8 @@ TOOLING = ${CLAUDE_PLUGIN_ROOT}/skills/publish-design/scripts
 3. **Publish (only after the user approved step 2):**
 
    ```bash
-   node $TOOLING/publish.mjs --file <path> --repo <repo> --feature <branch> \
+   TOOLING="${CLAUDE_PLUGIN_ROOT}/skills/publish-design/scripts"
+   node "$TOOLING/publish.mjs" --file <path> --repo <repo> --feature <branch> \
      --jira <key-or-unassigned> --path-in-repo <repo-relative-path>
    ```
 
@@ -47,6 +48,11 @@ TOOLING = ${CLAUDE_PLUGIN_ROOT}/skills/publish-design/scripts
 
 ## Notes
 
+- One-time credential setup: if publish.mjs exits with "No Google OAuth client
+  secret found", place your installed-app `client_secret.json` at
+  `~/.claude/designhub/client_secret.json` (or set `DH_CLIENT_SECRET_FILE`).
+  Full instructions - including how to create the client - are in
+  `${CLAUDE_PLUGIN_ROOT}/CREDENTIALS-SETUP.md` (bundled with this plugin).
 - One-time machine setup: if publish.mjs exits complaining that
   `designhub.config.local.json` is missing, copy the plugin's
   `designhub.config.json` to `designhub.config.local.json` (same directory) and

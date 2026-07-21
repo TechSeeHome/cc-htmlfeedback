@@ -11,7 +11,7 @@
     {
       "name": "designhub",
       "source": "./plugins/designhub",
-      "description": "Publish design docs to DesignHub - Google-login-gated review hub with in-page comments stored in Sheets."
+      "description": "[DEPRECATED - the DesignHub plugin has moved to the TechSeeHome/home-rnd-productivity marketplace; install it from there] Publish design docs to DesignHub - Google-login-gated review hub with in-page comments stored in Sheets.",
     }
   ]
 }

@@ -29,9 +29,8 @@ const ALLOWED_PUBLIC = new Set([
   // Knowledge Portal ingestion (Slice B1) - see bridge.js.
   'publishDesignDoc',
   'createKnowledgeLink',
-  // Portal per-row delete (spec 2026-07-21, home-rnd-productivity
-  // docs/superpowers/specs/) - deliberate bridge-surface extension, same
-  // containment as publishDesignDoc/createKnowledgeLink.
+  // Knowledge Portal per-row delete (2026-07-21) - deliberate bridge-surface
+  // extension, same containment as publishDesignDoc/createKnowledgeLink.
   'deleteDesignDoc',
   'deleteKnowledgeLink',
 ]);

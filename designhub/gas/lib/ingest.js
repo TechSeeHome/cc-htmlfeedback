@@ -367,10 +367,11 @@ var DH_INGEST = (function () {
     return 1 - startDepth;
   }
 
-  // --- Delete/unpublish (portal per-row delete spec, home-rnd-productivity
-  // docs/superpowers/specs/2026-07-21-portal-delete-unpublish-design.md).
-  // Same D5 split as everything above: bridge.js's deleteDesignDoc/
-  // deleteKnowledgeLink stay thin adapters, every decidable rule lives here.
+  // --- Delete/unpublish (portal per-row delete, 2026-07-21): hard delete of
+  // a published design doc or a manually-added knowledge link, initiated from
+  // the Knowledge Portal UI. Same D5 split as everything above: bridge.js's
+  // deleteDesignDoc/deleteKnowledgeLink stay thin adapters, every decidable
+  // rule lives here.
 
   function validateDeleteDocPath(docPath) {
     if (!docPath || !String(docPath).trim()) return invalid_('docPath', 'docPath is required');

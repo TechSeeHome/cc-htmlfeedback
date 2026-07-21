@@ -616,7 +616,7 @@ test('publishDesignDoc-style folder chain creation never re-creates the feature 
   );
 });
 
-// ---- delete planners (portal per-row delete spec, 2026-07-21) ----
+// ---- delete planners (Knowledge Portal per-row delete, 2026-07-21) ----
 
 test('validateDeleteDocPath: empty / whitespace docPath is INVALID_INPUT', () => {
   for (const bad of [undefined, null, '', '   ']) {

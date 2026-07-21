@@ -639,7 +639,7 @@ function createKnowledgeLink(input) {
   }
 }
 
-// --- Portal per-row delete (spec 2026-07-21) -------------------------------
+// --- Knowledge Portal per-row delete (2026-07-21) --------------------------
 // Two hard-delete write paths, same adapter shape as publishDesignDoc/
 // createKnowledgeLink: identity -> validate -> pre-lock ACL probe -> lock ->
 // re-resolve + re-check (TOCTOU) -> write -> audit. Error codes reuse the
@@ -796,11 +796,14 @@ function deleteDesignDoc(docPath) {
     // repo/pathInRepo/branch filled from the resolved doc path (CodeRabbit
     // review of PR #16) so delete rows filter/query alongside publish rows
     // in the same meta sheet; commitSha/pr/jira stay blank - there is no git
-    // context behind a portal delete.
+    // context behind a portal delete. The path-derived cells pass through
+    // sanitizeField (Codex review of PR #16): publish validation permits
+    // segment names starting with =/+/-/@, and appendRow parses a leading
+    // one of those as a live formula.
     dhIndexMetaEnsure_(indexSheet).appendRow([
-      resolved.parsed.repo,
-      resolved.parsed.segments.join('/'),
-      resolved.parsed.featureDir,
+      DH_SCHEMA.sanitizeField(resolved.parsed.repo),
+      DH_SCHEMA.sanitizeField(resolved.parsed.segments.join('/')),
+      DH_SCHEMA.sanitizeField(resolved.parsed.featureDir),
       '',
       '',
       '',
@@ -880,8 +883,23 @@ function deleteKnowledgeLink(id) {
         },
       };
     }
-    var ss = dhKnowledgeSheetEnsure_();
-    var sheet = ss.getSheetByName('links');
+    // Read-only lookup, NOT dhKnowledgeSheetEnsure_ (Codex review of PR
+    // #16): a delete must never CREATE the `_knowledge-index` spreadsheet or
+    // its tabs - when nothing has ever synced or been added, there is no row
+    // to delete and the request just fails as not-found, leaving Drive
+    // untouched.
+    var ss = dhKnowledgeSheet_();
+    var sheet = ss && ss.getSheetByName('links');
+    if (!sheet) {
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_INPUT',
+          field: 'id',
+          message: 'link not found - it may already be deleted',
+        },
+      };
+    }
     var rows = sheet
       .getDataRange()
       .getValues()
@@ -893,7 +911,15 @@ function deleteKnowledgeLink(id) {
     if (!plan.ok) return { ok: false, error: plan.error };
 
     sheet.deleteRow(plan.rowNumber);
-    ss.getSheetByName('meta').appendRow([
+    // The meta (audit) tab can be absent on an importer-created spreadsheet -
+    // ensure it only HERE, after a real mutation happened, never on the
+    // failure paths above.
+    var metaSheet = ss.getSheetByName('meta');
+    if (!metaSheet) {
+      metaSheet = ss.insertSheet('meta');
+      metaSheet.appendRow(DH_SCHEMA.META_COLS);
+    }
+    metaSheet.appendRow([
       '',
       '',
       '',

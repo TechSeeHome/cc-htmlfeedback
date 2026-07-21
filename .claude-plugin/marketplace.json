@@ -11,8 +11,7 @@
     {
       "name": "designhub",
       "source": "./plugins/designhub",
-      "description": "Publish design docs to DesignHub - Google-login-gated review hub with in-page comments stored in Sheets.",
-      "version": "0.3.0"
+      "description": "Publish design docs to DesignHub - Google-login-gated review hub with in-page comments stored in Sheets."
     }
   ]
 }

@@ -1,7 +1,9 @@
 // OAuth for the publish skill. Publishers publish as THEMSELVES (D13):
 // per-developer token cached at ~/.claude/designhub/token.json.
-// Client secret: an installed-app OAuth client JSON; default reuses the
-// gdoc-md-sync client on this machine, override with DH_CLIENT_SECRET_FILE.
+// Client secret: an installed-app OAuth client JSON, resolved via
+// resolveClientSecretFile: DH_CLIENT_SECRET_FILE env override ->
+// ~/.claude/designhub/client_secret.json (canonical). See CREDENTIALS-SETUP.md
+// (bundled with this plugin).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,12 +12,43 @@ import { spawn } from 'node:child_process';
 
 const TOKEN_FILE = process.env.DH_TOKEN_FILE ||
   path.join(os.homedir(), '.claude', 'designhub', 'token.json');
-const CLIENT_FILE = process.env.DH_CLIENT_SECRET_FILE ||
-  path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'client_secret.json');
 const SCOPE = 'https://www.googleapis.com/auth/drive';
 
+const NEUTRAL_CLIENT_FILE = () =>
+  path.join(os.homedir(), '.claude', 'designhub', 'client_secret.json');
+
+function noClientSecretError(expectedPath) {
+  return new Error(
+    `No Google OAuth client secret found.\n` +
+      `  Expected it at: ${expectedPath}\n` +
+      `  Set DH_CLIENT_SECRET_FILE to override the location.\n` +
+      `  How to create/obtain it: CREDENTIALS-SETUP.md (bundled with this plugin)`
+  );
+}
+
+// Resolve the installed-app OAuth client secret: an explicit
+// DH_CLIENT_SECRET_FILE override wins, otherwise the canonical path.
+// `env`/`exists` are injectable so the resolution is unit-testable without
+// touching the real environment or filesystem.
+export function resolveClientSecretFile({ env = process.env, exists = fs.existsSync } = {}) {
+  const override = env.DH_CLIENT_SECRET_FILE;
+  if (override) {
+    // A set-but-missing override must fail with the actionable error naming it
+    // (G4) - never a raw ENOENT, the very failure this whole change fixes.
+    if (exists(override)) return override;
+    throw new Error(
+      `DH_CLIENT_SECRET_FILE is set to ${override} but no file exists there.\n` +
+        `  Point it at your installed-app client_secret.json, or unset it to fall back to\n` +
+        `  ${NEUTRAL_CLIENT_FILE()}. See CREDENTIALS-SETUP.md (bundled with this plugin)`
+    );
+  }
+  const neutral = NEUTRAL_CLIENT_FILE();
+  if (exists(neutral)) return neutral;
+  throw noClientSecretError(neutral);
+}
+
 function clientCreds() {
-  const c = JSON.parse(fs.readFileSync(CLIENT_FILE, 'utf8'));
+  const c = JSON.parse(fs.readFileSync(resolveClientSecretFile(), 'utf8'));
   const k = c.installed || c.web;
   return { id: k.client_id, secret: k.client_secret };
 }
@@ -27,7 +60,15 @@ async function refresh(refreshToken) {
     body: new URLSearchParams({ client_id: id, client_secret: secret,
       refresh_token: refreshToken, grant_type: 'refresh_token' }),
   });
-  if (!r.ok) throw new Error('token refresh failed: ' + await r.text());
+  if (!r.ok) {
+    const body = await r.text();
+    // invalid_grant means this refresh token is no longer usable with the
+    // current client (Google refresh tokens are client-bound, so a token
+    // minted under a different client_secret fails here) or the grant was
+    // revoked. Return null so the caller falls through to consent().
+    if (r.status === 400 && /invalid_grant/.test(body)) return null;
+    throw new Error('token refresh failed: ' + body);
+  }
   return (await r.json()).access_token;
 }
 
@@ -92,19 +133,18 @@ async function consent() {
   });
   if (!r.ok) throw new Error('code exchange failed: ' + await r.text());
   const tok = await r.json();
-  fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
-  fs.writeFileSync(TOKEN_FILE, JSON.stringify({ refresh_token: tok.refresh_token }, null, 2));
+  fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(TOKEN_FILE, JSON.stringify({ refresh_token: tok.refresh_token }, null, 2), { mode: 0o600 });
   return tok.access_token;
 }
 
 export async function accessToken() {
   if (fs.existsSync(TOKEN_FILE)) {
-    return refresh(JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')).refresh_token);
-  }
-  // machine-local fallback: reuse the gdoc-md-sync token if present
-  const legacy = path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'token.json');
-  if (fs.existsSync(legacy)) {
-    return refresh(JSON.parse(fs.readFileSync(legacy, 'utf8')).refresh_token);
+    // Best-effort tighten permissions on tokens written by prior releases
+    // under a permissive umask: writeFileSync's `mode` only applies at
+    // creation, so an existing file's mode never self-heals otherwise.
+    try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
+    return (await refresh(JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8')).refresh_token)) ?? consent();
   }
   return consent();
 }

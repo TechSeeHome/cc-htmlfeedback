@@ -765,18 +765,28 @@ function deleteDesignDoc(docPath) {
     // a deleted row just fails to match (matched === null is legitimate),
     // and a duplicate audit append is harmless (append-only log).
     //
-    // A real setTrashed failure on the COMPANION (transient Drive error,
-    // permissions) propagates and fails the call cleanly - it must NOT be
-    // swallowed as "already gone", or the comments/audit data would silently
-    // outlive the doc while we report ok. Only the LOOKUP is tolerant: a
-    // missing companion (getFileById throws) is a legitimate stale-index
-    // state and proceeds.
+    // A real failure touching the COMPANION - a transient Drive error on
+    // either the getFileById LOOKUP or the setTrashed - propagates and fails
+    // the call cleanly; it must NOT be swallowed as "already gone", or the
+    // comments/audit data would silently outlive the doc while we report ok.
+    // The lookup tolerates ONLY a confirmed missing/inaccessible id (a
+    // legitimate stale-index state) and proceeds.
     var companionFile = null;
     if (matched && matched.row.commentSheetId) {
       try {
         companionFile = DriveApp.getFileById(matched.row.commentSheetId);
       } catch (e) {
-        /* companion already gone - the doc is what the user asked to delete */
+        // Only a confirmed missing/inaccessible id is the stale-index state we
+        // tolerate. Any OTHER getFileById failure (a transient Drive/service
+        // error) must propagate: swallowing it would trash the doc + index row
+        // while the comments Sheet stays live, and because the doc is trashed
+        // LAST, a retry could no longer re-enter to clean up. GAS reports a
+        // missing-or-inaccessible id with a fixed message; anything else
+        // re-throws so the caller can retry.
+        if (!/No item with the given ID could be found/i.test(String((e && e.message) || e))) {
+          throw e;
+        }
+        /* companion already gone - proceed with the delete the user asked for */
       }
     }
     if (companionFile) companionFile.setTrashed(true);

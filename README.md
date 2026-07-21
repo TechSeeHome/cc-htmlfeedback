@@ -13,7 +13,7 @@ A zero-dependency, in-page feedback tool. **Highlight text on the page to leave 
 > /plugin marketplace add TechSeeHome/home-rnd-productivity
 > /plugin install designhub@home-rnd-productivity
 > ```
-> The copy in this repo's marketplace is deprecated and frozen; it still resolves for existing installs but will not receive further updates here.
+> It is no longer published from this repo's marketplace - install it from home-rnd (above).
 
 ## Two modes
 

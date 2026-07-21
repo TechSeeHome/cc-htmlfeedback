@@ -126,7 +126,6 @@ test('api() passes through a response with no nextPageToken unchanged', async ()
 });
 
 const NEUTRAL = path.join(os.homedir(), '.claude', 'designhub', 'client_secret.json');
-const LEGACY = path.join(os.homedir(), '.claude', 'skills', 'gdoc-md-sync', 'client_secret.json');
 
 test('resolveClientSecretFile: DH_CLIENT_SECRET_FILE env override wins when it exists', async () => {
   const { resolveClientSecretFile } = await mod();
@@ -159,20 +158,6 @@ test('resolveClientSecretFile: uses the neutral ~/.claude/designhub path when it
   assert.equal(out, NEUTRAL);
 });
 
-test('resolveClientSecretFile: falls back to the deprecated legacy path and warns', async () => {
-  const { resolveClientSecretFile } = await mod();
-  const warnings = [];
-  const out = resolveClientSecretFile({
-    env: {},
-    exists: (p) => p === LEGACY,
-    warn: (m) => warnings.push(m),
-  });
-  assert.equal(out, LEGACY);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /deprecated/i);
-  assert.match(warnings[0], /CREDENTIALS-SETUP/);
-});
-
 test('resolveClientSecretFile: throws an actionable error naming the path, env var, and doc when nothing resolves', async () => {
   const { resolveClientSecretFile } = await mod();
   assert.throws(
@@ -187,30 +172,11 @@ test('resolveClientSecretFile: throws an actionable error naming the path, env v
   );
 });
 
-test('resolveClientSecretFile: neutral takes precedence over legacy when both exist (no warning)', async () => {
+test('resolveClientSecretFile: env override wins even when the canonical path also exists', async () => {
   const { resolveClientSecretFile } = await mod();
-  const warnings = [];
   const out = resolveClientSecretFile({
-    env: {},
+    env: { DH_CLIENT_SECRET_FILE: '/tmp/custom.json' },
     exists: () => true,
-    warn: (m) => warnings.push(m),
   });
-  assert.equal(out, NEUTRAL);
-  assert.equal(warnings.length, 0);
-});
-
-test('resolveClientSecretFile: the default console.warn fires at most once across calls (once-guard)', async () => {
-  const { resolveClientSecretFile } = await mod();
-  const orig = console.warn;
-  const calls = [];
-  console.warn = (m) => calls.push(m);
-  try {
-    const legacyOnly = (p) => p === LEGACY; // no injected warn -> exercises real console.warn + guard
-    resolveClientSecretFile({ env: {}, exists: legacyOnly });
-    resolveClientSecretFile({ env: {}, exists: legacyOnly });
-  } finally {
-    console.warn = orig;
-  }
-  assert.equal(calls.length, 1);
-  assert.match(calls[0], /deprecated/i);
+  assert.equal(out, '/tmp/custom.json');
 });

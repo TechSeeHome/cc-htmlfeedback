@@ -45,6 +45,13 @@ test('build.js (write mode) against the real repo is a byte-for-byte no-op when 
     'extension/feedback-widget.js',
     'plugins/cc-htmlfeedback/feedback-widget.js',
     'plugins/cc-htmlfeedback/server.js',
+    // build.js also mirrors every lib/*.js file verbatim into
+    // plugins/cc-htmlfeedback/lib/ - snapshot those generated copies too so
+    // this no-op assertion covers every output build.js produces.
+    ...fs
+      .readdirSync(path.join(REPO_ROOT, 'lib'))
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => 'plugins/cc-htmlfeedback/lib/' + f),
   ];
   const before = watched.map((rel) => fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8'));
   const out = execFileSync(process.execPath, ['build.js'], { cwd: REPO_ROOT, encoding: 'utf8' });

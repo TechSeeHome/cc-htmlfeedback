@@ -27,7 +27,7 @@ marketplace. Things a useful review of this repo must know:
 - The widget is tested through a jsdom harness (`test/helpers/dom.js`) that stubs
   geometry, `EventSource`, and `fetch` - layout/pixel behavior is intentionally out of
   unit-test scope (covered by browser E2E separately).
-- Coverage gate: c8, 75% lines minimum, run via `npm run test:cov`. New logic in
+- Coverage gate: c8, 80% lines minimum, run via `npm run test:cov`. New logic in
   `lib/` or `server.js` should come with tests.
 
 ## Review priorities

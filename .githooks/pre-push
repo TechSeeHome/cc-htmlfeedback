@@ -15,6 +15,6 @@ echo "pre-push: build drift"
 node build.js --check
 
 echo "pre-push: tests"
-npm test --silent
+npm run test:cov --silent
 
 echo "pre-push: all gates passed"

@@ -27,11 +27,9 @@
     "build": "node build.js",
     "check": "node build.js --check",
     "test": "node --test --test-force-exit test/*.test.js",
-    "test:designhub": "node --test --test-force-exit designhub/test/*.test.js",
-    "test:all": "npm test && npm run test:designhub",
-    "test:cov": "c8 npm run test:all",
+    "test:cov": "c8 npm test",
     "serve": "node server.js",
-    "lint": "npm run build --silent && oxlint extension/feedback-widget.js server.js lib build.js test designhub",
+    "lint": "npm run build --silent && oxlint extension/feedback-widget.js server.js lib build.js test",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
@@ -46,10 +44,7 @@
     "include": [
       "server.js",
       "build.js",
-      "lib/**",
-      "designhub/build-designhub.js",
-      "designhub/gas/lib/**",
-      "plugins/designhub/skills/publish-design/scripts/**"
+      "lib/**"
     ],
     "check-coverage": true,
     "lines": 80,

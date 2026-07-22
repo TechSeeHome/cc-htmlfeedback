@@ -1,4 +1,4 @@
-name: designhub
+name: ci
 on:
   push:
     branches: [main]
@@ -19,7 +19,5 @@ jobs:
         run: npm run lint
       - name: format check
         run: npm run format:check
-      - name: designhub widget transform is fresh + anchors hold
-        run: node designhub/build-designhub.js --check
       - name: tests with coverage gate (floor 80% lines)
         run: npm run test:cov

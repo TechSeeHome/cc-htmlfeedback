@@ -6,15 +6,6 @@
 
 A zero-dependency, in-page feedback tool. **Highlight text on the page to leave a comment** - that's how every note is made - then either copy the structured feedback or let Claude Code fix it live.
 
-> **DesignHub plugin has moved.** The `designhub` publish plugin is now maintained in the
-> [`TechSeeHome/home-rnd-productivity`](https://github.com/TechSeeHome/home-rnd-productivity) marketplace.
-> Install it from there:
-> ```text
-> /plugin marketplace add TechSeeHome/home-rnd-productivity
-> /plugin install designhub@home-rnd-productivity
-> ```
-> It is no longer published from this repo's marketplace - install it from home-rnd (above).
-
 ## Two modes
 
 1. **Simple (start here).** Chrome extension only. Highlight text, write notes, **copy** the structured feedback and paste it wherever you want. No server, no setup beyond loading the extension.
